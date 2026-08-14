@@ -11,7 +11,7 @@ export function JourneySection() {
   useJourneyScroll({ containerRef, trackRef, progressRef });
 
   return (
-    <div id="journey" className="relative" ref={containerRef}>
+    <div id="journey" className="relative overflow-x-hidden" ref={containerRef}>
       <div className="flex h-svh items-stretch will-change-transform" ref={trackRef}>
         {journeyStops.map((stop) => (
           <JourneyPanel key={stop.id} stop={stop} />

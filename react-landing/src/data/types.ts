@@ -3,11 +3,6 @@ export interface NavLink {
   href: string;
 }
 
-export interface LoginOption {
-  label: string;
-  href: string;
-}
-
 export interface JourneyStop {
   id: string;
   eyebrow: string;

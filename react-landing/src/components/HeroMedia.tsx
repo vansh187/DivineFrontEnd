@@ -95,7 +95,7 @@ export function HeroMedia() {
         onClick={toggleMute}
         aria-pressed={!muted}
         aria-label={muted ? 'Unmute background music' : 'Mute background music'}
-        className="absolute bottom-6 right-6 z-20 flex h-11 w-11 items-center justify-center rounded-full border border-white/30 bg-black/45 text-white backdrop-blur-sm transition-colors duration-200 hover:bg-black/65 sm:bottom-8 sm:right-8"
+        className="absolute right-6 top-24 z-20 flex h-11 w-11 items-center justify-center rounded-full border border-white/30 bg-black/45 text-white backdrop-blur-sm transition-colors duration-200 hover:bg-black/65 sm:right-8"
       >
         {muted ? <SpeakerMutedIcon /> : <SpeakerOnIcon />}
       </button>

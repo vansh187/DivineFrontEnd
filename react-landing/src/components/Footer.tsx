@@ -1,10 +1,11 @@
 import { navLinks } from '../data/navigation';
-import { loginOptions } from '../data/loginOptions';
 import { contact } from '../data/contact';
 import { company } from '../data/company';
+import { useAuth } from '../hooks/useAuth';
 
 export function Footer() {
   const year = new Date().getFullYear();
+  const { session, logout, openModal } = useAuth();
 
   return (
     <footer className="relative border-t border-hairline-dark bg-chrome px-6 pb-8 pt-12 sm:px-10">
@@ -33,13 +34,43 @@ export function Footer() {
         <div className="sm:pl-6 lg:border-l lg:border-white/10 lg:pl-8">
           <h5 className="eyebrow-label mb-3.5 block text-terracotta-light">Account</h5>
           <ul className="flex flex-col gap-2.5">
-            {loginOptions.map((option) => (
-              <li key={option.href}>
-                <a href={option.href} className="text-sm text-white/70 transition-colors hover:text-terracotta-light">
-                  {option.label}
-                </a>
-              </li>
-            ))}
+            {session ? (
+              <>
+                <li className="text-sm text-white/70">
+                  Signed in as {session.firstName || session.email}
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={logout}
+                    className="text-sm text-white/70 transition-colors hover:text-terracotta-light"
+                  >
+                    Log out
+                  </button>
+                </li>
+              </>
+            ) : (
+              <>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => openModal('signin')}
+                    className="text-sm text-white/70 transition-colors hover:text-terracotta-light"
+                  >
+                    Sign in
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => openModal('signup')}
+                    className="text-sm text-white/70 transition-colors hover:text-terracotta-light"
+                  >
+                    Create account
+                  </button>
+                </li>
+              </>
+            )}
           </ul>
         </div>
 
