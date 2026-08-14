@@ -216,3 +216,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Vue landing page (comparison build, not part of the client project)
+/vue-landing/

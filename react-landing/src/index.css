@@ -1,0 +1,77 @@
+@import 'tailwindcss';
+@import '@fontsource/merriweather/latin-400.css';
+@import '@fontsource/merriweather/latin-700.css';
+@import '@fontsource/open-sans/latin-400.css';
+@import '@fontsource/open-sans/latin-500.css';
+@import '@fontsource/open-sans/latin-600.css';
+@import '@fontsource/open-sans/latin-700.css';
+
+@theme inline {
+  /* Brand palette — "The Cultivator" (green/terracotta) with the client's
+     preferred structure: warm cream body, solid green nav/footer chrome. */
+  --color-bg: #f5f2ea;
+  --color-surface: #ffffff;
+  --color-chrome: #1e4d3b;
+  --color-ink: #2b2e28;
+  --color-ink-muted: rgba(43, 46, 40, 0.62);
+  --color-green: #388e3c;
+  --color-green-soft: #4fa653;
+  --color-terracotta: #d84315;
+  --color-hairline: #e4e1d8;
+  --color-hairline-dark: rgba(255, 255, 255, 0.22);
+
+  --font-display: 'Merriweather', serif;
+  --font-sans: 'Open Sans', sans-serif;
+}
+
+:root {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--color-green);
+  color: #fff;
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+/* Cultivator has no mono/data face — labels use Open Sans, spaced + uppercase. */
+.eyebrow-label {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+@keyframes hero-ken-burns {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.08);
+  }
+}
+
+.hero-video-zoom {
+  animation: hero-ken-burns 24s ease-in-out infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-video-zoom {
+    animation: none;
+  }
+}
