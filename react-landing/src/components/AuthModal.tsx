@@ -120,6 +120,7 @@ export function AuthModal() {
   const [phone, setPhone] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [entered, setEntered] = useState(false);
 
@@ -153,6 +154,7 @@ export function AuthModal() {
       setPhone('');
       setShowPassword(false);
       setError(null);
+      setSuccessMessage(null);
       setSubmitting(false);
     }
   }, [isModalOpen]);
@@ -170,11 +172,13 @@ export function AuthModal() {
   const switchMode = (mode: 'signin' | 'signup') => {
     setModalMode(mode);
     setError(null);
+    setSuccessMessage(null);
   };
 
   const switchRole = (role: Role) => {
     setModalRole(role);
     setError(null);
+    setSuccessMessage(null);
   };
 
   const handleSubmit = async (event: FormEvent) => {
@@ -188,6 +192,7 @@ export function AuthModal() {
 
     setSubmitting(true);
     setError(null);
+    setSuccessMessage(null);
 
     try {
       if (isSignup) {
@@ -198,17 +203,22 @@ export function AuthModal() {
           last_name: lastName || undefined,
           phone: phone || undefined,
         });
+        // Account created, but not signed in — send them to the sign-in screen
+        // instead of straight to the dashboard, with the email carried over.
+        setModalMode('signin');
+        setPassword('');
+        setSuccessMessage('Account created successfully. Sign in to continue.');
       } else {
         await login(modalRole, { email, password });
+        closeModal();
+        // Leaving "/" unmounts the hero/journey sections, which GSAP has pinned by
+        // physically wrapping them in "pin-spacer" divs — React doesn't know about
+        // that DOM restructuring. Killing every ScrollTrigger first undoes it and
+        // restores the original DOM, so React's own unmount doesn't try to remove
+        // a node from a parent GSAP has since replaced (a real crash otherwise).
+        ScrollTrigger.getAll().forEach((trigger) => trigger.kill());
+        navigate(modalRole === 'broker' ? '/broker' : '/customer');
       }
-      closeModal();
-      // Leaving "/" unmounts the hero/journey sections, which GSAP has pinned by
-      // physically wrapping them in "pin-spacer" divs — React doesn't know about
-      // that DOM restructuring. Killing every ScrollTrigger first undoes it and
-      // restores the original DOM, so React's own unmount doesn't try to remove
-      // a node from a parent GSAP has since replaced (a real crash otherwise).
-      ScrollTrigger.getAll().forEach((trigger) => trigger.kill());
-      navigate(modalRole === 'broker' ? '/broker' : '/customer');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
     } finally {
@@ -350,6 +360,12 @@ export function AuthModal() {
                 </button>
               }
             />
+
+            {successMessage && (
+              <p role="status" className="rounded-lg border border-green/25 bg-green/10 px-3.5 py-2.5 text-sm font-medium text-green">
+                {successMessage}
+              </p>
+            )}
 
             {error && (
               <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">

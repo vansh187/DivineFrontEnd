@@ -23,6 +23,8 @@ export function getDisplayName(session: AuthSession, maxLength = 22): string {
 interface AuthContextValue {
   session: AuthSession | null;
   login: (role: Role, input: LoginInput) => Promise<void>;
+  /** Creates the account only — does not sign the visitor in. Call login()
+   * afterwards once they've confirmed on the sign-in screen. */
   signup: (role: Role, input: SignupInput) => Promise<void>;
   logout: () => void;
   isModalOpen: boolean;
@@ -74,21 +76,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [persist],
   );
 
-  const signup = useCallback(
-    async (role: Role, input: SignupInput) => {
-      const profile = await authApi.signup(role, input);
-      const res = await authApi.login(role, { email: input.email, password: input.password });
-      const claims = authApi.decodeJwtClaims(res.access_token);
-      persist({
-        token: res.access_token,
-        role,
-        userId: claims?.sub ?? profile.id,
-        email: input.email,
-        firstName: profile.first_name,
-      });
-    },
-    [persist],
-  );
+  const signup = useCallback(async (role: Role, input: SignupInput) => {
+    await authApi.signup(role, input);
+  }, []);
 
   const logout = useCallback(() => persist(null), [persist]);
 
