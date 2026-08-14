@@ -68,3 +68,44 @@ body {
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+
+/* Cost estimator sliders — the filled/unfilled track split is painted via an
+   inline background-image gradient (computed from value) set by the component;
+   this just handles cross-browser thumb styling, which CSS can't do generically. */
+.brand-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-hairline);
+  outline: none;
+}
+
+.brand-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-green);
+  border: 3px solid #fff;
+  box-shadow: 0 2px 8px rgba(30, 77, 59, 0.35);
+  cursor: pointer;
+}
+
+.brand-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-green);
+  border: 3px solid #fff;
+  box-shadow: 0 2px 8px rgba(30, 77, 59, 0.35);
+  cursor: pointer;
+}
+
+.brand-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: transparent;
+}

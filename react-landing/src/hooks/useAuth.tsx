@@ -13,6 +13,13 @@ export interface AuthSession {
 
 export type ModalMode = 'signin' | 'signup';
 
+/** first_name is optional at signup, so the fallback (email local-part) can run
+ * long — truncate it so it can never break the nav pill or a heading's layout. */
+export function getDisplayName(session: AuthSession, maxLength = 22): string {
+  const raw = session.firstName || session.email.split('@')[0];
+  return raw.length > maxLength ? `${raw.slice(0, maxLength - 1)}…` : raw;
+}
+
 interface AuthContextValue {
   session: AuthSession | null;
   login: (role: Role, input: LoginInput) => Promise<void>;

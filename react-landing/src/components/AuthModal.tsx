@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useAuth } from '../hooks/useAuth';
 import { ApiError } from '../services/authApi';
 import type { Role } from '../services/authApi';
@@ -107,6 +109,7 @@ function Field({ label, type, value, onChange, icon, autoComplete, required, min
 
 export function AuthModal() {
   const { isModalOpen, modalMode, modalRole, closeModal, setModalMode, setModalRole, login, signup } = useAuth();
+  const navigate = useNavigate();
   const panelRef = useRef<HTMLDivElement>(null);
   const emailInputRef = useRef<HTMLInputElement>(null);
 
@@ -199,6 +202,13 @@ export function AuthModal() {
         await login(modalRole, { email, password });
       }
       closeModal();
+      // Leaving "/" unmounts the hero/journey sections, which GSAP has pinned by
+      // physically wrapping them in "pin-spacer" divs — React doesn't know about
+      // that DOM restructuring. Killing every ScrollTrigger first undoes it and
+      // restores the original DOM, so React's own unmount doesn't try to remove
+      // a node from a parent GSAP has since replaced (a real crash otherwise).
+      ScrollTrigger.getAll().forEach((trigger) => trigger.kill());
+      navigate(modalRole === 'broker' ? '/broker' : '/customer');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
     } finally {
