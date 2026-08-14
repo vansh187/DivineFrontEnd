@@ -12,7 +12,7 @@ export function LoginMenu() {
     <div className="relative" ref={rootRef}>
       <button
         type="button"
-        className="eyebrow-label inline-flex items-center gap-1.5 text-xs text-white/85 transition-colors hover:text-terracotta"
+        className="eyebrow-label inline-flex items-center gap-1.5 text-xs text-white/85 transition-colors hover:text-terracotta-light"
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((prev) => !prev)}
@@ -44,7 +44,7 @@ export function LoginMenu() {
               key={option.href}
               href={option.href}
               role="menuitem"
-              className="block rounded-lg px-3 py-2.5 text-sm text-ink transition-colors hover:bg-bg hover:text-green"
+              className="block rounded-lg px-3 py-2.5 text-sm text-ink transition-colors hover:bg-bg hover:text-chrome"
               onClick={() => setOpen(false)}
             >
               {option.label}

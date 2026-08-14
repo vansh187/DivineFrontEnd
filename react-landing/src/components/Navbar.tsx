@@ -22,7 +22,7 @@ export function Navbar() {
             <a
               key={link.href}
               href={link.href}
-              className="eyebrow-label text-xs text-white/85 transition-colors hover:text-terracotta"
+              className="eyebrow-label text-xs text-white/85 transition-colors hover:text-terracotta-light"
             >
               {link.label}
             </a>
@@ -33,7 +33,7 @@ export function Navbar() {
 
         <a
           href={contact.phoneHref}
-          className="rounded-full bg-white px-5 py-2.5 text-xs font-semibold text-chrome transition-colors hover:bg-terracotta hover:text-white"
+          className="rounded-full bg-white px-5 py-2.5 text-xs font-semibold text-chrome shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-green hover:text-white hover:shadow-[0_10px_24px_-10px_rgba(56,142,60,0.7)]"
         >
           Book a site visit
         </a>

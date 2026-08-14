@@ -13,10 +13,17 @@
   --color-surface: #ffffff;
   --color-chrome: #1e4d3b;
   --color-ink: #2b2e28;
-  --color-ink-muted: rgba(43, 46, 40, 0.62);
+  /* 0.72 (not the original 0.62) is the lowest alpha that still clears
+     4.5:1 against both the cream body and white surfaces — see the
+     ink-muted usages in JourneyPanel/DeliveredSection copy. */
+  --color-ink-muted: rgba(43, 46, 40, 0.72);
   --color-green: #388e3c;
   --color-green-soft: #4fa653;
-  --color-terracotta: #d84315;
+  /* Darkened from the brand's #d84315 so eyebrow/label text clears WCAG AA
+     (4.5:1) on the cream body background — the brighter tint is reserved
+     for dark (chrome) backgrounds, see --color-terracotta-light. */
+  --color-terracotta: #c0390f;
+  --color-terracotta-light: #f2a35c;
   --color-hairline: #e4e1d8;
   --color-hairline-dark: rgba(255, 255, 255, 0.22);
 
@@ -55,23 +62,4 @@ body {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-}
-
-@keyframes hero-ken-burns {
-  from {
-    transform: scale(1);
-  }
-  to {
-    transform: scale(1.08);
-  }
-}
-
-.hero-video-zoom {
-  animation: hero-ken-burns 24s ease-in-out infinite alternate;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .hero-video-zoom {
-    animation: none;
-  }
 }
