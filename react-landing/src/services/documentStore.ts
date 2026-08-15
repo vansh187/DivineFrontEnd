@@ -31,6 +31,31 @@ export function emptyAadhaarStatus(): AadhaarStatus {
   return { verified: false, verifiedAt: null, method: null, maskedAadhaar: null, name: null, lastAttemptError: null };
 }
 
+/** A raw Aadhaar front/back photo uploaded straight to storage (POST
+ * /documents/aadhaar-photo) for later use in document generation - not
+ * parsed or verified, unlike AadhaarStatus above. */
+export interface AadhaarPhotoStatus {
+  fileName: string | null;
+  fileSize: number | null;
+  uploadedAt: string | null;
+  documentId: string | null;
+  signedUrl: string | null;
+  signedUrlExpiresAt: number | null;
+  error: string | null;
+}
+
+export function emptyAadhaarPhotoStatus(): AadhaarPhotoStatus {
+  return {
+    fileName: null,
+    fileSize: null,
+    uploadedAt: null,
+    documentId: null,
+    signedUrl: null,
+    signedUrlExpiresAt: null,
+    error: null,
+  };
+}
+
 export interface GeneratedDocStatus {
   generated: boolean;
   generatedAt: string | null;
@@ -43,6 +68,8 @@ export interface GeneratedDocStatus {
 
 export interface CustomerDocState {
   aadhar: AadhaarStatus;
+  aadharFront: AadhaarPhotoStatus;
+  aadharBack: AadhaarPhotoStatus;
   pan: DocStatus;
   generatedDoc: GeneratedDocStatus;
 }
@@ -59,6 +86,8 @@ export interface ScheduledVisit {
 
 export interface BrokerDocState {
   aadhar: AadhaarStatus;
+  aadharFront: AadhaarPhotoStatus;
+  aadharBack: AadhaarPhotoStatus;
   visits: ScheduledVisit[];
 }
 
@@ -70,24 +99,39 @@ function storageKey(kind: 'customer' | 'broker', email: string) {
   return `dvi_docs_${kind}_${email.toLowerCase()}`;
 }
 
+function emptyGeneratedDocStatus(): GeneratedDocStatus {
+  return {
+    generated: false,
+    generatedAt: null,
+    applicantName: null,
+    signatureVerified: false,
+    documentId: null,
+    signedUrl: null,
+    signedUrlExpiresAt: null,
+  };
+}
+
 export function loadCustomerDocs(email: string): CustomerDocState {
   try {
     const raw = localStorage.getItem(storageKey('customer', email));
     if (!raw) throw new Error('none');
-    return JSON.parse(raw) as CustomerDocState;
+    // Partial<> because state cached before aadharFront/aadharBack existed won't have
+    // them - back-fill defaults rather than trust the cast and hand back `undefined`.
+    const parsed = JSON.parse(raw) as Partial<CustomerDocState>;
+    return {
+      aadhar: parsed.aadhar ?? emptyAadhaarStatus(),
+      aadharFront: parsed.aadharFront ?? emptyAadhaarPhotoStatus(),
+      aadharBack: parsed.aadharBack ?? emptyAadhaarPhotoStatus(),
+      pan: parsed.pan ?? emptyDocStatus(),
+      generatedDoc: parsed.generatedDoc ?? emptyGeneratedDocStatus(),
+    };
   } catch {
     return {
       aadhar: emptyAadhaarStatus(),
+      aadharFront: emptyAadhaarPhotoStatus(),
+      aadharBack: emptyAadhaarPhotoStatus(),
       pan: emptyDocStatus(),
-      generatedDoc: {
-        generated: false,
-        generatedAt: null,
-        applicantName: null,
-        signatureVerified: false,
-        documentId: null,
-        signedUrl: null,
-        signedUrlExpiresAt: null,
-      },
+      generatedDoc: emptyGeneratedDocStatus(),
     };
   }
 }
@@ -100,9 +144,15 @@ export function loadBrokerDocs(email: string): BrokerDocState {
   try {
     const raw = localStorage.getItem(storageKey('broker', email));
     if (!raw) throw new Error('none');
-    return JSON.parse(raw) as BrokerDocState;
+    const parsed = JSON.parse(raw) as Partial<BrokerDocState>;
+    return {
+      aadhar: parsed.aadhar ?? emptyAadhaarStatus(),
+      aadharFront: parsed.aadharFront ?? emptyAadhaarPhotoStatus(),
+      aadharBack: parsed.aadharBack ?? emptyAadhaarPhotoStatus(),
+      visits: parsed.visits ?? [],
+    };
   } catch {
-    return { aadhar: emptyAadhaarStatus(), visits: [] };
+    return { aadhar: emptyAadhaarStatus(), aadharFront: emptyAadhaarPhotoStatus(), aadharBack: emptyAadhaarPhotoStatus(), visits: [] };
   }
 }
 

@@ -1,13 +1,12 @@
 import { useRef, useState } from 'react';
-import { verifyAadhaarQr, verifyAadhaarXml } from '../services/kycApi';
+import { verifyAadhaarQr } from '../services/kycApi';
 import type { AadhaarVerifyResult } from '../services/kycApi';
+import { uploadAadhaarPhoto } from '../services/documentsApi';
+import type { AadhaarPhotoSide } from '../services/documentsApi';
 import { ApiError } from '../services/authApi';
-import type { AadhaarStatus } from '../services/documentStore';
+import type { AadhaarStatus, AadhaarPhotoStatus } from '../services/documentStore';
 import { TileShell } from './DocumentTile';
-import { AadhaarQrScanner } from './AadhaarQrScanner';
 import { IdCardIcon } from './DashboardIcons';
-
-type Method = 'qr' | 'xml';
 
 function failureMessage(reason: string | null): string {
   if (!reason) return 'Verification failed. Please try again.';
@@ -20,44 +19,16 @@ function failureMessage(reason: string | null): string {
   return 'Verification failed. Please try again.';
 }
 
-/** Opt-in via ?debug=1 — off for real users, but lets us grab the exact
- * failing image on request (e.g. to hand the backend team a real repro
- * instead of a synthetic one) without shipping always-on debug downloads. */
-function isDebugMode(): boolean {
-  try {
-    return new URLSearchParams(window.location.search).get('debug') === '1';
-  } catch {
-    return false;
-  }
-}
-
-function downloadDebugImage(file: File, tag: string) {
-  try {
-    const url = URL.createObjectURL(file);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `aadhaar-qr-${tag}-${Date.now()}.jpg`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  } catch {
-    // Best effort — a failed debug download shouldn't block the UI.
-  }
-}
-
 function FileField({
   label,
   file,
   onChange,
   accept,
-  capture,
 }: {
   label: string;
   file: File | null;
   onChange: (file: File | null) => void;
   accept: string;
-  capture?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   return (
@@ -66,11 +37,6 @@ function FileField({
         ref={inputRef}
         type="file"
         accept={accept}
-        // On phones, this opens the native camera app directly rather than
-        // a gallery/file picker — full native ISP quality (HDR, autofocus,
-        // exposure), the same pipeline that produces a sharp photo, unlike
-        // the browser's own getUserMedia feed used by the live scanner.
-        {...(capture ? { capture: 'environment' } : {})}
         className="hidden"
         onChange={(event) => onChange(event.target.files?.[0] ?? null)}
       />
@@ -86,25 +52,76 @@ function FileField({
   );
 }
 
+function PhotoUploadRow({
+  label,
+  status,
+  file,
+  onFileChange,
+  onUpload,
+  uploading,
+}: {
+  label: string;
+  status: AadhaarPhotoStatus;
+  file: File | null;
+  onFileChange: (file: File | null) => void;
+  onUpload: () => void;
+  uploading: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5 border-t border-hairline pt-3">
+      <p className="text-xs font-semibold text-ink">{label}</p>
+      <FileField label="Choose file" file={file} onChange={onFileChange} accept="image/jpeg,image/png" />
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onUpload}
+          disabled={uploading || !file}
+          className="self-start rounded-full border border-hairline px-4 py-2 text-xs font-semibold text-ink transition-colors hover:border-green hover:text-green disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {uploading ? 'Uploading…' : 'Upload'}
+        </button>
+        {status.fileName && !status.error && (
+          <span className="text-[11px] font-semibold text-green">Uploaded — {status.fileName}</span>
+        )}
+      </div>
+      {status.error && (
+        <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {status.error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 interface AadhaarVerifyTileProps {
   token: string;
   status: AadhaarStatus;
-  onChange: (next: AadhaarStatus) => void;
+  onStatusChange: (next: AadhaarStatus) => void;
+  frontStatus: AadhaarPhotoStatus;
+  onFrontChange: (next: AadhaarPhotoStatus) => void;
+  backStatus: AadhaarPhotoStatus;
+  onBackChange: (next: AadhaarPhotoStatus) => void;
   onSessionExpired: () => void;
 }
 
-export function AadhaarVerifyTile({ token, status, onChange, onSessionExpired }: AadhaarVerifyTileProps) {
-  const [method, setMethod] = useState<Method>('qr');
-  const [frontFile, setFrontFile] = useState<File | null>(null);
-  const [backFile, setBackFile] = useState<File | null>(null);
-  const [xmlFile, setXmlFile] = useState<File | null>(null);
-  const [shareCode, setShareCode] = useState('');
+export function AadhaarVerifyTile({
+  token,
+  status,
+  onStatusChange,
+  frontStatus,
+  onFrontChange,
+  backStatus,
+  onBackChange,
+  onSessionExpired,
+}: AadhaarVerifyTileProps) {
+  const [qrFile, setQrFile] = useState<File | null>(null);
   const [verifying, setVerifying] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [scannerOpen, setScannerOpen] = useState(false);
-  const [showLiveScan, setShowLiveScan] = useState(false);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
+
+  const [frontFile, setFrontFile] = useState<File | null>(null);
+  const [uploadingFront, setUploadingFront] = useState(false);
+  const [backFile, setBackFile] = useState<File | null>(null);
+  const [uploadingBack, setUploadingBack] = useState(false);
 
   const statusLabel = status.verified ? 'Verified' : 'Not verified';
   const statusTone = status.verified ? 'done' : 'failed';
@@ -119,7 +136,7 @@ export function AadhaarVerifyTile({ token, status, onChange, onSessionExpired }:
 
   const applyResult = (result: AadhaarVerifyResult) => {
     setError(null);
-    onChange({
+    onStatusChange({
       verified: result.verified,
       verifiedAt: result.verified ? new Date().toISOString() : status.verifiedAt,
       method: result.method,
@@ -130,68 +147,14 @@ export function AadhaarVerifyTile({ token, status, onChange, onSessionExpired }:
   };
 
   const handleVerifyQr = async () => {
-    const files = [backFile, frontFile].filter((f): f is File => !!f);
-    if (files.length === 0) {
-      setError('Upload at least one side of your Aadhaar card.');
+    if (!qrFile) {
+      setError('Choose a QR code image to verify.');
       return;
     }
     setVerifying(true);
     setError(null);
-    setNotice(null);
     try {
-      for (let i = 0; i < files.length; i++) {
-        const isLast = i === files.length - 1;
-        try {
-          const result = await verifyAadhaarQr(token, files[i]);
-          applyResult(result);
-          return;
-        } catch (err) {
-          if (isDebugMode()) downloadDebugImage(files[i], `manual-${i === 0 ? 'first' : 'second'}`);
-          const qrNotFound = err instanceof ApiError && err.detail === 'qr_not_found';
-          if (qrNotFound && !isLast) {
-            setNotice("Couldn't find a QR code on that side — trying the other side…");
-            continue;
-          }
-          setError(
-            qrNotFound
-              ? "We couldn't find a QR code on either photo. Try a clearer, well-lit photo with the card held flat."
-              : describeError(err),
-          );
-          return;
-        }
-      }
-    } finally {
-      setVerifying(false);
-      setNotice(null);
-    }
-  };
-
-  const handleScanCapture = async (file: File) => {
-    setScannerOpen(false);
-    setVerifying(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const result = await verifyAadhaarQr(token, file);
-      applyResult(result);
-    } catch (err) {
-      if (isDebugMode()) downloadDebugImage(file, 'scan');
-      setError(describeError(err));
-    } finally {
-      setVerifying(false);
-    }
-  };
-
-  const handleVerifyUpload = async () => {
-    if (!uploadFile) {
-      setError('Choose an existing QR photo to upload.');
-      return;
-    }
-    setVerifying(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const result = await verifyAadhaarQr(token, uploadFile);
+      const result = await verifyAadhaarQr(token, qrFile);
       applyResult(result);
     } catch (err) {
       setError(describeError(err));
@@ -200,166 +163,98 @@ export function AadhaarVerifyTile({ token, status, onChange, onSessionExpired }:
     }
   };
 
-  const handleVerifyXml = async () => {
-    if (!xmlFile) {
-      setError('Upload the ZIP file from UIDAI.');
-      return;
-    }
-    if (!shareCode.trim()) {
-      setError('Enter your share code.');
-      return;
-    }
-    setVerifying(true);
-    setError(null);
+  const handleUploadPhoto = async (
+    side: AadhaarPhotoSide,
+    file: File | null,
+    setUploading: (value: boolean) => void,
+    onChange: (next: AadhaarPhotoStatus) => void,
+  ) => {
+    if (!file) return;
+    setUploading(true);
     try {
-      const result = await verifyAadhaarXml(token, xmlFile, shareCode.trim());
-      applyResult(result);
+      const doc = await uploadAadhaarPhoto(token, file, side);
+      onChange({
+        fileName: file.name,
+        fileSize: file.size,
+        uploadedAt: new Date().toISOString(),
+        documentId: doc.id,
+        signedUrl: doc.signed_url,
+        signedUrlExpiresAt: Date.now() + doc.signed_url_expires_in * 1000,
+        error: null,
+      });
     } catch (err) {
-      setError(describeError(err));
+      onChange({
+        fileName: file.name,
+        fileSize: file.size,
+        uploadedAt: null,
+        documentId: null,
+        signedUrl: null,
+        signedUrlExpiresAt: null,
+        error: describeError(err),
+      });
     } finally {
-      setVerifying(false);
+      setUploading(false);
     }
   };
 
   return (
-    <>
     <TileShell
       icon={<IdCardIcon />}
       title="Aadhaar card"
-      description="Verify your identity with UIDAI — choose how you'd like to verify."
+      description="Upload your Aadhaar QR code to verify with UIDAI, and front/back photos for your records."
       statusLabel={statusLabel}
       statusTone={statusTone}
     >
-      {status.verified ? (
-        <div className="flex flex-col gap-1 text-xs text-ink-muted">
-          <p>
-            <span className="font-semibold text-ink">{status.name ?? 'Verified'}</span>
-            {status.maskedAadhaar ? ` · ${status.maskedAadhaar}` : ''}
-          </p>
-          <p>
-            Verified via {status.method === 'qr' ? 'QR code' : 'Offline e-KYC'}
-            {status.verifiedAt ? ` on ${new Date(status.verifiedAt).toLocaleDateString('en-IN')}` : ''}.
-          </p>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1.5 text-xs text-ink">
-            Verification method
-            <select
-              value={method}
-              onChange={(event) => {
-                setMethod(event.target.value as Method);
-                setError(null);
-                setNotice(null);
-              }}
-              className="rounded-lg border border-hairline bg-bg px-3 py-2 text-xs text-ink outline-none focus:border-green"
-            >
-              <option value="qr">Aadhaar card photo (QR code)</option>
-              <option value="xml">Offline e-KYC (UIDAI ZIP + share code)</option>
-            </select>
-          </label>
-
-          {method === 'qr' ? (
-            <div className="flex flex-col gap-2">
-              <FileField label="Front side" file={frontFile} onChange={setFrontFile} accept="image/jpeg,image/png" capture />
-              <FileField label="Back side" file={backFile} onChange={setBackFile} accept="image/jpeg,image/png" capture />
-              <p className="text-[11px] leading-snug text-ink-muted">
-                Opens your camera app directly — take a clear, well-lit photo of the side with the QR code.
-                This goes through your phone's own camera, so it's usually sharper than live scanning below.
-              </p>
-              <button
-                type="button"
-                onClick={handleVerifyQr}
-                disabled={verifying}
-                className="self-start rounded-full bg-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {verifying ? 'Verifying…' : 'Verify photo'}
-              </button>
-
-              {!showLiveScan ? (
-                <button
-                  type="button"
-                  onClick={() => setShowLiveScan(true)}
-                  className="self-start text-[11px] font-semibold text-chrome hover:underline"
-                >
-                  Or try other ways to verify
-                </button>
-              ) : (
-                <div className="mt-1 flex flex-col gap-3 border-t border-hairline pt-3">
-                  <div className="flex flex-col gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setScannerOpen(true)}
-                      disabled={verifying}
-                      className="self-start rounded-full border border-hairline px-4 py-2 text-xs font-semibold text-ink transition-colors hover:border-green hover:text-green disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {verifying ? 'Verifying…' : 'Scan QR with camera'}
-                    </button>
-                    <p className="text-[11px] leading-snug text-ink-muted">
-                      Live preview quality can be lower than a regular photo on some phones — if it struggles,
-                      the photo option above is usually more reliable.
-                    </p>
-                  </div>
-
-                  <div className="flex flex-col gap-2 border-t border-hairline pt-3">
-                    <FileField label="Upload existing photo" file={uploadFile} onChange={setUploadFile} accept="image/jpeg,image/png" />
-                    <button
-                      type="button"
-                      onClick={handleVerifyUpload}
-                      disabled={verifying}
-                      className="self-start rounded-full border border-hairline px-4 py-2 text-xs font-semibold text-ink transition-colors hover:border-green hover:text-green disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {verifying ? 'Verifying…' : 'Verify uploaded photo'}
-                    </button>
-                    <p className="text-[11px] leading-snug text-ink-muted">
-                      Already have a QR photo saved (from your gallery, downloads, or another device)? Upload it
-                      directly here to check it against the backend.
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              <FileField label="UIDAI ZIP file" file={xmlFile} onChange={setXmlFile} accept=".zip,application/zip,application/x-zip-compressed" />
-              <input
-                value={shareCode}
-                onChange={(event) => setShareCode(event.target.value)}
-                placeholder="Share code"
-                className="rounded-lg border border-hairline bg-bg px-3 py-2 text-xs text-ink outline-none focus:border-green"
-              />
-              <p className="text-[11px] leading-snug text-ink-muted">
-                Get this ZIP from{' '}
-                <a href="https://myaadhaar.uidai.gov.in" target="_blank" rel="noopener noreferrer" className="text-chrome hover:underline">
-                  myaadhaar.uidai.gov.in
-                </a>{' '}
-                → Offline eKYC, using the share code you set there.
-              </p>
-            </div>
-          )}
-
-          {notice && <p className="text-xs font-medium text-terracotta">{notice}</p>}
-
-          {(error || status.lastAttemptError) && (
-            <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-              {error ?? status.lastAttemptError}
+      <div className="flex flex-col gap-3">
+        {status.verified ? (
+          <div className="flex flex-col gap-1 text-xs text-ink-muted">
+            <p>
+              <span className="font-semibold text-ink">{status.name ?? 'Verified'}</span>
+              {status.maskedAadhaar ? ` · ${status.maskedAadhaar}` : ''}
             </p>
-          )}
-
-          {method === 'xml' && (
+            <p>
+              Verified via {status.method === 'qr' ? 'QR code' : 'Offline e-KYC'}
+              {status.verifiedAt ? ` on ${new Date(status.verifiedAt).toLocaleDateString('en-IN')}` : ''}.
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-semibold text-ink">QR code (for KYC verification)</p>
+            <FileField label="Choose QR image" file={qrFile} onChange={setQrFile} accept="image/jpeg,image/png" />
             <button
               type="button"
-              onClick={handleVerifyXml}
+              onClick={handleVerifyQr}
               disabled={verifying}
               className="self-start rounded-full bg-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {verifying ? 'Verifying…' : 'Verify Aadhaar'}
+              {verifying ? 'Verifying…' : 'Verify QR'}
             </button>
-          )}
-        </div>
-      )}
+            {(error || status.lastAttemptError) && (
+              <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                {error ?? status.lastAttemptError}
+              </p>
+            )}
+          </div>
+        )}
+
+        <PhotoUploadRow
+          label="Aadhaar front photo"
+          status={frontStatus}
+          file={frontFile}
+          onFileChange={setFrontFile}
+          onUpload={() => handleUploadPhoto('front', frontFile, setUploadingFront, onFrontChange)}
+          uploading={uploadingFront}
+        />
+
+        <PhotoUploadRow
+          label="Aadhaar back photo"
+          status={backStatus}
+          file={backFile}
+          onFileChange={setBackFile}
+          onUpload={() => handleUploadPhoto('back', backFile, setUploadingBack, onBackChange)}
+          uploading={uploadingBack}
+        />
+      </div>
     </TileShell>
-    {scannerOpen && <AadhaarQrScanner onCapture={handleScanCapture} onCancel={() => setScannerOpen(false)} />}
-    </>
   );
 }

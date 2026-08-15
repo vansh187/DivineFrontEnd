@@ -60,7 +60,11 @@ export function BrokerDocuments() {
         <AadhaarVerifyTile
           token={session?.token ?? ''}
           status={docs.aadhar}
-          onChange={(next) => persist({ ...docs, aadhar: next })}
+          onStatusChange={(next) => persist({ ...docs, aadhar: next })}
+          frontStatus={docs.aadharFront}
+          onFrontChange={(next) => persist({ ...docs, aadharFront: next })}
+          backStatus={docs.aadharBack}
+          onBackChange={(next) => persist({ ...docs, aadharBack: next })}
           onSessionExpired={() => {
             logout();
             openModal('signin', 'broker');

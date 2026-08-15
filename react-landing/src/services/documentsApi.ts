@@ -16,6 +16,8 @@ export interface GenerateDocumentInput {
   form_data: Record<string, string | number>;
 }
 
+export type AadhaarPhotoSide = 'front' | 'back';
+
 function messageForDocumentsError(status: number, detail: unknown): string {
   if (status === 401) {
     return detail === 'token_expired'
@@ -25,8 +27,13 @@ function messageForDocumentsError(status: number, detail: unknown): string {
   if (status === 403) return 'You can only access your own documents.';
   if (status === 404) return 'That document could not be found.';
   if (status === 429) return 'Too many attempts. Please wait a minute and try again.';
+  if (status === 400) {
+    if (detail === 'empty_file') return 'That file is empty. Please choose a different file.';
+    if (detail === 'file_too_large') return 'That file is larger than 8 MB. Please choose a smaller file.';
+    if (detail === 'unsupported_file_type') return 'Please upload a JPEG or PNG image.';
+  }
   if (typeof detail === 'string' && detail.startsWith('storage_')) {
-    return 'Something went wrong generating your document. Please try again.';
+    return 'Something went wrong uploading your document. Please try again.';
   }
   if (status === 422) return 'Please check the details you entered.';
   return 'Something went wrong. Please try again.';
@@ -63,4 +70,17 @@ export function generateDocument(token: string, input: GenerateDocumentInput): P
 
 export function getDocument(token: string, documentId: string): Promise<GeneratedDocument> {
   return authedRequest<GeneratedDocument>(`/documents/${documentId}`, token);
+}
+
+/** Uploads a raw Aadhaar front/back photo straight to storage for later use in document
+ * generation - no parsing or KYC verification, unlike kycApi's verifyAadhaarQr. */
+export function uploadAadhaarPhoto(token: string, file: File, side: AadhaarPhotoSide): Promise<GeneratedDocument> {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('side', side);
+  return authedRequest<GeneratedDocument>('/documents/aadhaar-photo', token, {
+    method: 'POST',
+    // No Content-Type here - the browser sets the multipart boundary itself.
+    body: formData,
+  });
 }
