@@ -51,11 +51,18 @@ function playBeep() {
   }
 }
 
+interface QrCorners {
+  topLeftCorner: { x: number; y: number };
+  topRightCorner: { x: number; y: number };
+  bottomLeftCorner: { x: number; y: number };
+  bottomRightCorner: { x: number; y: number };
+}
+
 /** Crop tightly to the QR's own bounding box (+25% padding) so the image we
  * upload has far more effective pixel density on the QR patch than a full
  * card photo would — this is what actually fixes qr_not_found on genuine
  * cards, not just a nicer UI. */
-function cropToQr(source: HTMLCanvasElement, location: QRCode['location']): HTMLCanvasElement {
+function cropToQr(source: HTMLCanvasElement, location: QrCorners): HTMLCanvasElement {
   const xs = [location.topLeftCorner.x, location.topRightCorner.x, location.bottomLeftCorner.x, location.bottomRightCorner.x];
   const ys = [location.topLeftCorner.y, location.topRightCorner.y, location.bottomLeftCorner.y, location.bottomRightCorner.y];
   const minX = Math.min(...xs);
@@ -74,6 +81,27 @@ function cropToQr(source: HTMLCanvasElement, location: QRCode['location']): HTML
   cropCanvas.getContext('2d')?.drawImage(source, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
   return cropCanvas;
 }
+
+function scalePoint(p: { x: number; y: number }, scaleX: number, scaleY: number) {
+  return { x: p.x * scaleX, y: p.y * scaleY };
+}
+
+/** jsQR runs on a small downscaled frame every tick — cheap enough not to
+ * freeze the page. Its coordinates need scaling back up to the native video
+ * resolution before we crop, so the uploaded image still has full quality. */
+function scaleLocation(location: QRCode['location'], scaleX: number, scaleY: number): QrCorners {
+  return {
+    topLeftCorner: scalePoint(location.topLeftCorner, scaleX, scaleY),
+    topRightCorner: scalePoint(location.topRightCorner, scaleX, scaleY),
+    bottomLeftCorner: scalePoint(location.bottomLeftCorner, scaleX, scaleY),
+    bottomRightCorner: scalePoint(location.bottomRightCorner, scaleX, scaleY),
+  };
+}
+
+/** jsQR only needs enough pixels to locate + read module boundaries, not the
+ * full native frame — analyzing a multi-megapixel buffer 8x/second is what
+ * was freezing the page on phones with high-res rear cameras. */
+const DETECTION_MAX_DIM = 640;
 
 const CloseIcon = () => (
   <svg viewBox="0 0 20 20" aria-hidden="true" className="h-4 w-4">
@@ -106,10 +134,21 @@ export function AadhaarQrScanner({ onCapture, onCancel }: AadhaarQrScannerProps)
       streamRef.current = null;
     };
 
-    const handleDetected = (canvas: HTMLCanvasElement, location: QRCode['location']) => {
+    const handleDetected = (detectionWidth: number, detectionHeight: number, location: QRCode['location']) => {
+      const v = videoRef.current;
+      if (!v || !v.videoWidth || !v.videoHeight) return;
       stoppedRef.current = true;
       setFound(true);
-      const cropped = cropToQr(canvas, location);
+
+      // One-time full-resolution grab, only now that we know where to crop —
+      // this is the only place a full-size frame gets touched.
+      const fullFrame = document.createElement('canvas');
+      fullFrame.width = v.videoWidth;
+      fullFrame.height = v.videoHeight;
+      fullFrame.getContext('2d')?.drawImage(v, 0, 0, v.videoWidth, v.videoHeight);
+
+      const scaled = scaleLocation(location, v.videoWidth / detectionWidth, v.videoHeight / detectionHeight);
+      const cropped = cropToQr(fullFrame, scaled);
       playBeep();
       stopStream();
       cropped.toBlob(
@@ -130,13 +169,13 @@ export function AadhaarQrScanner({ onCapture, onCancel }: AadhaarQrScannerProps)
 
       let stream: MediaStream;
       try {
-        // Ask for the highest resolution the device offers, in its natural
-        // aspect ratio — a forced square crop here previously made most
-        // cameras negotiate a lower fallback mode. More native pixels on
-        // the QR patch is what actually fixes qr_not_found, not the guide
-        // box or pinch-zoom (which just upscales/blurs existing pixels).
+        // 1080p in the camera's natural aspect ratio — a forced square
+        // request here previously made most cameras negotiate a worse
+        // fallback mode. Going higher than this (e.g. 4K) buys little on
+        // the final crop but costs real decode/processing overhead on
+        // mid-range phones, which was freezing the page.
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } },
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
           audio: false,
         });
       } catch (err) {
@@ -169,17 +208,20 @@ export function AadhaarQrScanner({ onCapture, onCancel }: AadhaarQrScannerProps)
         if (stoppedRef.current || cancelled) return;
         const v = videoRef.current;
         const canvas = canvasRef.current;
-        if (v && canvas && v.readyState >= v.HAVE_ENOUGH_DATA && timestamp - lastScanRef.current > 120) {
+        if (v && canvas && v.readyState >= v.HAVE_ENOUGH_DATA && v.videoWidth && v.videoHeight && timestamp - lastScanRef.current > 120) {
           lastScanRef.current = timestamp;
-          if (v.videoWidth && canvas.width !== v.videoWidth) canvas.width = v.videoWidth;
-          if (v.videoHeight && canvas.height !== v.videoHeight) canvas.height = v.videoHeight;
-          const ctx = canvas.getContext('2d');
-          if (ctx && canvas.width && canvas.height) {
-            ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const code = jsQR(imageData.data, imageData.width, imageData.height);
+          const scale = Math.min(1, DETECTION_MAX_DIM / Math.max(v.videoWidth, v.videoHeight));
+          const dw = Math.max(1, Math.round(v.videoWidth * scale));
+          const dh = Math.max(1, Math.round(v.videoHeight * scale));
+          if (canvas.width !== dw) canvas.width = dw;
+          if (canvas.height !== dh) canvas.height = dh;
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          if (ctx) {
+            ctx.drawImage(v, 0, 0, dw, dh);
+            const imageData = ctx.getImageData(0, 0, dw, dh);
+            const code = jsQR(imageData.data, dw, dh);
             if (code) {
-              handleDetected(canvas, code.location);
+              handleDetected(dw, dh, code.location);
               return;
             }
           }
