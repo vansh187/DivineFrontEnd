@@ -7,6 +7,7 @@ import { ApiError } from '../services/authApi';
 import { townshipPricing } from '../data/townshipPricing';
 import { TileShell, UploadDocumentTile } from './DocumentTile';
 import { AadhaarVerifyTile } from './AadhaarVerifyTile';
+import { PaymentTile } from './PaymentTile';
 import { CardIcon, FileIcon } from './DashboardIcons';
 
 export function CustomerDocuments() {
@@ -200,7 +201,7 @@ export function CustomerDocuments() {
         real PDF. PAN verification and signature checks are still simulated pending that part of the backend.
       </p>
 
-      <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <AadhaarVerifyTile
           token={session?.token ?? ''}
           status={docs.aadhar}
@@ -335,6 +336,18 @@ export function CustomerDocuments() {
             </button>
           )}
         </TileShell>
+
+        <PaymentTile
+          token={session?.token ?? ''}
+          email={session?.email ?? ''}
+          name={applicantName || (session ? getDisplayName(session) : '')}
+          status={docs.payment}
+          onChange={(next) => persist({ ...docs, payment: next })}
+          onSessionExpired={() => {
+            logout();
+            openModal('signin', 'customer');
+          }}
+        />
       </div>
     </section>
   );

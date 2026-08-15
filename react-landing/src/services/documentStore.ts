@@ -72,12 +72,28 @@ export interface GeneratedDocStatus {
   signedUrlExpiresAt: number | null;
 }
 
+/** Real Razorpay payment - "paid" is only ever set after the backend's signature
+ * verification confirms it (see paymentsApi.verifyPayment), never from client-side say-so. */
+export interface PaymentStatus {
+  amount: number | null;
+  status: 'created' | 'paid' | 'failed' | null;
+  razorpayOrderId: string | null;
+  razorpayPaymentId: string | null;
+  paidAt: string | null;
+  error: string | null;
+}
+
+export function emptyPaymentStatus(): PaymentStatus {
+  return { amount: null, status: null, razorpayOrderId: null, razorpayPaymentId: null, paidAt: null, error: null };
+}
+
 export interface CustomerDocState {
   aadhar: AadhaarStatus;
   aadharFront: AadhaarPhotoStatus;
   aadharBack: AadhaarPhotoStatus;
   pan: DocStatus;
   generatedDoc: GeneratedDocStatus;
+  payment: PaymentStatus;
 }
 
 export interface ScheduledVisit {
@@ -142,6 +158,7 @@ export function loadCustomerDocs(email: string): CustomerDocState {
       // signedUrl/error existed on DocStatus still back-fills those specific fields.
       pan: { ...emptyDocStatus(), ...parsed.pan },
       generatedDoc: parsed.generatedDoc ?? emptyGeneratedDocStatus(),
+      payment: { ...emptyPaymentStatus(), ...parsed.payment },
     };
   } catch {
     return {
@@ -150,6 +167,7 @@ export function loadCustomerDocs(email: string): CustomerDocState {
       aadharBack: emptyAadhaarPhotoStatus(),
       pan: emptyDocStatus(),
       generatedDoc: emptyGeneratedDocStatus(),
+      payment: emptyPaymentStatus(),
     };
   }
 }

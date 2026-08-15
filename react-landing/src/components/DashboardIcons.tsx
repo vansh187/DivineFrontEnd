@@ -57,6 +57,11 @@ export const CardIcon = () => (
     <path d="M2.5 8h15M5.5 12h4" />
   </IconWrap>
 );
+export const RupeeIcon = () => (
+  <IconWrap>
+    <path d="M5.5 4h9M5.5 7.5h9M5.5 4a3.6 3.6 0 0 1 0 7h-1.3L11 16.5" />
+  </IconWrap>
+);
 export const CheckIcon = () => (
   <svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
     <path d="M4.5 10.5 8 14l7.5-8" />
