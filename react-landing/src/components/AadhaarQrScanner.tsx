@@ -144,15 +144,56 @@ export function AadhaarQrScanner({ onCapture, onCancel }: AadhaarQrScannerProps)
   const [torchSupported, setTorchSupported] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
   const [hintStage, setHintStage] = useState(0);
+  const [cameraReady, setCameraReady] = useState(false);
+
+  const stopStream = () => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+  };
+
+  /** Auto-detect requires jsQR to actually lock onto the QR first — if the
+   * live feed never gets sharp enough for that (common on some phones at
+   * close range), there was previously no way to submit anything at all.
+   * This lets the user force a capture of whatever's in the guide box right
+   * now, so they're not stuck waiting on a detector that may never fire. */
+  const captureNow = () => {
+    const v = videoRef.current;
+    if (!v || !v.videoWidth || !v.videoHeight || stoppedRef.current || !cameraReady) return;
+    stoppedRef.current = true;
+    setFound(true);
+    if (hintTimerRef.current) window.clearInterval(hintTimerRef.current);
+
+    const fullFrame = document.createElement('canvas');
+    fullFrame.width = v.videoWidth;
+    fullFrame.height = v.videoHeight;
+    fullFrame.getContext('2d')?.drawImage(v, 0, 0, v.videoWidth, v.videoHeight);
+
+    // We don't know exactly where the QR is without jsQR, so approximate
+    // with a generous center crop — roughly matching the on-screen guide
+    // box, which is always centered.
+    const shortSide = Math.min(v.videoWidth, v.videoHeight);
+    const cropSize = shortSide * 0.55;
+    const cropX = (v.videoWidth - cropSize) / 2;
+    const cropY = (v.videoHeight - cropSize) / 2;
+    const cropCanvas = document.createElement('canvas');
+    cropCanvas.width = cropSize;
+    cropCanvas.height = cropSize;
+    cropCanvas.getContext('2d')?.drawImage(fullFrame, cropX, cropY, cropSize, cropSize, 0, 0, cropSize, cropSize);
+
+    stopStream();
+    cropCanvas.toBlob(
+      (blob) => {
+        if (!blob) return;
+        onCapture(new File([blob], 'aadhaar-qr-manual.jpg', { type: 'image/jpeg' }));
+      },
+      'image/jpeg',
+      0.95,
+    );
+  };
 
   useEffect(() => {
     stoppedRef.current = false;
     let cancelled = false;
-
-    const stopStream = () => {
-      streamRef.current?.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    };
 
     const handleDetected = (detectionWidth: number, detectionHeight: number, location: QRCode['location']) => {
       const v = videoRef.current;
@@ -210,13 +251,18 @@ export function AadhaarQrScanner({ onCapture, onCancel }: AadhaarQrScannerProps)
       }
       streamRef.current = stream;
 
-      // Best-effort: keep autofocus continuously locking on, since a
-      // close-up document scan easily drifts out of a fixed focal plane.
-      // Non-standard constraint — browsers that don't support it just
-      // ignore it rather than throwing.
+      // Best-effort: keep focus, exposure, and white balance continuously
+      // adjusting rather than locked to whatever the camera opened with —
+      // a dim/soft opening frame (common on close-up document scans) can
+      // otherwise persist for the whole session. Non-standard constraints;
+      // browsers that don't support them just ignore them.
       const [videoTrack] = stream.getVideoTracks();
       videoTrackRef.current = videoTrack ?? null;
-      videoTrack?.applyConstraints({ advanced: [{ focusMode: 'continuous' } as unknown as MediaTrackConstraintSet] }).catch(() => {});
+      videoTrack
+        ?.applyConstraints({
+          advanced: [{ focusMode: 'continuous', exposureMode: 'continuous', whiteBalanceMode: 'continuous' } as unknown as MediaTrackConstraintSet],
+        })
+        .catch(() => {});
 
       // Best-effort: some phones expose a torch (flashlight) control on the
       // rear camera track. Low light forces a slower shutter, which is a
@@ -228,6 +274,7 @@ export function AadhaarQrScanner({ onCapture, onCancel }: AadhaarQrScannerProps)
       if (!video) return;
       video.srcObject = stream;
       await video.play().catch(() => {});
+      if (!cancelled && video.videoWidth && video.videoHeight) setCameraReady(true);
 
       const { default: jsQR } = await import('jsqr');
       if (cancelled) return;
@@ -345,8 +392,17 @@ export function AadhaarQrScanner({ onCapture, onCancel }: AadhaarQrScannerProps)
                 <TorchIcon on={torchOn} />
               </button>
             )}
+            {!found && cameraReady && (
+              <button
+                type="button"
+                onClick={captureNow}
+                className="absolute bottom-11 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-white/50 bg-black/50 px-3.5 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-black/70"
+              >
+                Not locking on? Capture anyway
+              </button>
+            )}
             <p className="pointer-events-none absolute inset-x-0 bottom-4 px-4 text-center text-xs font-semibold text-white drop-shadow">
-              {found ? 'QR found — verifying…' : HINT_STAGES[hintStage]}
+              {found ? 'Captured — verifying…' : HINT_STAGES[hintStage]}
             </p>
           </div>
         )}

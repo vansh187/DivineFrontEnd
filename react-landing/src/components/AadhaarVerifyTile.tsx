@@ -20,7 +20,45 @@ function failureMessage(reason: string | null): string {
   return 'Verification failed. Please try again.';
 }
 
-function FileField({ label, file, onChange, accept }: { label: string; file: File | null; onChange: (file: File | null) => void; accept: string }) {
+/** Opt-in via ?debug=1 — off for real users, but lets us grab the exact
+ * failing image on request (e.g. to hand the backend team a real repro
+ * instead of a synthetic one) without shipping always-on debug downloads. */
+function isDebugMode(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get('debug') === '1';
+  } catch {
+    return false;
+  }
+}
+
+function downloadDebugImage(file: File, tag: string) {
+  try {
+    const url = URL.createObjectURL(file);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `aadhaar-qr-${tag}-${Date.now()}.jpg`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch {
+    // Best effort — a failed debug download shouldn't block the UI.
+  }
+}
+
+function FileField({
+  label,
+  file,
+  onChange,
+  accept,
+  capture,
+}: {
+  label: string;
+  file: File | null;
+  onChange: (file: File | null) => void;
+  accept: string;
+  capture?: boolean;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   return (
     <div className="flex items-center gap-2 rounded-lg border border-hairline bg-bg px-2.5 py-2 text-xs">
@@ -28,6 +66,11 @@ function FileField({ label, file, onChange, accept }: { label: string; file: Fil
         ref={inputRef}
         type="file"
         accept={accept}
+        // On phones, this opens the native camera app directly rather than
+        // a gallery/file picker — full native ISP quality (HDR, autofocus,
+        // exposure), the same pipeline that produces a sharp photo, unlike
+        // the browser's own getUserMedia feed used by the live scanner.
+        {...(capture ? { capture: 'environment' } : {})}
         className="hidden"
         onChange={(event) => onChange(event.target.files?.[0] ?? null)}
       />
@@ -60,7 +103,7 @@ export function AadhaarVerifyTile({ token, status, onChange, onSessionExpired }:
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
-  const [showManualUpload, setShowManualUpload] = useState(false);
+  const [showLiveScan, setShowLiveScan] = useState(false);
 
   const statusLabel = status.verified ? 'Verified' : 'Not verified';
   const statusTone = status.verified ? 'done' : 'failed';
@@ -102,6 +145,7 @@ export function AadhaarVerifyTile({ token, status, onChange, onSessionExpired }:
           applyResult(result);
           return;
         } catch (err) {
+          if (isDebugMode()) downloadDebugImage(files[i], `manual-${i === 0 ? 'first' : 'second'}`);
           const qrNotFound = err instanceof ApiError && err.detail === 'qr_not_found';
           if (qrNotFound && !isLast) {
             setNotice("Couldn't find a QR code on that side — trying the other side…");
@@ -130,6 +174,7 @@ export function AadhaarVerifyTile({ token, status, onChange, onSessionExpired }:
       const result = await verifyAadhaarQr(token, file);
       applyResult(result);
     } catch (err) {
+      if (isDebugMode()) downloadDebugImage(file, 'scan');
       setError(describeError(err));
     } finally {
       setVerifying(false);
@@ -197,42 +242,43 @@ export function AadhaarVerifyTile({ token, status, onChange, onSessionExpired }:
 
           {method === 'qr' ? (
             <div className="flex flex-col gap-2">
+              <FileField label="Front side" file={frontFile} onChange={setFrontFile} accept="image/jpeg,image/png" capture />
+              <FileField label="Back side" file={backFile} onChange={setBackFile} accept="image/jpeg,image/png" capture />
+              <p className="text-[11px] leading-snug text-ink-muted">
+                Opens your camera app directly — take a clear, well-lit photo of the side with the QR code.
+                This goes through your phone's own camera, so it's usually sharper than live scanning below.
+              </p>
               <button
                 type="button"
-                onClick={() => setScannerOpen(true)}
+                onClick={handleVerifyQr}
                 disabled={verifying}
                 className="self-start rounded-full bg-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {verifying ? 'Verifying…' : 'Scan QR with camera'}
+                {verifying ? 'Verifying…' : 'Verify photo'}
               </button>
-              <p className="text-[11px] leading-snug text-ink-muted">
-                Point your camera at the QR code — scanning it live works better than a full card photo, and
-                verifies automatically the moment it's found.
-              </p>
 
-              {!showManualUpload ? (
+              {!showLiveScan ? (
                 <button
                   type="button"
-                  onClick={() => setShowManualUpload(true)}
+                  onClick={() => setShowLiveScan(true)}
                   className="self-start text-[11px] font-semibold text-chrome hover:underline"
                 >
-                  Or upload photos instead
+                  Or try live camera scanning
                 </button>
               ) : (
                 <div className="mt-1 flex flex-col gap-2 border-t border-hairline pt-3">
-                  <FileField label="Front side" file={frontFile} onChange={setFrontFile} accept="image/jpeg,image/png" />
-                  <FileField label="Back side" file={backFile} onChange={setBackFile} accept="image/jpeg,image/png" />
-                  <p className="text-[11px] leading-snug text-ink-muted">
-                    Upload at least one clear, well-lit side showing the QR code. JPG or PNG only.
-                  </p>
                   <button
                     type="button"
-                    onClick={handleVerifyQr}
+                    onClick={() => setScannerOpen(true)}
                     disabled={verifying}
                     className="self-start rounded-full border border-hairline px-4 py-2 text-xs font-semibold text-ink transition-colors hover:border-green hover:text-green disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {verifying ? 'Verifying…' : 'Verify uploaded photos'}
+                    {verifying ? 'Verifying…' : 'Scan QR with camera'}
                   </button>
+                  <p className="text-[11px] leading-snug text-ink-muted">
+                    Live preview quality can be lower than a regular photo on some phones — if it struggles,
+                    the photo option above is usually more reliable.
+                  </p>
                 </div>
               )}
             </div>
