@@ -58,22 +58,32 @@ interface QrCorners {
   bottomRightCorner: { x: number; y: number };
 }
 
-/** Crop tightly to the QR's own bounding box (+25% padding) so the image we
- * upload has far more effective pixel density on the QR patch than a full
- * card photo would — this is what actually fixes qr_not_found on genuine
- * cards, not just a nicer UI. */
-function cropToQr(source: HTMLCanvasElement, location: QrCorners): HTMLCanvasElement {
-  const xs = [location.topLeftCorner.x, location.topRightCorner.x, location.bottomLeftCorner.x, location.bottomRightCorner.x];
-  const ys = [location.topLeftCorner.y, location.topRightCorner.y, location.bottomLeftCorner.y, location.bottomRightCorner.y];
+/** How much padding to add around the QR's own bounding box when cropping —
+ * enough to keep the quiet zone and finder patterns intact without hauling
+ * in unrelated card background. */
+const QR_PADDING = 0.25;
+
+function bboxOf(c: QrCorners) {
+  const xs = [c.topLeftCorner.x, c.topRightCorner.x, c.bottomLeftCorner.x, c.bottomRightCorner.x];
+  const ys = [c.topLeftCorner.y, c.topRightCorner.y, c.bottomLeftCorner.y, c.bottomRightCorner.y];
   const minX = Math.min(...xs);
   const maxX = Math.max(...xs);
   const minY = Math.min(...ys);
   const maxY = Math.max(...ys);
-  const pad = Math.max(maxX - minX, maxY - minY) * 0.25;
-  const cropX = Math.max(0, minX - pad);
-  const cropY = Math.max(0, minY - pad);
-  const cropW = Math.min(source.width - cropX, maxX - minX + pad * 2);
-  const cropH = Math.min(source.height - cropY, maxY - minY + pad * 2);
+  return { minX, maxX, minY, maxY, width: maxX - minX, height: maxY - minY };
+}
+
+/** Crop tightly to the QR's own bounding box (+padding) so the image we
+ * upload has far more effective pixel density on the QR patch than a full
+ * card photo would — this is what actually fixes qr_not_found on genuine
+ * cards, not just a nicer UI. */
+function cropToQr(source: HTMLCanvasElement, location: QrCorners): HTMLCanvasElement {
+  const box = bboxOf(location);
+  const pad = Math.max(box.width, box.height) * QR_PADDING;
+  const cropX = Math.max(0, box.minX - pad);
+  const cropY = Math.max(0, box.minY - pad);
+  const cropW = Math.min(source.width - cropX, box.width + pad * 2);
+  const cropH = Math.min(source.height - cropY, box.height + pad * 2);
 
   const cropCanvas = document.createElement('canvas');
   cropCanvas.width = cropW;
@@ -100,10 +110,34 @@ function scaleLocation(location: QRCode['location'], scaleX: number, scaleY: num
 
 /** jsQR only needs enough pixels to locate + read module boundaries, not the
  * full native frame — analyzing a multi-megapixel buffer 8x/second is what
- * was freezing the page on phones with high-res rear cameras. 960 gives a
- * genuinely small/dense QR more to work with than 640 did, while still
- * being far cheaper than the native frame. */
-const DETECTION_MAX_DIM = 960;
+ * was freezing the page on phones with high-res rear cameras. 1600 gives a
+ * dense Aadhaar Secure QR meaningfully more detail to lock onto than 960/640
+ * did, while still being far cheaper than the native frame. Lower-powered
+ * devices (few CPU cores) start at 1280 instead; the scan loop also backs
+ * this off further at runtime if frames are taking too long to process. */
+const DETECTION_MAX_DIM_DEFAULT = 1600;
+const DETECTION_MAX_DIM_LOW_END = 1280;
+const DETECTION_MAX_DIM_FLOOR = 960;
+
+/** Below this (native-resolution) shorter-side pixel size, the QR crop we'd
+ * upload is too sparse to reliably decode — ask the user to move closer
+ * instead of finalizing a low-quality capture. */
+const MIN_QR_BOX_PX = 180;
+
+/** Opt-in via ?debug=1 — off for real users, mirrors the flag used in
+ * AadhaarVerifyTile. Logs pipeline diagnostics only (resolutions, timings,
+ * file size) — never the QR payload or any Aadhaar data. */
+function isDebugMode(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get('debug') === '1';
+  } catch {
+    return false;
+  }
+}
+
+function debugLog(message: string, data?: Record<string, unknown>) {
+  if (isDebugMode()) console.debug(message, data);
+}
 
 const CloseIcon = () => (
   <svg viewBox="0 0 20 20" aria-hidden="true" className="h-4 w-4">
@@ -123,7 +157,7 @@ interface AadhaarQrScannerProps {
 }
 
 const HINT_STAGES = [
-  "Fit the QR code inside the box.",
+  "Place the complete Aadhaar QR inside the box. Keep the camera steady.",
   "Fit the QR code inside the box. Hold the phone steady and let it focus.",
   "Still looking — move a little closer or further until the pattern looks sharp, not blurry. Low light? Try the torch.",
 ] as const;
@@ -138,6 +172,13 @@ export function AadhaarQrScanner({ onCapture, onCancel }: AadhaarQrScannerProps)
   const lastScanRef = useRef(0);
   const scanStartRef = useRef(0);
   const hintTimerRef = useRef<number | null>(null);
+  // Runtime-adaptive detection tuning — degraded (never re-raised) if frames
+  // are taking too long to process, so low-end phones stay responsive
+  // instead of freezing. Low core-count devices start lower to begin with.
+  const lowEndDevice = typeof navigator !== 'undefined' && (navigator.hardwareConcurrency ?? 8) <= 4;
+  const detectionDimRef = useRef(lowEndDevice ? DETECTION_MAX_DIM_LOW_END : DETECTION_MAX_DIM_DEFAULT);
+  const scanIntervalRef = useRef(100);
+  const frameTimesRef = useRef<number[]>([]);
 
   const [error, setError] = useState<string | null>(null);
   const [found, setFound] = useState(false);
@@ -145,6 +186,7 @@ export function AadhaarQrScanner({ onCapture, onCancel }: AadhaarQrScannerProps)
   const [torchOn, setTorchOn] = useState(false);
   const [hintStage, setHintStage] = useState(0);
   const [cameraReady, setCameraReady] = useState(false);
+  const [sizeHint, setSizeHint] = useState<string | null>(null);
 
   const stopStream = () => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -154,8 +196,12 @@ export function AadhaarQrScanner({ onCapture, onCancel }: AadhaarQrScannerProps)
   /** Auto-detect requires jsQR to actually lock onto the QR first — if the
    * live feed never gets sharp enough for that (common on some phones at
    * close range), there was previously no way to submit anything at all.
-   * This lets the user force a capture of whatever's in the guide box right
-   * now, so they're not stuck waiting on a detector that may never fire. */
+   * This lets the user force a capture so they're not stuck waiting on a
+   * detector that may never fire. We don't know exactly where the QR is
+   * without jsQR having found it, so — unlike the auto-detect path — this
+   * sends the full native-resolution frame and lets the backend's own QR
+   * detection locate it, rather than guessing at an arbitrary center crop
+   * that might not even contain the QR. */
   const captureNow = () => {
     const v = videoRef.current;
     if (!v || !v.videoWidth || !v.videoHeight || stoppedRef.current || !cameraReady) return;
@@ -168,22 +214,15 @@ export function AadhaarQrScanner({ onCapture, onCancel }: AadhaarQrScannerProps)
     fullFrame.height = v.videoHeight;
     fullFrame.getContext('2d')?.drawImage(v, 0, 0, v.videoWidth, v.videoHeight);
 
-    // We don't know exactly where the QR is without jsQR, so approximate
-    // with a generous center crop — roughly matching the on-screen guide
-    // box, which is always centered.
-    const shortSide = Math.min(v.videoWidth, v.videoHeight);
-    const cropSize = shortSide * 0.55;
-    const cropX = (v.videoWidth - cropSize) / 2;
-    const cropY = (v.videoHeight - cropSize) / 2;
-    const cropCanvas = document.createElement('canvas');
-    cropCanvas.width = cropSize;
-    cropCanvas.height = cropSize;
-    cropCanvas.getContext('2d')?.drawImage(fullFrame, cropX, cropY, cropSize, cropSize, 0, 0, cropSize, cropSize);
-
     stopStream();
-    cropCanvas.toBlob(
+    fullFrame.toBlob(
       (blob) => {
         if (!blob) return;
+        debugLog('[AadhaarQR] Manual capture (full frame, backend will locate QR)', {
+          camera: `${fullFrame.width}x${fullFrame.height}`,
+          fileSize: blob.size,
+          mimeType: blob.type,
+        });
         onCapture(new File([blob], 'aadhaar-qr-manual.jpg', { type: 'image/jpeg' }));
       },
       'image/jpeg',
@@ -195,9 +234,28 @@ export function AadhaarQrScanner({ onCapture, onCancel }: AadhaarQrScannerProps)
     stoppedRef.current = false;
     let cancelled = false;
 
-    const handleDetected = (detectionWidth: number, detectionHeight: number, location: QRCode['location']) => {
+    const handleDetected = (detectionWidth: number, detectionHeight: number, location: QRCode['location'], detectionTimeMs: number) => {
       const v = videoRef.current;
       if (!v || !v.videoWidth || !v.videoHeight) return;
+
+      const scaled = scaleLocation(location, v.videoWidth / detectionWidth, v.videoHeight / detectionHeight);
+      const box = bboxOf(scaled);
+      const shortSide = Math.min(v.videoWidth, v.videoHeight);
+
+      // A QR located in the frame doesn't mean it's large enough to decode
+      // reliably once cropped — jsQR can lock on well before the patch has
+      // enough pixel density. Rather than upload a low-quality crop and let
+      // it fail server-side, keep scanning and steer the user instead.
+      if (Math.min(box.width, box.height) < MIN_QR_BOX_PX) {
+        setSizeHint('Move the camera closer to the QR code.');
+        return;
+      }
+      if (Math.max(box.width, box.height) > shortSide * 0.92) {
+        setSizeHint('Move the camera slightly farther from the card.');
+        return;
+      }
+      setSizeHint(null);
+
       stoppedRef.current = true;
       setFound(true);
       if (hintTimerRef.current) window.clearInterval(hintTimerRef.current);
@@ -209,13 +267,21 @@ export function AadhaarQrScanner({ onCapture, onCancel }: AadhaarQrScannerProps)
       fullFrame.height = v.videoHeight;
       fullFrame.getContext('2d')?.drawImage(v, 0, 0, v.videoWidth, v.videoHeight);
 
-      const scaled = scaleLocation(location, v.videoWidth / detectionWidth, v.videoHeight / detectionHeight);
       const cropped = cropToQr(fullFrame, scaled);
       playBeep();
       stopStream();
       cropped.toBlob(
         (blob) => {
           if (!blob) return;
+          debugLog('[AadhaarQR] Auto capture', {
+            camera: `${v.videoWidth}x${v.videoHeight}`,
+            detection: `${detectionWidth}x${detectionHeight}`,
+            qrBox: `${Math.round(box.width)}x${Math.round(box.height)}`,
+            crop: `${cropped.width}x${cropped.height}`,
+            fileSize: blob.size,
+            mimeType: blob.type,
+            detectionTimeMs: Math.round(detectionTimeMs),
+          });
           onCapture(new File([blob], 'aadhaar-qr.jpg', { type: 'image/jpeg' }));
         },
         'image/jpeg',
@@ -235,9 +301,15 @@ export function AadhaarQrScanner({ onCapture, onCancel }: AadhaarQrScannerProps)
         // request here previously made most cameras negotiate a worse
         // fallback mode. Going higher than this (e.g. 4K) buys little on
         // the final crop but costs real decode/processing overhead on
-        // mid-range phones, which was freezing the page.
+        // mid-range phones, which was freezing the page. min bounds stop
+        // the browser from silently negotiating a much smaller feed.
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1920, min: 1280 },
+            height: { ideal: 1080, min: 720 },
+            frameRate: { ideal: 30, max: 30 },
+          },
           audio: false,
         });
       } catch (err) {
@@ -251,30 +323,52 @@ export function AadhaarQrScanner({ onCapture, onCancel }: AadhaarQrScannerProps)
       }
       streamRef.current = stream;
 
+      const [videoTrack] = stream.getVideoTracks();
+      videoTrackRef.current = videoTrack ?? null;
+
+      const settings = videoTrack?.getSettings();
+      debugLog('[AadhaarQR] Camera settings', {
+        width: settings?.width,
+        height: settings?.height,
+        frameRate: settings?.frameRate,
+        facingMode: settings?.facingMode,
+      });
+
+      type ExtendedCapabilities = MediaTrackCapabilities & {
+        torch?: boolean;
+        focusMode?: string[];
+        exposureMode?: string[];
+        whiteBalanceMode?: string[];
+      };
+      const caps = videoTrack?.getCapabilities?.() as ExtendedCapabilities | undefined;
+
       // Best-effort: keep focus, exposure, and white balance continuously
       // adjusting rather than locked to whatever the camera opened with —
       // a dim/soft opening frame (common on close-up document scans) can
-      // otherwise persist for the whole session. Non-standard constraints;
-      // browsers that don't support them just ignore them.
-      const [videoTrack] = stream.getVideoTracks();
-      videoTrackRef.current = videoTrack ?? null;
-      videoTrack
-        ?.applyConstraints({
-          advanced: [{ focusMode: 'continuous', exposureMode: 'continuous', whiteBalanceMode: 'continuous' } as unknown as MediaTrackConstraintSet],
-        })
-        .catch(() => {});
+      // otherwise persist for the whole session. Only request modes the
+      // track actually reports supporting; browsers vary widely here and
+      // some reject the whole `advanced` list if any entry is unrecognized.
+      const advancedConstraint: Record<string, string> = {};
+      if (caps?.focusMode?.includes?.('continuous')) advancedConstraint.focusMode = 'continuous';
+      if (caps?.exposureMode?.includes?.('continuous')) advancedConstraint.exposureMode = 'continuous';
+      if (caps?.whiteBalanceMode?.includes?.('continuous')) advancedConstraint.whiteBalanceMode = 'continuous';
+      if (Object.keys(advancedConstraint).length > 0) {
+        videoTrack?.applyConstraints({ advanced: [advancedConstraint as unknown as MediaTrackConstraintSet] }).catch(() => {});
+      }
 
       // Best-effort: some phones expose a torch (flashlight) control on the
       // rear camera track. Low light forces a slower shutter, which is a
       // common cause of the motion-blur users hit when scanning up close.
-      const caps = videoTrack?.getCapabilities?.() as (MediaTrackCapabilities & { torch?: boolean }) | undefined;
       if (!cancelled && caps?.torch) setTorchSupported(true);
 
       const video = videoRef.current;
       if (!video) return;
       video.srcObject = stream;
       await video.play().catch(() => {});
-      if (!cancelled && video.videoWidth && video.videoHeight) setCameraReady(true);
+      if (!cancelled && video.videoWidth && video.videoHeight) {
+        setCameraReady(true);
+        debugLog('[AadhaarQR] Video dimensions', { width: video.videoWidth, height: video.videoHeight });
+      }
 
       const { default: jsQR } = await import('jsqr');
       if (cancelled) return;
@@ -289,21 +383,46 @@ export function AadhaarQrScanner({ onCapture, onCancel }: AadhaarQrScannerProps)
         if (stoppedRef.current || cancelled) return;
         const v = videoRef.current;
         const canvas = canvasRef.current;
-        if (v && canvas && v.readyState >= v.HAVE_ENOUGH_DATA && v.videoWidth && v.videoHeight && timestamp - lastScanRef.current > 100) {
+        if (v && canvas && v.readyState >= v.HAVE_ENOUGH_DATA && v.videoWidth && v.videoHeight && timestamp - lastScanRef.current > scanIntervalRef.current) {
           lastScanRef.current = timestamp;
-          const scale = Math.min(1, DETECTION_MAX_DIM / Math.max(v.videoWidth, v.videoHeight));
+          const maxDim = detectionDimRef.current;
+          const scale = Math.min(1, maxDim / Math.max(v.videoWidth, v.videoHeight));
           const dw = Math.max(1, Math.round(v.videoWidth * scale));
           const dh = Math.max(1, Math.round(v.videoHeight * scale));
           if (canvas.width !== dw) canvas.width = dw;
           if (canvas.height !== dh) canvas.height = dh;
           const ctx = canvas.getContext('2d', { willReadFrequently: true });
           if (ctx) {
+            const t0 = performance.now();
             ctx.drawImage(v, 0, 0, dw, dh);
             const imageData = ctx.getImageData(0, 0, dw, dh);
             const code = jsQR(imageData.data, dw, dh);
+            const elapsed = performance.now() - t0;
+
+            // Adaptive throttling: if a detection pass is taking too long at
+            // the current settings, back off frequency first, then frame
+            // size — this is what keeps the page responsive on low-end
+            // phones instead of freezing, without permanently sacrificing
+            // quality on devices that can handle more.
+            frameTimesRef.current.push(elapsed);
+            if (frameTimesRef.current.length > 6) frameTimesRef.current.shift();
+            if (frameTimesRef.current.length === 6) {
+              const avg = frameTimesRef.current.reduce((a, b) => a + b, 0) / 6;
+              if (avg > 180 && detectionDimRef.current > DETECTION_MAX_DIM_FLOOR) {
+                detectionDimRef.current = Math.max(DETECTION_MAX_DIM_FLOOR, Math.round(detectionDimRef.current * 0.8));
+                debugLog('[AadhaarQR] Reducing detection resolution for performance', { newMaxDim: detectionDimRef.current, avgMs: Math.round(avg) });
+              } else if (avg > 120 && scanIntervalRef.current < 220) {
+                scanIntervalRef.current = 220;
+                debugLog('[AadhaarQR] Reducing scan frequency for performance', { intervalMs: scanIntervalRef.current, avgMs: Math.round(avg) });
+              }
+            }
+
             if (code) {
-              handleDetected(dw, dh, code.location);
-              return;
+              handleDetected(dw, dh, code.location, elapsed);
+              // handleDetected only finalizes (and sets stoppedRef) once the
+              // QR is a usable size — if it just nudged the size hint instead,
+              // the loop must keep going rather than silently stopping here.
+              if (stoppedRef.current) return;
             }
           }
         }
@@ -371,13 +490,15 @@ export function AadhaarQrScanner({ onCapture, onCancel }: AadhaarQrScannerProps)
             {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
             <video ref={videoRef} className="h-full w-full object-contain" muted playsInline autoPlay />
             <canvas ref={canvasRef} className="hidden" />
-            {/* Fixed small size, not a percentage of the frame — this is roughly
-                how large an Aadhaar QR patch actually looks at a comfortable,
-                in-focus distance. Pinch-zooming to fill a bigger box just
-                upscales and blurs; moving physically closer (within focus
-                range) is what raises real resolution. */}
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <div className={`h-36 w-36 rounded-xl border-[3px] transition-colors sm:h-44 sm:w-44 ${found ? 'border-green' : 'border-white/70'}`} />
+            {/* Sized as a share of the preview, not a fixed pixel box, so it's
+                easy to align on any screen. Detection itself scans the whole
+                frame (not just this box), and the box doesn't need to be
+                centered exactly — it's alignment guidance, not a hard crop. */}
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
+              <div
+                className={`aspect-square w-[65%] rounded-xl border-[3px] transition-colors sm:w-[55%] ${found ? 'border-green' : 'border-white/70'}`}
+                style={{ maxHeight: '85%' }}
+              />
             </div>
             {torchSupported && !found && (
               <button
@@ -402,7 +523,7 @@ export function AadhaarQrScanner({ onCapture, onCancel }: AadhaarQrScannerProps)
               </button>
             )}
             <p className="pointer-events-none absolute inset-x-0 bottom-4 px-4 text-center text-xs font-semibold text-white drop-shadow">
-              {found ? 'Captured — verifying…' : HINT_STAGES[hintStage]}
+              {found ? 'Captured — verifying…' : (sizeHint ?? HINT_STAGES[hintStage])}
             </p>
           </div>
         )}

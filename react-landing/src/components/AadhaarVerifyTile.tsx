@@ -104,6 +104,7 @@ export function AadhaarVerifyTile({ token, status, onChange, onSessionExpired }:
   const [error, setError] = useState<string | null>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [showLiveScan, setShowLiveScan] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
 
   const statusLabel = status.verified ? 'Verified' : 'Not verified';
   const statusTone = status.verified ? 'done' : 'failed';
@@ -175,6 +176,24 @@ export function AadhaarVerifyTile({ token, status, onChange, onSessionExpired }:
       applyResult(result);
     } catch (err) {
       if (isDebugMode()) downloadDebugImage(file, 'scan');
+      setError(describeError(err));
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleVerifyUpload = async () => {
+    if (!uploadFile) {
+      setError('Choose an existing QR photo to upload.');
+      return;
+    }
+    setVerifying(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await verifyAadhaarQr(token, uploadFile);
+      applyResult(result);
+    } catch (err) {
       setError(describeError(err));
     } finally {
       setVerifying(false);
@@ -263,22 +282,40 @@ export function AadhaarVerifyTile({ token, status, onChange, onSessionExpired }:
                   onClick={() => setShowLiveScan(true)}
                   className="self-start text-[11px] font-semibold text-chrome hover:underline"
                 >
-                  Or try live camera scanning
+                  Or try other ways to verify
                 </button>
               ) : (
-                <div className="mt-1 flex flex-col gap-2 border-t border-hairline pt-3">
-                  <button
-                    type="button"
-                    onClick={() => setScannerOpen(true)}
-                    disabled={verifying}
-                    className="self-start rounded-full border border-hairline px-4 py-2 text-xs font-semibold text-ink transition-colors hover:border-green hover:text-green disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {verifying ? 'Verifying…' : 'Scan QR with camera'}
-                  </button>
-                  <p className="text-[11px] leading-snug text-ink-muted">
-                    Live preview quality can be lower than a regular photo on some phones — if it struggles,
-                    the photo option above is usually more reliable.
-                  </p>
+                <div className="mt-1 flex flex-col gap-3 border-t border-hairline pt-3">
+                  <div className="flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setScannerOpen(true)}
+                      disabled={verifying}
+                      className="self-start rounded-full border border-hairline px-4 py-2 text-xs font-semibold text-ink transition-colors hover:border-green hover:text-green disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {verifying ? 'Verifying…' : 'Scan QR with camera'}
+                    </button>
+                    <p className="text-[11px] leading-snug text-ink-muted">
+                      Live preview quality can be lower than a regular photo on some phones — if it struggles,
+                      the photo option above is usually more reliable.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col gap-2 border-t border-hairline pt-3">
+                    <FileField label="Upload existing photo" file={uploadFile} onChange={setUploadFile} accept="image/jpeg,image/png" />
+                    <button
+                      type="button"
+                      onClick={handleVerifyUpload}
+                      disabled={verifying}
+                      className="self-start rounded-full border border-hairline px-4 py-2 text-xs font-semibold text-ink transition-colors hover:border-green hover:text-green disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {verifying ? 'Verifying…' : 'Verify uploaded photo'}
+                    </button>
+                    <p className="text-[11px] leading-snug text-ink-muted">
+                      Already have a QR photo saved (from your gallery, downloads, or another device)? Upload it
+                      directly here to check it against the backend.
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
