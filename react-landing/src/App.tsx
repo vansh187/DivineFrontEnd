@@ -1,17 +1,32 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { LandingPage } from './pages/LandingPage';
 import { CustomerPage } from './pages/CustomerPage';
 import { BrokerPage } from './pages/BrokerPage';
 import { AuthModal } from './components/AuthModal';
 import { RoleRoute } from './components/RoleRoute';
-import { AuthProvider } from './hooks/useAuth';
+import { AuthProvider, useAuth } from './hooks/useAuth';
+import type { Role } from './services/authApi';
+
+const roleHome: Record<Role, string> = {
+  customer: '/customer',
+  broker: '/broker',
+};
+
+/** A returning visitor with an active session (e.g. reopening the tab) should land on
+ * their own dashboard, not the marketing landing page. Signed-out visitors see the
+ * landing page as normal. */
+function HomeRoute() {
+  const { session } = useAuth();
+  if (session) return <Navigate to={roleHome[session.role]} replace />;
+  return <LandingPage />;
+}
 
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<LandingPage />} />
+          <Route path="/" element={<HomeRoute />} />
           <Route
             path="/customer"
             element={
