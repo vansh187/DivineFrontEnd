@@ -46,14 +46,31 @@ interface UploadDocumentTileProps {
   onUpload: (file: File) => void;
   onVerify: () => void;
   verifying: boolean;
+  uploading?: boolean;
   accept?: string;
 }
 
-export function UploadDocumentTile({ icon, title, description, status, onUpload, onVerify, verifying, accept = 'image/*,application/pdf' }: UploadDocumentTileProps) {
+export function UploadDocumentTile({
+  icon,
+  title,
+  description,
+  status,
+  onUpload,
+  onVerify,
+  verifying,
+  uploading = false,
+  accept = 'image/*,application/pdf',
+}: UploadDocumentTileProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const statusLabel = status.verified ? 'Verified' : status.fileName ? 'Uploaded — pending verification' : 'Not uploaded';
-  const statusTone: StatusTone = status.verified ? 'done' : status.fileName ? 'pending' : 'neutral';
+  const statusLabel = status.verified
+    ? 'Verified'
+    : status.documentId
+      ? 'Uploaded — pending verification'
+      : status.error
+        ? 'Upload failed'
+        : 'Not uploaded';
+  const statusTone: StatusTone = status.verified ? 'done' : status.documentId ? 'pending' : status.error ? 'failed' : 'neutral';
 
   return (
     <TileShell icon={icon} title={title} description={description} statusLabel={statusLabel} statusTone={statusTone}>
@@ -78,16 +95,23 @@ export function UploadDocumentTile({ icon, title, description, status, onUpload,
         </div>
       )}
 
+      {status.error && (
+        <p role="alert" className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {status.error}
+        </p>
+      )}
+
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className="rounded-full border border-hairline px-4 py-2 text-xs font-semibold text-ink transition-colors hover:border-green hover:text-green"
+          disabled={uploading}
+          className="rounded-full border border-hairline px-4 py-2 text-xs font-semibold text-ink transition-colors hover:border-green hover:text-green disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {status.fileName ? 'Replace file' : 'Upload file'}
+          {uploading ? 'Uploading…' : status.fileName ? 'Replace file' : 'Upload file'}
         </button>
 
-        {status.fileName && !status.verified && (
+        {status.documentId && !status.verified && (
           <button
             type="button"
             onClick={onVerify}

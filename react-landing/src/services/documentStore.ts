@@ -13,6 +13,12 @@ export interface DocStatus {
   uploadedAt: string | null;
   verified: boolean;
   verifiedAt: string | null;
+  /** Set once the file has actually reached storage (POST /documents/pan-photo) - fileName
+   * alone can be set optimistically before the upload confirms. */
+  documentId: string | null;
+  signedUrl: string | null;
+  signedUrlExpiresAt: number | null;
+  error: string | null;
 }
 
 /** Aadhaar now verifies against the real UIDAI-backed /kyc/aadhaar/* API —
@@ -92,7 +98,17 @@ export interface BrokerDocState {
 }
 
 export function emptyDocStatus(): DocStatus {
-  return { fileName: null, fileSize: null, uploadedAt: null, verified: false, verifiedAt: null };
+  return {
+    fileName: null,
+    fileSize: null,
+    uploadedAt: null,
+    verified: false,
+    verifiedAt: null,
+    documentId: null,
+    signedUrl: null,
+    signedUrlExpiresAt: null,
+    error: null,
+  };
 }
 
 function storageKey(kind: 'customer' | 'broker', email: string) {
@@ -122,7 +138,9 @@ export function loadCustomerDocs(email: string): CustomerDocState {
       aadhar: parsed.aadhar ?? emptyAadhaarStatus(),
       aadharFront: parsed.aadharFront ?? emptyAadhaarPhotoStatus(),
       aadharBack: parsed.aadharBack ?? emptyAadhaarPhotoStatus(),
-      pan: parsed.pan ?? emptyDocStatus(),
+      // Spread over the defaults (not just `??`) so state cached before documentId/
+      // signedUrl/error existed on DocStatus still back-fills those specific fields.
+      pan: { ...emptyDocStatus(), ...parsed.pan },
       generatedDoc: parsed.generatedDoc ?? emptyGeneratedDocStatus(),
     };
   } catch {

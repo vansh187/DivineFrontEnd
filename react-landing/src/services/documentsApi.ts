@@ -31,6 +31,9 @@ function messageForDocumentsError(status: number, detail: unknown): string {
     if (detail === 'empty_file') return 'That file is empty. Please choose a different file.';
     if (detail === 'file_too_large') return 'That file is larger than 8 MB. Please choose a smaller file.';
     if (detail === 'unsupported_file_type') return 'Please upload a JPEG or PNG image.';
+    if (typeof detail === 'string' && detail.startsWith('documents_incomplete:')) {
+      return 'Upload your Aadhaar front, Aadhaar back, and PAN card photos before generating this document.';
+    }
   }
   if (typeof detail === 'string' && detail.startsWith('storage_')) {
     return 'Something went wrong uploading your document. Please try again.';
@@ -81,6 +84,17 @@ export function uploadAadhaarPhoto(token: string, file: File, side: AadhaarPhoto
   return authedRequest<GeneratedDocument>('/documents/aadhaar-photo', token, {
     method: 'POST',
     // No Content-Type here - the browser sets the multipart boundary itself.
+    body: formData,
+  });
+}
+
+/** Uploads a raw PAN card photo straight to storage for later use in document generation -
+ * no parsing or verification, same storage-only pattern as uploadAadhaarPhoto. */
+export function uploadPanPhoto(token: string, file: File): Promise<GeneratedDocument> {
+  const formData = new FormData();
+  formData.append('file', file);
+  return authedRequest<GeneratedDocument>('/documents/pan-photo', token, {
+    method: 'POST',
     body: formData,
   });
 }

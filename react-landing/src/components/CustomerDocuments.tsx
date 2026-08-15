@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useAuth, getDisplayName } from '../hooks/useAuth';
 import * as store from '../services/documentStore';
 import type { CustomerDocState } from '../services/documentStore';
-import { generateDocument, getDocument } from '../services/documentsApi';
+import { generateDocument, getDocument, uploadPanPhoto } from '../services/documentsApi';
 import { ApiError } from '../services/authApi';
 import { townshipPricing } from '../data/townshipPricing';
 import { TileShell, UploadDocumentTile } from './DocumentTile';
@@ -15,6 +15,7 @@ export function CustomerDocuments() {
 
   const [docs, setDocs] = useState<CustomerDocState>(() => store.loadCustomerDocs(email));
   const [verifyingPan, setVerifyingPan] = useState(false);
+  const [uploadingPan, setUploadingPan] = useState(false);
 
   const persist = (next: CustomerDocState) => {
     setDocs(next);
@@ -22,10 +23,45 @@ export function CustomerDocuments() {
   };
 
   const handlePanUpload = (file: File) => {
+    if (!session) return;
+    setUploadingPan(true);
     persist({
       ...docs,
-      pan: { fileName: file.name, fileSize: file.size, uploadedAt: new Date().toISOString(), verified: false, verifiedAt: null },
+      pan: { ...docs.pan, fileName: file.name, fileSize: file.size, documentId: null, error: null },
     });
+    uploadPanPhoto(session.token, file)
+      .then((doc) => {
+        setDocs((prev) => {
+          const next: CustomerDocState = {
+            ...prev,
+            pan: {
+              ...prev.pan,
+              fileName: file.name,
+              fileSize: file.size,
+              uploadedAt: new Date().toISOString(),
+              documentId: doc.id,
+              signedUrl: doc.signed_url,
+              signedUrlExpiresAt: Date.now() + doc.signed_url_expires_in * 1000,
+              error: null,
+            },
+          };
+          store.saveCustomerDocs(email, next);
+          return next;
+        });
+      })
+      .catch((err) => {
+        if (err instanceof ApiError && err.status === 401) {
+          logout();
+          openModal('signin', 'customer');
+        }
+        const message = err instanceof ApiError ? err.message : 'Something went wrong. Please try again.';
+        setDocs((prev) => {
+          const next: CustomerDocState = { ...prev, pan: { ...prev.pan, error: message } };
+          store.saveCustomerDocs(email, next);
+          return next;
+        });
+      })
+      .finally(() => setUploadingPan(false));
   };
 
   const handlePanVerify = () => {
@@ -51,6 +87,15 @@ export function CustomerDocuments() {
   const [generating, setGenerating] = useState(false);
   const [opening, setOpening] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
+
+  // The generated PDF embeds these three photos, so the backend refuses to generate
+  // until all three are actually uploaded to storage - mirror that gate here so the
+  // button reflects it up front instead of only failing after a click.
+  const missingDocs: string[] = [];
+  if (!docs.aadharFront.documentId) missingDocs.push('Aadhaar front photo');
+  if (!docs.aadharBack.documentId) missingDocs.push('Aadhaar back photo');
+  if (!docs.pan.documentId) missingDocs.push('PAN card photo');
+  const documentsReady = missingDocs.length === 0;
 
   const handleAuthError = (err: unknown) => {
     if (err instanceof ApiError) {
@@ -173,21 +218,27 @@ export function CustomerDocuments() {
         <UploadDocumentTile
           icon={<CardIcon />}
           title="PAN card"
-          description="Upload a clear photo or scan of your PAN card."
+          description="Upload a clear photo of your PAN card."
           status={docs.pan}
           onUpload={handlePanUpload}
           onVerify={handlePanVerify}
           verifying={verifyingPan}
-          accept="image/jpeg,image/png,application/pdf"
+          uploading={uploadingPan}
+          accept="image/jpeg,image/png"
         />
 
         <TileShell
           icon={<FileIcon />}
           title="Document generation"
-          description="Generate your booking application as a PDF, then verify your signature."
+          description="Generate your booking application as a PDF — it includes your Aadhaar and PAN photos, then verify your signature."
           statusLabel={genStatusLabel}
           statusTone={genStatusTone}
         >
+          {!documentsReady && (
+            <p className="mb-3 rounded-lg border border-hairline bg-bg px-3 py-2 text-xs text-ink-muted">
+              Upload {missingDocs.join(', ')} above before generating — the PDF includes these photos.
+            </p>
+          )}
           {!formOpen ? (
             <div className="flex flex-wrap gap-2">
               {docs.generatedDoc.generated && (
@@ -203,7 +254,8 @@ export function CustomerDocuments() {
               <button
                 type="button"
                 onClick={() => setFormOpen(true)}
-                className="rounded-full border border-hairline px-4 py-2 text-xs font-semibold text-ink transition-colors hover:border-green hover:text-green"
+                disabled={!documentsReady}
+                className="rounded-full border border-hairline px-4 py-2 text-xs font-semibold text-ink transition-colors hover:border-green hover:text-green disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {docs.generatedDoc.generated ? 'Generate again' : 'Fill applicant details'}
               </button>
