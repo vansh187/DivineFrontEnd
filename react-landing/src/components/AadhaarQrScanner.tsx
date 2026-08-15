@@ -130,8 +130,13 @@ export function AadhaarQrScanner({ onCapture, onCancel }: AadhaarQrScannerProps)
 
       let stream: MediaStream;
       try {
+        // Ask for the highest resolution the device offers, in its natural
+        // aspect ratio — a forced square crop here previously made most
+        // cameras negotiate a lower fallback mode. More native pixels on
+        // the QR patch is what actually fixes qr_not_found, not the guide
+        // box or pinch-zoom (which just upscales/blurs existing pixels).
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1920 } },
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } },
           audio: false,
         });
       } catch (err) {
@@ -144,6 +149,13 @@ export function AadhaarQrScanner({ onCapture, onCancel }: AadhaarQrScannerProps)
         return;
       }
       streamRef.current = stream;
+
+      // Best-effort: keep autofocus continuously locking on, since a
+      // close-up document scan easily drifts out of a fixed focal plane.
+      // Non-standard constraint — browsers that don't support it just
+      // ignore it rather than throwing.
+      const [videoTrack] = stream.getVideoTracks();
+      videoTrack?.applyConstraints({ advanced: [{ focusMode: 'continuous' } as unknown as MediaTrackConstraintSet] }).catch(() => {});
 
       const video = videoRef.current;
       if (!video) return;
@@ -217,15 +229,22 @@ export function AadhaarQrScanner({ onCapture, onCancel }: AadhaarQrScannerProps)
             </button>
           </div>
         ) : (
-          <div className="relative aspect-square w-full overflow-hidden bg-black">
+          <div className="relative flex h-[62vh] max-h-[460px] min-h-[280px] w-full items-center justify-center overflow-hidden bg-black">
+            {/* object-contain (not cover) so the guide box below matches exactly
+                what's actually captured — no hidden crop the user can't see. */}
             {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-            <video ref={videoRef} className="h-full w-full object-cover" muted playsInline autoPlay />
+            <video ref={videoRef} className="h-full w-full object-contain" muted playsInline autoPlay />
             <canvas ref={canvasRef} className="hidden" />
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-10">
-              <div className={`h-full w-full rounded-2xl border-[3px] transition-colors ${found ? 'border-green' : 'border-white/70'}`} />
+            {/* Fixed small size, not a percentage of the frame — this is roughly
+                how large an Aadhaar QR patch actually looks at a comfortable,
+                in-focus distance. Pinch-zooming to fill a bigger box just
+                upscales and blurs; moving physically closer (within focus
+                range) is what raises real resolution. */}
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <div className={`h-36 w-36 rounded-xl border-[3px] transition-colors sm:h-44 sm:w-44 ${found ? 'border-green' : 'border-white/70'}`} />
             </div>
             <p className="pointer-events-none absolute inset-x-0 bottom-4 px-4 text-center text-xs font-semibold text-white drop-shadow">
-              {found ? 'QR found — verifying…' : 'Point your camera at the QR code on your Aadhaar card'}
+              {found ? 'QR found — verifying…' : "Fit the QR code inside the box. Move closer if it's small — don't pinch-zoom, it blurs the image."}
             </p>
           </div>
         )}
