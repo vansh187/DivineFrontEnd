@@ -75,6 +75,7 @@ export function PaymentTile({ token, email, name, status, onChange, onSessionExp
   return (
     <TileShell
       icon={<RupeeIcon />}
+      accent="green-soft"
       title="Pay now"
       description="Pay your booking amount securely online."
       statusLabel={statusLabel}

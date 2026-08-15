@@ -16,16 +16,19 @@ export function BrokerPage() {
     >
       <PlaceholderCard
         icon={<UsersIcon />}
+        accent="chrome"
         title="My leads"
         description="Customers you're working with, and where each one is in the corridor."
       />
       <PlaceholderCard
         icon={<TagIcon />}
+        accent="terracotta"
         title="Listings"
         description="Plots you're actively representing across Suraksha Enclave and OPS Divine Greens."
       />
       <PlaceholderCard
         icon={<ChartIcon />}
+        accent="green-soft"
         title="Commission"
         description="Track closed bookings and payouts as they come in."
       />

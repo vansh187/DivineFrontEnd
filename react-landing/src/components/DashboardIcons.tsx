@@ -1,10 +1,49 @@
 import type { ReactNode } from 'react';
 
-function IconWrap({ children }: { children: ReactNode }) {
+function IconWrap({ children, className = 'h-6 w-6' }: { children: ReactNode; className?: string }) {
   return (
-    <svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+    <svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className={className}>
       {children}
     </svg>
+  );
+}
+
+export type IconAccent = 'chrome' | 'green' | 'green-soft' | 'terracotta';
+
+/** Each dashboard tile/card gets its own accent, pulled from the existing brand
+ * palette (no new colors) so the dashboard reads as a coherent set rather than
+ * identical neutral badges — the gradient + ring + tinted shadow gives the icon
+ * real depth instead of sitting flat on the card. */
+const accentClass: Record<IconAccent, { badge: string; icon: string }> = {
+  chrome: {
+    badge: 'bg-gradient-to-br from-chrome/16 via-chrome/6 to-transparent ring-1 ring-chrome/15 shadow-[0_10px_22px_-10px_rgba(30,77,59,0.55)]',
+    icon: 'text-chrome',
+  },
+  green: {
+    badge: 'bg-gradient-to-br from-green/20 via-green/7 to-transparent ring-1 ring-green/18 shadow-[0_10px_22px_-10px_rgba(56,142,60,0.5)]',
+    icon: 'text-green',
+  },
+  'green-soft': {
+    badge: 'bg-gradient-to-br from-green-soft/22 via-green-soft/8 to-transparent ring-1 ring-green-soft/18 shadow-[0_10px_22px_-10px_rgba(79,166,83,0.5)]',
+    icon: 'text-green-soft',
+  },
+  terracotta: {
+    badge: 'bg-gradient-to-br from-terracotta/18 via-terracotta/6 to-transparent ring-1 ring-terracotta/18 shadow-[0_10px_22px_-10px_rgba(192,57,15,0.5)]',
+    icon: 'text-terracotta',
+  },
+};
+
+/** Shared premium icon-badge used by every dashboard card (TileShell, PlaceholderCard)
+ * so the whole workspace reads as one designed system. `interactive` adds the
+ * hover scale/tilt — pair with `group` on the parent card. */
+export function IconBadge({ icon, accent = 'green', interactive = false }: { icon: ReactNode; accent?: IconAccent; interactive?: boolean }) {
+  const { badge, icon: iconColor } = accentClass[accent];
+  return (
+    <span
+      className={`flex h-12 w-12 items-center justify-center rounded-2xl transition-transform duration-300 ${interactive ? 'group-hover:scale-105 group-hover:rotate-2' : ''} ${badge} ${iconColor}`}
+    >
+      {icon}
+    </span>
   );
 }
 
@@ -19,8 +58,8 @@ export const CalendarIcon = () => (
     <path d="M3 8.5h14M7 2.5v3M13 2.5v3" />
   </IconWrap>
 );
-export const FileIcon = () => (
-  <IconWrap>
+export const FileIcon = ({ className }: { className?: string } = {}) => (
+  <IconWrap className={className}>
     <path d="M6 2.8h5.5L15 6.3v10.9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3.8a1 1 0 0 1 1-1Z" />
     <path d="M11.3 2.8v3.5H15" />
   </IconWrap>

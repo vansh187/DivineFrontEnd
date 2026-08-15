@@ -200,6 +200,7 @@ export function AadhaarVerifyTile({
   return (
     <TileShell
       icon={<IdCardIcon />}
+      accent="chrome"
       title="Aadhaar card"
       description="Upload your Aadhaar QR code to verify with UIDAI, and front/back photos for your records."
       statusLabel={statusLabel}

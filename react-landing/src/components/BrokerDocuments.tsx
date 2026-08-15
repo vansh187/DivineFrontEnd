@@ -73,6 +73,7 @@ export function BrokerDocuments() {
 
         <TileShell
           icon={<CalendarIcon />}
+          accent="terracotta"
           title="Schedule a visit"
           description="Book a site-visit appointment for one of your customers."
           statusLabel={docs.visits.length ? `${docs.visits.length} upcoming` : 'No visits scheduled'}

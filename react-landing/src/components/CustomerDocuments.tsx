@@ -218,6 +218,7 @@ export function CustomerDocuments() {
 
         <UploadDocumentTile
           icon={<CardIcon />}
+          accent="terracotta"
           title="PAN card"
           description="Upload a clear photo of your PAN card."
           status={docs.pan}
@@ -230,6 +231,7 @@ export function CustomerDocuments() {
 
         <TileShell
           icon={<FileIcon />}
+          accent="green"
           title="Document generation"
           description="Generate your booking application as a PDF — it includes your Aadhaar and PAN photos, then verify your signature."
           statusLabel={genStatusLabel}

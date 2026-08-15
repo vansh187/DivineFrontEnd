@@ -16,11 +16,13 @@ export function CustomerPage() {
     >
       <PlaceholderCard
         icon={<BookmarkIcon />}
+        accent="terracotta"
         title="Saved townships"
         description="Bookmark plots along the corridor and compare them side by side."
       />
       <PlaceholderCard
         icon={<CalendarIcon />}
+        accent="green-soft"
         title="Site visits"
         description="Track upcoming visits and revisit past ones with your broker."
       />

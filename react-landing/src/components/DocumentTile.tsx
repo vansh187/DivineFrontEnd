@@ -1,9 +1,11 @@
 import { useRef } from 'react';
 import type { ReactNode } from 'react';
 import type { DocStatus } from '../services/documentStore';
-import { CheckIcon, FileIcon } from './DashboardIcons';
+import { CheckIcon, FileIcon, IconBadge } from './DashboardIcons';
+import type { IconAccent } from './DashboardIcons';
 
 type StatusTone = 'done' | 'pending' | 'neutral' | 'failed';
+export type { IconAccent };
 
 interface TileShellProps {
   icon: ReactNode;
@@ -11,6 +13,7 @@ interface TileShellProps {
   description: string;
   statusLabel?: string;
   statusTone?: StatusTone;
+  accent?: IconAccent;
   children: ReactNode;
 }
 
@@ -21,15 +24,15 @@ const toneClass: Record<StatusTone, string> = {
   failed: 'text-red-600',
 };
 
-export function TileShell({ icon, title, description, statusLabel, statusTone = 'neutral', children }: TileShellProps) {
+export function TileShell({ icon, title, description, statusLabel, statusTone = 'neutral', accent = 'green', children }: TileShellProps) {
   return (
-    <div className="relative rounded-2xl border border-hairline bg-surface p-6 shadow-[0_16px_40px_-26px_rgba(30,77,59,0.3)]">
+    <div className="group relative rounded-2xl border border-hairline bg-surface p-6 shadow-[0_16px_40px_-26px_rgba(30,77,59,0.3)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_26px_50px_-24px_rgba(30,77,59,0.4)]">
       {statusTone === 'done' && (
-        <span className="absolute right-5 top-5 flex h-7 w-7 items-center justify-center rounded-full bg-green text-white">
+        <span className="absolute right-5 top-5 flex h-7 w-7 items-center justify-center rounded-full bg-green text-white shadow-[0_4px_14px_-2px_rgba(56,142,60,0.65)] ring-2 ring-surface">
           <CheckIcon />
         </span>
       )}
-      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-bg text-chrome">{icon}</span>
+      <IconBadge icon={icon} accent={accent} interactive />
       <h3 className="mt-4 font-display text-lg font-bold text-ink">{title}</h3>
       <p className="mt-1.5 text-sm leading-[1.6] text-ink-muted">{description}</p>
       {statusLabel && <p className={`eyebrow-label mt-3 ${toneClass[statusTone]}`}>{statusLabel}</p>}
@@ -48,6 +51,7 @@ interface UploadDocumentTileProps {
   verifying: boolean;
   uploading?: boolean;
   accept?: string;
+  accent?: IconAccent;
 }
 
 export function UploadDocumentTile({
@@ -60,6 +64,7 @@ export function UploadDocumentTile({
   verifying,
   uploading = false,
   accept = 'image/*,application/pdf',
+  accent,
 }: UploadDocumentTileProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -73,7 +78,7 @@ export function UploadDocumentTile({
   const statusTone: StatusTone = status.verified ? 'done' : status.documentId ? 'pending' : status.error ? 'failed' : 'neutral';
 
   return (
-    <TileShell icon={icon} title={title} description={description} statusLabel={statusLabel} statusTone={statusTone}>
+    <TileShell icon={icon} title={title} description={description} statusLabel={statusLabel} statusTone={statusTone} accent={accent}>
       <input
         ref={inputRef}
         type="file"
@@ -88,8 +93,8 @@ export function UploadDocumentTile({
 
       {status.fileName && (
         <div className="mb-3 flex items-center gap-2 rounded-lg bg-bg px-3 py-2 text-xs text-ink-muted">
-          <span className="h-3.5 w-3.5 shrink-0">
-            <FileIcon />
+          <span className="shrink-0">
+            <FileIcon className="h-3.5 w-3.5" />
           </span>
           <span className="truncate">{status.fileName}</span>
         </div>

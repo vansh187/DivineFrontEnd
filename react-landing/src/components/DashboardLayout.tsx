@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { Navbar } from './Navbar';
 import { Footer } from './Footer';
+import { IconBadge } from './DashboardIcons';
+import type { IconAccent } from './DashboardIcons';
 
 interface DashboardLayoutProps {
   eyebrow: string;
@@ -36,12 +38,13 @@ interface PlaceholderCardProps {
   icon: ReactNode;
   title: string;
   description: string;
+  accent?: IconAccent;
 }
 
-export function PlaceholderCard({ icon, title, description }: PlaceholderCardProps) {
+export function PlaceholderCard({ icon, title, description, accent = 'chrome' }: PlaceholderCardProps) {
   return (
-    <div className="rounded-2xl border border-hairline bg-surface p-6 shadow-[0_16px_40px_-26px_rgba(30,77,59,0.3)]">
-      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-bg text-chrome">{icon}</span>
+    <div className="group relative rounded-2xl border border-hairline bg-surface p-6 shadow-[0_16px_40px_-26px_rgba(30,77,59,0.3)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_26px_50px_-24px_rgba(30,77,59,0.4)]">
+      <IconBadge icon={icon} accent={accent} interactive />
       <h3 className="mt-4 font-display text-lg font-bold text-ink">{title}</h3>
       <p className="mt-1.5 text-sm leading-[1.6] text-ink-muted">{description}</p>
       <p className="eyebrow-label mt-4 text-terracotta">Coming soon</p>
