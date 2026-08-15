@@ -100,12 +100,20 @@ function scaleLocation(location: QRCode['location'], scaleX: number, scaleY: num
 
 /** jsQR only needs enough pixels to locate + read module boundaries, not the
  * full native frame — analyzing a multi-megapixel buffer 8x/second is what
- * was freezing the page on phones with high-res rear cameras. */
-const DETECTION_MAX_DIM = 640;
+ * was freezing the page on phones with high-res rear cameras. 960 gives a
+ * genuinely small/dense QR more to work with than 640 did, while still
+ * being far cheaper than the native frame. */
+const DETECTION_MAX_DIM = 960;
 
 const CloseIcon = () => (
   <svg viewBox="0 0 20 20" aria-hidden="true" className="h-4 w-4">
     <path d="M5 5l10 10M15 5 5 15" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+);
+
+const TorchIcon = ({ on }: { on: boolean }) => (
+  <svg viewBox="0 0 20 20" aria-hidden="true" className="h-4 w-4" fill={on ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M7 2.5h6l-1 5h2l-6.5 9 1.5-6.5H6.5L7 2.5Z" />
   </svg>
 );
 
@@ -114,16 +122,28 @@ interface AadhaarQrScannerProps {
   onCancel: () => void;
 }
 
+const HINT_STAGES = [
+  "Fit the QR code inside the box.",
+  "Fit the QR code inside the box. Hold the phone steady and let it focus.",
+  "Still looking — move a little closer or further until the pattern looks sharp, not blurry. Low light? Try the torch.",
+] as const;
+
 export function AadhaarQrScanner({ onCapture, onCancel }: AadhaarQrScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const videoTrackRef = useRef<MediaStreamTrack | null>(null);
   const rafRef = useRef<number | null>(null);
   const stoppedRef = useRef(false);
   const lastScanRef = useRef(0);
+  const scanStartRef = useRef(0);
+  const hintTimerRef = useRef<number | null>(null);
 
   const [error, setError] = useState<string | null>(null);
   const [found, setFound] = useState(false);
+  const [torchSupported, setTorchSupported] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
+  const [hintStage, setHintStage] = useState(0);
 
   useEffect(() => {
     stoppedRef.current = false;
@@ -139,6 +159,7 @@ export function AadhaarQrScanner({ onCapture, onCancel }: AadhaarQrScannerProps)
       if (!v || !v.videoWidth || !v.videoHeight) return;
       stoppedRef.current = true;
       setFound(true);
+      if (hintTimerRef.current) window.clearInterval(hintTimerRef.current);
 
       // One-time full-resolution grab, only now that we know where to crop —
       // this is the only place a full-size frame gets touched.
@@ -194,7 +215,14 @@ export function AadhaarQrScanner({ onCapture, onCancel }: AadhaarQrScannerProps)
       // Non-standard constraint — browsers that don't support it just
       // ignore it rather than throwing.
       const [videoTrack] = stream.getVideoTracks();
+      videoTrackRef.current = videoTrack ?? null;
       videoTrack?.applyConstraints({ advanced: [{ focusMode: 'continuous' } as unknown as MediaTrackConstraintSet] }).catch(() => {});
+
+      // Best-effort: some phones expose a torch (flashlight) control on the
+      // rear camera track. Low light forces a slower shutter, which is a
+      // common cause of the motion-blur users hit when scanning up close.
+      const caps = videoTrack?.getCapabilities?.() as (MediaTrackCapabilities & { torch?: boolean }) | undefined;
+      if (!cancelled && caps?.torch) setTorchSupported(true);
 
       const video = videoRef.current;
       if (!video) return;
@@ -204,11 +232,17 @@ export function AadhaarQrScanner({ onCapture, onCancel }: AadhaarQrScannerProps)
       const { default: jsQR } = await import('jsqr');
       if (cancelled) return;
 
+      scanStartRef.current = performance.now();
+      hintTimerRef.current = window.setInterval(() => {
+        const elapsed = performance.now() - scanStartRef.current;
+        setHintStage(elapsed > 9000 ? 2 : elapsed > 4000 ? 1 : 0);
+      }, 1000);
+
       const scanLoop = (timestamp: number) => {
         if (stoppedRef.current || cancelled) return;
         const v = videoRef.current;
         const canvas = canvasRef.current;
-        if (v && canvas && v.readyState >= v.HAVE_ENOUGH_DATA && v.videoWidth && v.videoHeight && timestamp - lastScanRef.current > 120) {
+        if (v && canvas && v.readyState >= v.HAVE_ENOUGH_DATA && v.videoWidth && v.videoHeight && timestamp - lastScanRef.current > 100) {
           lastScanRef.current = timestamp;
           const scale = Math.min(1, DETECTION_MAX_DIM / Math.max(v.videoWidth, v.videoHeight));
           const dw = Math.max(1, Math.round(v.videoWidth * scale));
@@ -238,9 +272,22 @@ export function AadhaarQrScanner({ onCapture, onCancel }: AadhaarQrScannerProps)
       cancelled = true;
       stoppedRef.current = true;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (hintTimerRef.current) window.clearInterval(hintTimerRef.current);
       stopStream();
     };
   }, [onCapture]);
+
+  const toggleTorch = async () => {
+    const track = videoTrackRef.current;
+    if (!track) return;
+    try {
+      await track.applyConstraints({ advanced: [{ torch: !torchOn } as unknown as MediaTrackConstraintSet] });
+      setTorchOn((v) => !v);
+    } catch {
+      // Some devices report the capability but reject the constraint — no
+      // harm done, the toggle just stays off.
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center bg-ink/80 p-4 backdrop-blur-sm">
@@ -285,8 +332,21 @@ export function AadhaarQrScanner({ onCapture, onCancel }: AadhaarQrScannerProps)
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <div className={`h-36 w-36 rounded-xl border-[3px] transition-colors sm:h-44 sm:w-44 ${found ? 'border-green' : 'border-white/70'}`} />
             </div>
+            {torchSupported && !found && (
+              <button
+                type="button"
+                onClick={() => void toggleTorch()}
+                aria-label={torchOn ? 'Turn off torch' : 'Turn on torch'}
+                aria-pressed={torchOn}
+                className={`absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full border transition-colors ${
+                  torchOn ? 'border-white bg-white text-ink' : 'border-white/40 bg-black/40 text-white hover:bg-black/60'
+                }`}
+              >
+                <TorchIcon on={torchOn} />
+              </button>
+            )}
             <p className="pointer-events-none absolute inset-x-0 bottom-4 px-4 text-center text-xs font-semibold text-white drop-shadow">
-              {found ? 'QR found — verifying…' : "Fit the QR code inside the box. Move closer if it's small — don't pinch-zoom, it blurs the image."}
+              {found ? 'QR found — verifying…' : HINT_STAGES[hintStage]}
             </p>
           </div>
         )}
