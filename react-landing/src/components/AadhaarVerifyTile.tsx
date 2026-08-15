@@ -4,6 +4,7 @@ import type { AadhaarVerifyResult } from '../services/kycApi';
 import { ApiError } from '../services/authApi';
 import type { AadhaarStatus } from '../services/documentStore';
 import { TileShell } from './DocumentTile';
+import { AadhaarQrScanner } from './AadhaarQrScanner';
 import { IdCardIcon } from './DashboardIcons';
 
 type Method = 'qr' | 'xml';
@@ -58,6 +59,8 @@ export function AadhaarVerifyTile({ token, status, onChange, onSessionExpired }:
   const [verifying, setVerifying] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [showManualUpload, setShowManualUpload] = useState(false);
 
   const statusLabel = status.verified ? 'Verified' : 'Not verified';
   const statusTone = status.verified ? 'done' : 'failed';
@@ -118,6 +121,21 @@ export function AadhaarVerifyTile({ token, status, onChange, onSessionExpired }:
     }
   };
 
+  const handleScanCapture = async (file: File) => {
+    setScannerOpen(false);
+    setVerifying(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await verifyAadhaarQr(token, file);
+      applyResult(result);
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   const handleVerifyXml = async () => {
     if (!xmlFile) {
       setError('Upload the ZIP file from UIDAI.');
@@ -140,6 +158,7 @@ export function AadhaarVerifyTile({ token, status, onChange, onSessionExpired }:
   };
 
   return (
+    <>
     <TileShell
       icon={<IdCardIcon />}
       title="Aadhaar card"
@@ -178,11 +197,44 @@ export function AadhaarVerifyTile({ token, status, onChange, onSessionExpired }:
 
           {method === 'qr' ? (
             <div className="flex flex-col gap-2">
-              <FileField label="Front side" file={frontFile} onChange={setFrontFile} accept="image/jpeg,image/png" />
-              <FileField label="Back side" file={backFile} onChange={setBackFile} accept="image/jpeg,image/png" />
+              <button
+                type="button"
+                onClick={() => setScannerOpen(true)}
+                disabled={verifying}
+                className="self-start rounded-full bg-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {verifying ? 'Verifying…' : 'Scan QR with camera'}
+              </button>
               <p className="text-[11px] leading-snug text-ink-muted">
-                Upload at least one clear, well-lit side showing the QR code. JPG or PNG only.
+                Point your camera at the QR code — scanning it live works better than a full card photo, and
+                verifies automatically the moment it's found.
               </p>
+
+              {!showManualUpload ? (
+                <button
+                  type="button"
+                  onClick={() => setShowManualUpload(true)}
+                  className="self-start text-[11px] font-semibold text-chrome hover:underline"
+                >
+                  Or upload photos instead
+                </button>
+              ) : (
+                <div className="mt-1 flex flex-col gap-2 border-t border-hairline pt-3">
+                  <FileField label="Front side" file={frontFile} onChange={setFrontFile} accept="image/jpeg,image/png" />
+                  <FileField label="Back side" file={backFile} onChange={setBackFile} accept="image/jpeg,image/png" />
+                  <p className="text-[11px] leading-snug text-ink-muted">
+                    Upload at least one clear, well-lit side showing the QR code. JPG or PNG only.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleVerifyQr}
+                    disabled={verifying}
+                    className="self-start rounded-full border border-hairline px-4 py-2 text-xs font-semibold text-ink transition-colors hover:border-green hover:text-green disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {verifying ? 'Verifying…' : 'Verify uploaded photos'}
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex flex-col gap-2">
@@ -211,16 +263,20 @@ export function AadhaarVerifyTile({ token, status, onChange, onSessionExpired }:
             </p>
           )}
 
-          <button
-            type="button"
-            onClick={method === 'qr' ? handleVerifyQr : handleVerifyXml}
-            disabled={verifying}
-            className="self-start rounded-full bg-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {verifying ? 'Verifying…' : 'Verify Aadhaar'}
-          </button>
+          {method === 'xml' && (
+            <button
+              type="button"
+              onClick={handleVerifyXml}
+              disabled={verifying}
+              className="self-start rounded-full bg-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {verifying ? 'Verifying…' : 'Verify Aadhaar'}
+            </button>
+          )}
         </div>
       )}
     </TileShell>
+    {scannerOpen && <AadhaarQrScanner onCapture={handleScanCapture} onCancel={() => setScannerOpen(false)} />}
+    </>
   );
 }
