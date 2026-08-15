@@ -44,3 +44,21 @@ export const TagIcon = () => (
     <circle cx="7" cy="7" r="1.1" />
   </IconWrap>
 );
+export const IdCardIcon = () => (
+  <IconWrap>
+    <rect x="2.5" y="4" width="15" height="12" rx="1.5" />
+    <circle cx="7" cy="9.3" r="1.8" />
+    <path d="M4.3 14c.5-1.5 1.5-2.2 2.7-2.2s2.2.7 2.7 2.2M12 8.2h4M12 11h4" />
+  </IconWrap>
+);
+export const CardIcon = () => (
+  <IconWrap>
+    <rect x="2.5" y="4.5" width="15" height="11" rx="1.5" />
+    <path d="M2.5 8h15M5.5 12h4" />
+  </IconWrap>
+);
+export const CheckIcon = () => (
+  <svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+    <path d="M4.5 10.5 8 14l7.5-8" />
+  </svg>
+);

@@ -1,5 +1,6 @@
 import { useAuth, getDisplayName } from '../hooks/useAuth';
 import { DashboardLayout, PlaceholderCard } from '../components/DashboardLayout';
+import { BrokerDocuments } from '../components/BrokerDocuments';
 import { UsersIcon, TagIcon, ChartIcon } from '../components/DashboardIcons';
 
 export function BrokerPage() {
@@ -10,7 +11,8 @@ export function BrokerPage() {
     <DashboardLayout
       eyebrow="Broker workspace"
       heading={<>Welcome back, {name}.</>}
-      subheading="Your leads, listings and commission tracking will live here as we build out the broker portal."
+      subheading="Your leads, listings and commission tracking will live here as we build out the broker portal — documents and scheduling are ready below."
+      after={<BrokerDocuments />}
     >
       <PlaceholderCard
         icon={<UsersIcon />}

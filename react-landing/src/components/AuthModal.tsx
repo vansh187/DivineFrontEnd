@@ -3,7 +3,7 @@ import type { FormEvent, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useAuth } from '../hooks/useAuth';
-import { ApiError } from '../services/authApi';
+import { ApiError, requestPasswordReset, resetPassword } from '../services/authApi';
 import type { Role } from '../services/authApi';
 
 function IconWrap({ children }: { children: ReactNode }) {
@@ -59,6 +59,12 @@ const EyeOffIcon = () => (
     <path d="M2.5 2.5l15 15M8.2 8.4a2.4 2.4 0 0 0 3.4 3.4M5.3 5.6C3.2 7 1.7 10 1.7 10s2.8 5.5 8.3 5.5c1.5 0 2.8-.4 3.9-1M11.9 4.9c-.6-.2-1.2-.3-1.9-.3C4.5 4.5 1.7 10 1.7 10c.4.8 1.2 2 2.4 3.1" />
   </IconWrap>
 );
+const ShieldCheckIcon = () => (
+  <IconWrap>
+    <path d="M10 2.5 16.5 5v5c0 4-2.8 6.8-6.5 8-3.7-1.2-6.5-4-6.5-8V5L10 2.5Z" />
+    <path d="m7.3 10 1.9 1.9 3.5-3.8" />
+  </IconWrap>
+);
 const CloseIcon = () => (
   <svg viewBox="0 0 20 20" aria-hidden="true" className="h-4 w-4">
     <path d="M5 5l10 10M15 5 5 15" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -79,11 +85,13 @@ interface FieldProps {
   autoComplete?: string;
   required?: boolean;
   minLength?: number;
+  maxLength?: number;
+  inputMode?: 'text' | 'numeric' | 'tel' | 'email';
   optional?: boolean;
   trailing?: ReactNode;
 }
 
-function Field({ label, type, value, onChange, icon, autoComplete, required, minLength, optional, trailing }: FieldProps) {
+function Field({ label, type, value, onChange, icon, autoComplete, required, minLength, maxLength, inputMode, optional, trailing }: FieldProps) {
   return (
     <label className="flex flex-col gap-1.5 text-sm text-ink">
       <span>
@@ -96,6 +104,8 @@ function Field({ label, type, value, onChange, icon, autoComplete, required, min
           type={type}
           required={required}
           minLength={minLength}
+          maxLength={maxLength}
+          inputMode={inputMode}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           autoComplete={autoComplete}
@@ -123,6 +133,17 @@ export function AuthModal() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [entered, setEntered] = useState(false);
+
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [otp, setOtp] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [sendingOtp, setSendingOtp] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [forgotError, setForgotError] = useState<string | null>(null);
+  const [forgotSuccess, setForgotSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isModalOpen) {
@@ -156,6 +177,16 @@ export function AuthModal() {
       setError(null);
       setSuccessMessage(null);
       setSubmitting(false);
+      setForgotOpen(false);
+      setOtp('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setShowNewPassword(false);
+      setOtpSent(false);
+      setSendingOtp(false);
+      setResetting(false);
+      setForgotError(null);
+      setForgotSuccess(null);
     }
   }, [isModalOpen]);
 
@@ -173,12 +204,88 @@ export function AuthModal() {
     setModalMode(mode);
     setError(null);
     setSuccessMessage(null);
+    setForgotOpen(false);
+    setForgotError(null);
+    setForgotSuccess(null);
   };
 
   const switchRole = (role: Role) => {
     setModalRole(role);
     setError(null);
     setSuccessMessage(null);
+  };
+
+  const openForgotView = () => {
+    setForgotOpen(true);
+    setError(null);
+    setSuccessMessage(null);
+    setForgotError(null);
+    setForgotSuccess(null);
+  };
+
+  const closeForgotView = () => {
+    setForgotOpen(false);
+    setForgotError(null);
+    setForgotSuccess(null);
+  };
+
+  const handleSendOtp = async () => {
+    if (!email) {
+      setForgotError('Enter your email first.');
+      return;
+    }
+    setSendingOtp(true);
+    setForgotError(null);
+    setForgotSuccess(null);
+    try {
+      await requestPasswordReset(modalRole, { email });
+      setOtpSent(true);
+      setForgotSuccess('If that email is registered, an OTP is on its way.');
+    } catch (err) {
+      setForgotError(err instanceof ApiError ? err.message : 'Could not send the code. Please try again.');
+    } finally {
+      setSendingOtp(false);
+    }
+  };
+
+  const handleForgotSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (resetting) return;
+
+    if (!otpSent) {
+      setForgotError('Send yourself an OTP first.');
+      return;
+    }
+    if (otp.length !== 6) {
+      setForgotError('Enter the 6-digit code from your email.');
+      return;
+    }
+    if (newPassword.length < 8) {
+      setForgotError('Password must be at least 8 characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setForgotError('Passwords do not match.');
+      return;
+    }
+
+    setResetting(true);
+    setForgotError(null);
+    try {
+      await resetPassword(modalRole, { email, otp, newPassword });
+      setForgotOpen(false);
+      setModalMode('signin');
+      setOtp('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setOtpSent(false);
+      setPassword('');
+      setSuccessMessage('Password reset. Sign in with your new password.');
+    } catch (err) {
+      setForgotError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+    } finally {
+      setResetting(false);
+    }
   };
 
   const handleSubmit = async (event: FormEvent) => {
@@ -301,97 +408,221 @@ export function AuthModal() {
             ))}
           </div>
 
-          <h2 id="auth-modal-heading" className="font-display text-[26px] font-bold leading-tight text-ink">
-            {isSignup ? 'Create your account' : 'Welcome back'}
-          </h2>
-          <p className="mt-1.5 text-sm text-ink-muted">
-            {isSignup
-              ? `Sign up as a ${modalRole} to save your corridor shortlist.`
-              : `Sign in as a ${modalRole} to pick up where you left off.`}
-          </p>
+          {forgotOpen ? (
+            <>
+              <h2 id="auth-modal-heading" className="font-display text-[26px] font-bold leading-tight text-ink">
+                Reset your password
+              </h2>
+              <p className="mt-1.5 text-sm text-ink-muted">
+                Verify your {modalRole} account email with the OTP we send you, then set a new password.
+              </p>
 
-          <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
-            {isSignup && (
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="First name" type="text" value={firstName} onChange={setFirstName} icon={<UserIcon />} autoComplete="given-name" />
-                <Field label="Last name" type="text" value={lastName} onChange={setLastName} icon={<UserIcon />} autoComplete="family-name" />
-              </div>
-            )}
+              <form onSubmit={handleForgotSubmit} className="mt-6 flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5 text-sm text-ink">
+                  <span className="flex items-center justify-between gap-3">
+                    <label htmlFor="forgot-email">Email</label>
+                    <button
+                      type="button"
+                      onClick={handleSendOtp}
+                      disabled={sendingOtp || !email}
+                      className="text-xs font-semibold text-chrome transition-colors hover:underline disabled:cursor-not-allowed disabled:text-ink-muted disabled:no-underline"
+                    >
+                      {sendingOtp ? 'Sending…' : otpSent ? 'Resend OTP' : 'Send OTP'}
+                    </button>
+                  </span>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted">
+                      <MailIcon />
+                    </span>
+                    <input
+                      id="forgot-email"
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      autoComplete="email"
+                      className="w-full rounded-xl border border-hairline bg-bg py-2.5 pl-10 pr-3.5 text-sm text-ink outline-none transition-all focus:border-green focus:ring-4 focus:ring-green/10"
+                    />
+                  </div>
+                </div>
 
-            <label className="flex flex-col gap-1.5 text-sm text-ink">
-              Email
-              <div className="relative">
-                <span className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted">
-                  <MailIcon />
-                </span>
-                <input
-                  ref={emailInputRef}
-                  type="email"
+                <Field
+                  label="OTP"
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={otp}
+                  onChange={(value) => setOtp(value.replace(/\D/g, '').slice(0, 6))}
+                  icon={<ShieldCheckIcon />}
+                  autoComplete="one-time-code"
                   required
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  autoComplete="email"
-                  className="w-full rounded-xl border border-hairline bg-bg py-2.5 pl-10 pr-3.5 text-sm text-ink outline-none transition-all focus:border-green focus:ring-4 focus:ring-green/10"
+                  minLength={6}
                 />
-              </div>
-            </label>
 
-            {isSignup && (
-              <Field label="Phone" type="tel" value={phone} onChange={setPhone} icon={<PhoneIcon />} autoComplete="tel" optional />
-            )}
+                <Field
+                  label="New password"
+                  type={showNewPassword ? 'text' : 'password'}
+                  value={newPassword}
+                  onChange={setNewPassword}
+                  icon={<LockIcon />}
+                  autoComplete="new-password"
+                  required
+                  minLength={8}
+                  trailing={
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword((v) => !v)}
+                      aria-label={showNewPassword ? 'Hide password' : 'Show password'}
+                      className="text-ink-muted transition-colors hover:text-ink"
+                    >
+                      <span className="block h-4 w-4">{showNewPassword ? <EyeOffIcon /> : <EyeIcon />}</span>
+                    </button>
+                  }
+                />
 
-            <Field
-              label="Password"
-              type={showPassword ? 'text' : 'password'}
-              value={password}
-              onChange={setPassword}
-              icon={<LockIcon />}
-              autoComplete={isSignup ? 'new-password' : 'current-password'}
-              required
-              minLength={8}
-              trailing={
+                <Field
+                  label="Confirm new password"
+                  type={showNewPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={setConfirmPassword}
+                  icon={<LockIcon />}
+                  autoComplete="new-password"
+                  required
+                  minLength={8}
+                />
+
+                {forgotSuccess && (
+                  <p role="status" className="rounded-lg border border-green/25 bg-green/10 px-3.5 py-2.5 text-sm font-medium text-green">
+                    {forgotSuccess}
+                  </p>
+                )}
+
+                {forgotError && (
+                  <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
+                    {forgotError}
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={resetting}
+                  className="mt-1 rounded-full bg-green px-6 py-3 text-sm font-semibold text-white shadow-[0_16px_36px_-14px_rgba(56,142,60,0.65)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-green-soft hover:shadow-[0_20px_40px_-14px_rgba(56,142,60,0.75)] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60 disabled:shadow-none"
+                >
+                  {resetting ? 'Resetting…' : 'Reset password'}
+                </button>
+              </form>
+
+              <p className="mt-5 text-center text-sm text-ink-muted">
+                <button type="button" onClick={closeForgotView} className="font-semibold text-chrome hover:underline">
+                  ← Back to sign in
+                </button>
+              </p>
+            </>
+          ) : (
+            <>
+              <h2 id="auth-modal-heading" className="font-display text-[26px] font-bold leading-tight text-ink">
+                {isSignup ? 'Create your account' : 'Welcome back'}
+              </h2>
+              <p className="mt-1.5 text-sm text-ink-muted">
+                {isSignup
+                  ? `Sign up as a ${modalRole} to save your corridor shortlist.`
+                  : `Sign in as a ${modalRole} to pick up where you left off.`}
+              </p>
+
+              <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
+                {isSignup && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="First name" type="text" value={firstName} onChange={setFirstName} icon={<UserIcon />} autoComplete="given-name" />
+                    <Field label="Last name" type="text" value={lastName} onChange={setLastName} icon={<UserIcon />} autoComplete="family-name" />
+                  </div>
+                )}
+
+                <label className="flex flex-col gap-1.5 text-sm text-ink">
+                  Email
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted">
+                      <MailIcon />
+                    </span>
+                    <input
+                      ref={emailInputRef}
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      autoComplete="email"
+                      className="w-full rounded-xl border border-hairline bg-bg py-2.5 pl-10 pr-3.5 text-sm text-ink outline-none transition-all focus:border-green focus:ring-4 focus:ring-green/10"
+                    />
+                  </div>
+                </label>
+
+                {isSignup && (
+                  <Field label="Phone" type="tel" value={phone} onChange={setPhone} icon={<PhoneIcon />} autoComplete="tel" optional />
+                )}
+
+                <Field
+                  label="Password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={setPassword}
+                  icon={<LockIcon />}
+                  autoComplete={isSignup ? 'new-password' : 'current-password'}
+                  required
+                  minLength={8}
+                  trailing={
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      className="text-ink-muted transition-colors hover:text-ink"
+                    >
+                      <span className="block h-4 w-4">{showPassword ? <EyeOffIcon /> : <EyeIcon />}</span>
+                    </button>
+                  }
+                />
+
+                {!isSignup && (
+                  <button
+                    type="button"
+                    onClick={openForgotView}
+                    className="-mt-2 self-end text-xs font-semibold text-chrome transition-colors hover:underline"
+                  >
+                    Forgot password?
+                  </button>
+                )}
+
+                {successMessage && (
+                  <p role="status" className="rounded-lg border border-green/25 bg-green/10 px-3.5 py-2.5 text-sm font-medium text-green">
+                    {successMessage}
+                  </p>
+                )}
+
+                {error && (
+                  <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
+                    {error}
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="mt-1 rounded-full bg-green px-6 py-3 text-sm font-semibold text-white shadow-[0_16px_36px_-14px_rgba(56,142,60,0.65)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-green-soft hover:shadow-[0_20px_40px_-14px_rgba(56,142,60,0.75)] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60 disabled:shadow-none"
+                >
+                  {submitting ? 'Please wait…' : isSignup ? 'Create account' : 'Sign in'}
+                </button>
+              </form>
+
+              <p className="mt-5 text-center text-sm text-ink-muted">
+                {isSignup ? 'Already have an account?' : "Don't have an account?"}{' '}
                 <button
                   type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  className="text-ink-muted transition-colors hover:text-ink"
+                  onClick={() => switchMode(isSignup ? 'signin' : 'signup')}
+                  className="font-semibold text-chrome hover:underline"
                 >
-                  <span className="block h-4 w-4">{showPassword ? <EyeOffIcon /> : <EyeIcon />}</span>
+                  {isSignup ? 'Sign in' : 'Create one'}
                 </button>
-              }
-            />
-
-            {successMessage && (
-              <p role="status" className="rounded-lg border border-green/25 bg-green/10 px-3.5 py-2.5 text-sm font-medium text-green">
-                {successMessage}
               </p>
-            )}
-
-            {error && (
-              <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
-                {error}
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className="mt-1 rounded-full bg-green px-6 py-3 text-sm font-semibold text-white shadow-[0_16px_36px_-14px_rgba(56,142,60,0.65)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-green-soft hover:shadow-[0_20px_40px_-14px_rgba(56,142,60,0.75)] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60 disabled:shadow-none"
-            >
-              {submitting ? 'Please wait…' : isSignup ? 'Create account' : 'Sign in'}
-            </button>
-          </form>
-
-          <p className="mt-5 text-center text-sm text-ink-muted">
-            {isSignup ? 'Already have an account?' : "Don't have an account?"}{' '}
-            <button
-              type="button"
-              onClick={() => switchMode(isSignup ? 'signin' : 'signup')}
-              className="font-semibold text-chrome hover:underline"
-            >
-              {isSignup ? 'Sign in' : 'Create one'}
-            </button>
-          </p>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -1,6 +1,7 @@
 import { useAuth, getDisplayName } from '../hooks/useAuth';
 import { DashboardLayout, PlaceholderCard } from '../components/DashboardLayout';
-import { BookmarkIcon, CalendarIcon, FileIcon } from '../components/DashboardIcons';
+import { CustomerDocuments } from '../components/CustomerDocuments';
+import { BookmarkIcon, CalendarIcon } from '../components/DashboardIcons';
 
 export function CustomerPage() {
   const { session } = useAuth();
@@ -10,7 +11,8 @@ export function CustomerPage() {
     <DashboardLayout
       eyebrow="Customer workspace"
       heading={<>Welcome back, {name}.</>}
-      subheading="Your shortlist, site visits and documents will live here as we build out the customer portal."
+      subheading="Your shortlist and site visits will live here as we build out the customer portal — documents are ready below."
+      after={<CustomerDocuments />}
     >
       <PlaceholderCard
         icon={<BookmarkIcon />}
@@ -21,11 +23,6 @@ export function CustomerPage() {
         icon={<CalendarIcon />}
         title="Site visits"
         description="Track upcoming visits and revisit past ones with your broker."
-      />
-      <PlaceholderCard
-        icon={<FileIcon />}
-        title="Documents"
-        description="Booking forms, DDJAY paperwork and registry documents in one place."
       />
     </DashboardLayout>
   );

@@ -40,7 +40,8 @@ export interface JwtClaims {
 
 // The API's login field is literally "username" — signup() below sets it to
 // the email the person types, so "log in with email" holds end to end.
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, '')
+// Exported so other service modules (e.g. documentsApi) hit the same host.
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, '')
   ?? 'https://divinevisioninfrabackend.onrender.com';
 
 export class ApiError extends Error {
@@ -115,6 +116,29 @@ export function login(role: Role, input: LoginInput): Promise<AuthTokenResponse>
     username: input.email,
     password: input.password,
   }, 'login');
+}
+
+export interface ForgotPasswordInput {
+  email: string;
+}
+
+export interface ResetPasswordInput {
+  email: string;
+  otp: string;
+  newPassword: string;
+}
+
+// TODO(backend): the forgot-password endpoints aren't live yet — swap these
+// for real postJson(`/${role}/forgot-password`, ...) / postJson(`/${role}/reset-password`, ...)
+// calls once the team shares the contract. Simulated for now so the UI is
+// fully clickable end to end; both already throw ApiError-compatible errors
+// once wired up, so AuthModal's error handling needs no changes.
+export function requestPasswordReset(_role: Role, _input: ForgotPasswordInput): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, 900));
+}
+
+export function resetPassword(_role: Role, _input: ResetPasswordInput): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, 900));
 }
 
 export function decodeJwtClaims(token: string): JwtClaims | null {
