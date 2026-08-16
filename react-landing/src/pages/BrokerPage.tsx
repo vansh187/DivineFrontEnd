@@ -11,8 +11,8 @@ export function BrokerPage() {
     <DashboardLayout
       eyebrow="Broker workspace"
       heading={<>Welcome back, {name}.</>}
-      subheading="Your leads, listings and commission tracking will live here as we build out the broker portal — documents and scheduling are ready below."
-      after={<BrokerDocuments />}
+      subheading="Schedule site visits first, then manage broker documents and the rest of your workspace."
+      before={<BrokerDocuments />}
     >
       <PlaceholderCard
         icon={<UsersIcon />}

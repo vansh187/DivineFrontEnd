@@ -105,6 +105,7 @@ export interface ScheduledVisit {
   date: string;
   time: string;
   notes: string;
+  status: 'scheduled' | 'cancelled';
   createdAt: string;
 }
 
@@ -143,6 +144,19 @@ function emptyGeneratedDocStatus(): GeneratedDocStatus {
     signedUrl: null,
     signedUrlExpiresAt: null,
   };
+}
+
+function normalizeVisits(visits: Partial<ScheduledVisit>[] | undefined): ScheduledVisit[] {
+  return (visits ?? []).map((visit) => ({
+    id: visit.id ?? `${Date.now()}`,
+    customerName: visit.customerName ?? '',
+    customerContact: visit.customerContact ?? '',
+    date: visit.date ?? '',
+    time: visit.time ?? '',
+    notes: visit.notes ?? '',
+    status: visit.status ?? 'scheduled',
+    createdAt: visit.createdAt ?? new Date().toISOString(),
+  }));
 }
 
 export function loadCustomerDocs(email: string): CustomerDocState {
@@ -187,7 +201,7 @@ export function loadBrokerDocs(email: string): BrokerDocState {
       aadhar: parsed.aadhar ?? emptyAadhaarStatus(),
       aadharFront: parsed.aadharFront ?? emptyAadhaarPhotoStatus(),
       aadharBack: parsed.aadharBack ?? emptyAadhaarPhotoStatus(),
-      visits: parsed.visits ?? [],
+      visits: normalizeVisits(parsed.visits),
     };
   } catch {
     return { aadhar: emptyAadhaarStatus(), aadharFront: emptyAadhaarPhotoStatus(), aadharBack: emptyAadhaarPhotoStatus(), visits: [] };

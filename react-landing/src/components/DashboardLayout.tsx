@@ -9,10 +9,11 @@ interface DashboardLayoutProps {
   heading: ReactNode;
   subheading: string;
   children: ReactNode;
+  before?: ReactNode;
   after?: ReactNode;
 }
 
-export function DashboardLayout({ eyebrow, heading, subheading, children, after }: DashboardLayoutProps) {
+export function DashboardLayout({ eyebrow, heading, subheading, children, before, after }: DashboardLayoutProps) {
   return (
     <>
       <Navbar />
@@ -23,6 +24,8 @@ export function DashboardLayout({ eyebrow, heading, subheading, children, after 
             {heading}
           </h1>
           <p className="mt-3 max-w-[60ch] text-[15px] leading-[1.65] text-ink-muted">{subheading}</p>
+
+          {before}
 
           <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
 
