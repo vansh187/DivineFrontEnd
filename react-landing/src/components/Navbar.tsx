@@ -1,10 +1,13 @@
+import { useState } from 'react';
 import { useScrolled } from '../hooks/useScrolled';
 import { navLinks } from '../data/navigation';
 import { contact } from '../data/contact';
 import { LoginMenu } from './LoginMenu';
+import { DivineVisionLogo } from './DivineVisionLogo';
 
 export function Navbar() {
   const scrolled = useScrolled(50);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
     <nav
@@ -12,8 +15,12 @@ export function Navbar() {
         scrolled ? 'shadow-[0_12px_30px_rgba(43,46,40,0.18)]' : 'shadow-none'
       }`}
     >
-      <a href="/" className="font-display shrink-0 text-base font-bold text-white sm:text-lg">
-        Divine Vision
+      <a
+        href="/"
+        aria-label="Divine Vision home"
+        className="shrink-0"
+      >
+        <DivineVisionLogo />
       </a>
 
       <div className="flex items-center gap-3 sm:gap-7">
@@ -38,7 +45,36 @@ export function Navbar() {
           <span className="sm:hidden">Visit</span>
           <span className="hidden sm:inline">Book a site visit</span>
         </a>
+
+        <button
+          type="button"
+          onClick={() => setMobileOpen((value) => !value)}
+          aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+          aria-expanded={mobileOpen}
+          className="flex h-9 w-9 shrink-0 flex-col items-center justify-center gap-1.5 rounded-full border border-white/15 bg-white/8 text-white transition-colors hover:bg-white/12 sm:hidden"
+        >
+          <span className="h-0.5 w-4 rounded-full bg-current" />
+          <span className="h-0.5 w-4 rounded-full bg-current" />
+          <span className="h-0.5 w-4 rounded-full bg-current" />
+        </button>
       </div>
+
+      {mobileOpen ? (
+        <div className="absolute inset-x-4 top-[calc(100%+8px)] rounded-xl border border-white/10 bg-chrome px-4 py-3 shadow-[0_18px_44px_-22px_rgba(0,0,0,0.75)] sm:hidden">
+          <div className="flex flex-col gap-2">
+            {navLinks.map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                onClick={() => setMobileOpen(false)}
+                className="rounded-lg px-2 py-2 text-sm font-semibold text-white/82 transition-colors hover:bg-white/8 hover:text-terracotta-light"
+              >
+                {link.label}
+              </a>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </nav>
   );
 }

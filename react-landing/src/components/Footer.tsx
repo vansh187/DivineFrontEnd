@@ -2,6 +2,7 @@ import { navLinks } from '../data/navigation';
 import { contact } from '../data/contact';
 import { company } from '../data/company';
 import { useAuth } from '../hooks/useAuth';
+import { DivineVisionLogo } from './DivineVisionLogo';
 
 export function Footer() {
   const year = new Date().getFullYear();
@@ -14,7 +15,13 @@ export function Footer() {
 
       <div className="grid grid-cols-1 gap-8 border-b border-hairline-dark pb-10 sm:grid-cols-2 lg:grid-cols-[1.6fr_1fr_1fr_1fr_1fr]">
         <div>
-          <div className="font-display text-lg font-bold text-white">Divine Vision</div>
+          <a
+            href="/"
+            aria-label="Divine Vision home"
+            className="inline-flex max-w-full"
+          >
+            <DivineVisionLogo variant="footer" />
+          </a>
           <p className="mt-3.5 max-w-[28ch] text-sm text-white/70">{company.tagline}</p>
         </div>
 

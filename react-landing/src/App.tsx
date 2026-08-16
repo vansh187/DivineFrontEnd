@@ -4,6 +4,7 @@ import { CustomerPage } from './pages/CustomerPage';
 import { BrokerPage } from './pages/BrokerPage';
 import { BrokerCommissionPage } from './pages/BrokerCommissionPage';
 import { AuthModal } from './components/AuthModal';
+import { ChatbotButton } from './components/ChatbotButton';
 import { RoleRoute } from './components/RoleRoute';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import type { Role } from './services/authApi';
@@ -54,6 +55,7 @@ function App() {
           />
         </Routes>
         <AuthModal />
+        <ChatbotButton />
       </BrowserRouter>
     </AuthProvider>
   );

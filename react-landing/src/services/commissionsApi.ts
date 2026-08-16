@@ -47,6 +47,48 @@ export interface ListCommissionsResponse {
   summary: CommissionSummary;
 }
 
+type RawCommissionRecord = Partial<CommissionRecord> & {
+  broker_id?: string;
+  serial_number?: string;
+  unit_address?: string;
+  customer_name?: string | null;
+  sale_value?: number | null;
+  commission_amount?: number;
+  transaction_mode?: CommissionTransactionMode;
+  created_at?: string;
+  created_date?: string;
+  paid_at?: string | null;
+  rejected_at?: string | null;
+};
+
+type RawSummary = Partial<CommissionSummary>;
+
+function normalizeCommission(record: RawCommissionRecord): CommissionRecord {
+  return {
+    id: record.id ?? '',
+    brokerId: record.brokerId ?? record.broker_id ?? '',
+    serialNumber: record.serialNumber ?? record.serial_number ?? '',
+    unitAddress: record.unitAddress ?? record.unit_address ?? '',
+    customerName: record.customerName ?? record.customer_name ?? null,
+    township: record.township ?? null,
+    saleValue: record.saleValue ?? record.sale_value ?? null,
+    commissionAmount: record.commissionAmount ?? record.commission_amount ?? 0,
+    status: record.status ?? 'pending',
+    transactionMode: record.transactionMode ?? record.transaction_mode ?? 'cash',
+    createdAt: record.createdAt ?? record.created_at ?? record.created_date ?? '',
+    paidAt: record.paidAt ?? record.paid_at ?? null,
+    rejectedAt: record.rejectedAt ?? record.rejected_at ?? null,
+  };
+}
+
+function normalizeSummary(summary: RawSummary | null | undefined): CommissionSummary {
+  return {
+    pending: summary?.pending ?? 0,
+    paid: summary?.paid ?? 0,
+    rejected: summary?.rejected ?? 0,
+  };
+}
+
 function messageForCommissionError(status: number, detail: unknown): string {
   if (status === 0) return 'Could not reach the server. Check your connection and try again.';
   if (status === 401) {
@@ -93,16 +135,28 @@ async function authedRequest<T>(path: string, token: string, init?: RequestInit)
 }
 
 export async function listBrokerCommissions(token: string, brokerId: string): Promise<ListCommissionsResponse> {
-  return authedRequest<ListCommissionsResponse>(`/api/broker/commissions?brokerId=${encodeURIComponent(brokerId)}`, token);
+  const res = await authedRequest<{ success: boolean; commissions?: RawCommissionRecord[]; summary?: RawSummary }>(
+    `/api/broker/commissions?brokerId=${encodeURIComponent(brokerId)}`,
+    token,
+  );
+  return {
+    success: res.success,
+    commissions: (res.commissions ?? []).map(normalizeCommission),
+    summary: normalizeSummary(res.summary),
+  };
 }
 
 export async function createBrokerCashCommission(
   token: string,
   input: CreateCashCommissionInput,
 ): Promise<CreateCommissionResponse> {
-  return authedRequest<CreateCommissionResponse>('/api/broker/commissions', token, {
+  const res = await authedRequest<{ success: boolean; commission: RawCommissionRecord }>('/api/broker/commissions', token, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   });
+  return {
+    success: res.success,
+    commission: normalizeCommission(res.commission),
+  };
 }
