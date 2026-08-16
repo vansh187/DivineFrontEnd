@@ -206,9 +206,6 @@ export function BrokerDocuments() {
           <p className="eyebrow-label text-terracotta">Priority workflow</p>
           <h2 className="mt-2 font-display text-2xl font-bold text-ink sm:text-3xl">Site visits &amp; broker documents</h2>
         </div>
-        <p className="max-w-[38ch] text-sm leading-[1.6] text-ink-muted sm:text-right">
-          Upcoming visits stay visible first. New scheduling unlocks after broker Aadhaar verification.
-        </p>
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -221,6 +218,9 @@ export function BrokerDocuments() {
             statusLabel={loadingVisits ? 'Loading visits' : upcomingVisits.length ? `${upcomingVisits.length} scheduled` : 'No upcoming visits'}
             statusTone={upcomingVisits.length ? 'pending' : 'neutral'}
           >
+            <p className="mb-3 rounded-lg border border-hairline bg-bg px-3 py-2 text-xs text-ink-muted">
+              Upcoming visits stay visible first. New scheduling unlocks after broker Aadhaar verification.
+            </p>
             {loadingVisits ? (
               <div className="rounded-xl border border-dashed border-hairline bg-bg px-4 py-6 text-sm text-ink-muted">
                 Loading saved visits...
@@ -282,7 +282,7 @@ export function BrokerDocuments() {
           title="Schedule a site visit"
           description="Book a new customer appointment after broker Aadhaar verification is complete."
           statusLabel={aadhaarVerified ? 'Ready to schedule' : 'Aadhaar verification required'}
-          statusTone={aadhaarVerified ? 'done' : 'failed'}
+          statusTone={aadhaarVerified ? 'pending' : 'failed'}
         >
           {!aadhaarVerified && (
             <p className="mb-3 rounded-lg border border-hairline bg-bg px-3 py-2 text-xs text-ink-muted">

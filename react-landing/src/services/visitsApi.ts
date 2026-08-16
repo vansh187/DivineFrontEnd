@@ -32,6 +32,7 @@ function messageForVisitsError(status: number, detail: unknown): string {
       : 'You can only manage your own visits.';
   }
   if (status === 404) return 'That visit could not be found.';
+  if (status === 405) return 'Visit history is not available yet. Please ask the backend team to enable GET /visits/history.';
   if (status === 400) {
     if (detail === 'invalid_date') return 'Choose a valid visit date.';
     if (detail === 'invalid_time') return 'Choose a valid visit time.';
