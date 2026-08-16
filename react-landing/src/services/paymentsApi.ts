@@ -17,6 +17,7 @@ export interface PaymentRecord {
   amount: number;
   currency: string;
   status: string;
+  method: 'razorpay' | 'cash';
   verified: boolean;
   razorpay_order_id: string;
   razorpay_payment_id: string | null;
@@ -86,5 +87,15 @@ export function verifyPayment(token: string, input: VerifyPaymentInput): Promise
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
+  });
+}
+
+/** Records cash already collected in person — settles immediately server-side, no
+ * gateway involved (unlike createPaymentOrder/verifyPayment). */
+export function recordCashPayment(token: string, amount: number, note?: string): Promise<PaymentRecord> {
+  return authedRequest<PaymentRecord>('/payments/cash', token, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ amount, note: note || undefined }),
   });
 }

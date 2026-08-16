@@ -72,11 +72,13 @@ export interface GeneratedDocStatus {
   signedUrlExpiresAt: number | null;
 }
 
-/** Real Razorpay payment - "paid" is only ever set after the backend's signature
- * verification confirms it (see paymentsApi.verifyPayment), never from client-side say-so. */
+/** A payment (online via Razorpay, or cash recorded in person) - "paid" is only ever set
+ * after the backend confirms it (Razorpay's signature check, or the cash-entry response
+ * itself since cash settles immediately), never from client-side say-so. */
 export interface PaymentStatus {
   amount: number | null;
   status: 'created' | 'paid' | 'failed' | null;
+  method: 'razorpay' | 'cash' | null;
   razorpayOrderId: string | null;
   razorpayPaymentId: string | null;
   paidAt: string | null;
@@ -84,7 +86,7 @@ export interface PaymentStatus {
 }
 
 export function emptyPaymentStatus(): PaymentStatus {
-  return { amount: null, status: null, razorpayOrderId: null, razorpayPaymentId: null, paidAt: null, error: null };
+  return { amount: null, status: null, method: null, razorpayOrderId: null, razorpayPaymentId: null, paidAt: null, error: null };
 }
 
 export interface CustomerDocState {
