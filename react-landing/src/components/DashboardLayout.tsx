@@ -42,15 +42,27 @@ interface PlaceholderCardProps {
   title: string;
   description: string;
   accent?: IconAccent;
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
-export function PlaceholderCard({ icon, title, description, accent = 'chrome' }: PlaceholderCardProps) {
+export function PlaceholderCard({ icon, title, description, accent = 'chrome', actionLabel, onAction }: PlaceholderCardProps) {
   return (
     <div className="group relative rounded-2xl border border-hairline bg-surface p-6 shadow-[0_16px_40px_-26px_rgba(30,77,59,0.3)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_26px_50px_-24px_rgba(30,77,59,0.4)]">
       <IconBadge icon={icon} accent={accent} interactive />
       <h3 className="mt-4 font-display text-lg font-bold text-ink">{title}</h3>
       <p className="mt-1.5 text-sm leading-[1.6] text-ink-muted">{description}</p>
-      <p className="eyebrow-label mt-4 text-terracotta">Coming soon</p>
+      {onAction ? (
+        <button
+          type="button"
+          onClick={onAction}
+          className="mt-4 rounded-full bg-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft"
+        >
+          {actionLabel ?? 'Open'}
+        </button>
+      ) : (
+        <p className="eyebrow-label mt-4 text-terracotta">Coming soon</p>
+      )}
     </div>
   );
 }
