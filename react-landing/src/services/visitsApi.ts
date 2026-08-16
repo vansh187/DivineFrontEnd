@@ -7,8 +7,8 @@ export interface VisitRecord {
   customer_contact: string;
   date: string;
   time: string;
-  notes: string;
-  status: 'scheduled' | 'cancelled';
+  notes: string | null;
+  status: 'scheduled' | 'completed' | 'cancelled';
   created_date: string;
 }
 
@@ -65,6 +65,10 @@ export function listVisits(token: string): Promise<VisitRecord[]> {
   return authedRequest<VisitRecord[]>('/visits', token);
 }
 
+export function listVisitHistory(token: string): Promise<VisitRecord[]> {
+  return authedRequest<VisitRecord[]>('/visits/history', token);
+}
+
 export function createVisit(token: string, input: CreateVisitInput): Promise<VisitRecord> {
   return authedRequest<VisitRecord>('/visits', token, {
     method: 'POST',
@@ -74,5 +78,5 @@ export function createVisit(token: string, input: CreateVisitInput): Promise<Vis
 }
 
 export function cancelVisit(token: string, visitId: string): Promise<VisitRecord> {
-  return authedRequest<VisitRecord>(`/visits/${visitId}`, token, { method: 'DELETE' });
+  return authedRequest<VisitRecord>(`/visits/${encodeURIComponent(visitId)}`, token, { method: 'DELETE' });
 }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import * as store from '../services/documentStore';
 import type { BrokerDocState, ScheduledVisit } from '../services/documentStore';
-import { createVisit, listVisits, cancelVisit as cancelVisitApi } from '../services/visitsApi';
+import { createVisit, listVisits, listVisitHistory, cancelVisit as cancelVisitApi } from '../services/visitsApi';
 import type { VisitRecord } from '../services/visitsApi';
 import { ApiError } from '../services/authApi';
 import { TileShell } from './DocumentTile';
@@ -13,10 +13,10 @@ function visitFromApi(visit: VisitRecord): ScheduledVisit {
   return {
     id: visit.id,
     customerName: visit.customer_name,
-    customerContact: visit.customer_contact,
+    customerContact: visit.customer_contact ?? '',
     date: visit.date,
     time: visit.time,
-    notes: visit.notes,
+    notes: visit.notes ?? '',
     status: visit.status,
     createdAt: visit.created_date,
   };
@@ -30,6 +30,20 @@ function formatVisitDate(visit: ScheduledVisit) {
     hour: 'numeric',
     minute: '2-digit',
   });
+}
+
+function isFutureVisit(visit: ScheduledVisit) {
+  return new Date(`${visit.date}T${visit.time}`).getTime() > Date.now();
+}
+
+function isFutureDateTime(date: string, time: string) {
+  return new Date(`${date}T${time}`).getTime() > Date.now();
+}
+
+function todayInputValue() {
+  const today = new Date();
+  const offsetMs = today.getTimezoneOffset() * 60 * 1000;
+  return new Date(today.getTime() - offsetMs).toISOString().slice(0, 10);
 }
 
 export function BrokerDocuments() {
@@ -56,13 +70,16 @@ export function BrokerDocuments() {
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
   const [notes, setNotes] = useState('');
+  const [historyVisits, setHistoryVisits] = useState<ScheduledVisit[]>([]);
   const [loadingVisits, setLoadingVisits] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const [savingVisit, setSavingVisit] = useState(false);
   const [cancellingVisitId, setCancellingVisitId] = useState<string | null>(null);
   const [visitError, setVisitError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   const aadhaarVerified = docs.aadhar.verified;
-  const upcomingVisits = docs.visits.filter((visit) => visit.status === 'scheduled');
+  const upcomingVisits = docs.visits.filter((visit) => visit.status === 'scheduled' && isFutureVisit(visit));
 
   const handleVisitError = useCallback((err: unknown) => {
     if (err instanceof ApiError) {
@@ -76,15 +93,29 @@ export function BrokerDocuments() {
     }
   }, [logout, openModal]);
 
+  const handleHistoryError = useCallback((err: unknown) => {
+    if (err instanceof ApiError) {
+      if (err.status === 401) {
+        logout();
+        openModal('signin', 'broker');
+      }
+      setHistoryError(err.message);
+    } else {
+      setHistoryError('Something went wrong loading visit history. Please try again.');
+    }
+  }, [logout, openModal]);
+
   useEffect(() => {
     if (!session?.token) return;
     let active = true;
     setLoadingVisits(true);
+    setLoadingHistory(true);
     setVisitError(null);
+    setHistoryError(null);
     listVisits(session.token)
       .then((visits) => {
         if (!active) return;
-        persistVisits(visits.filter((visit) => visit.status === 'scheduled').map(visitFromApi));
+        persistVisits(visits.filter((visit) => visit.status === 'scheduled').map(visitFromApi).filter(isFutureVisit));
       })
       .catch((err) => {
         if (!active) return;
@@ -93,10 +124,22 @@ export function BrokerDocuments() {
       .finally(() => {
         if (active) setLoadingVisits(false);
       });
+    listVisitHistory(session.token)
+      .then((visits) => {
+        if (!active) return;
+        setHistoryVisits(visits.map(visitFromApi));
+      })
+      .catch((err) => {
+        if (!active) return;
+        handleHistoryError(err);
+      })
+      .finally(() => {
+        if (active) setLoadingHistory(false);
+      });
     return () => {
       active = false;
     };
-  }, [handleVisitError, persistVisits, session?.token]);
+  }, [handleHistoryError, handleVisitError, persistVisits, session?.token]);
 
   const scheduleVisit = async () => {
     if (!session) return;
@@ -105,6 +148,10 @@ export function BrokerDocuments() {
       return;
     }
     if (!customerName.trim() || !date || !time) return;
+    if (!isFutureDateTime(date, time)) {
+      setVisitError('Choose a future date and time for the site visit.');
+      return;
+    }
     setSavingVisit(true);
     setVisitError(null);
     try {
@@ -115,7 +162,8 @@ export function BrokerDocuments() {
         time,
         notes: notes.trim() || undefined,
       });
-      persistVisits([visitFromApi(created), ...upcomingVisits]);
+      const createdVisit = visitFromApi(created);
+      persistVisits(createdVisit.status === 'scheduled' && isFutureVisit(createdVisit) ? [createdVisit, ...upcomingVisits] : upcomingVisits);
       setCustomerName('');
       setCustomerContact('');
       setDate('');
@@ -133,10 +181,19 @@ export function BrokerDocuments() {
     setCancellingVisitId(id);
     setVisitError(null);
     try {
-      await cancelVisitApi(session.token, id);
+      const cancelled = await cancelVisitApi(session.token, id);
       persistVisits(upcomingVisits.filter((visit) => visit.id !== id));
+      const latestHistory = await listVisitHistory(session.token).catch(() => null);
+      setHistoryVisits(latestHistory ? latestHistory.map(visitFromApi) : [visitFromApi(cancelled), ...historyVisits]);
     } catch (err) {
-      handleVisitError(err);
+      if (err instanceof ApiError && err.status === 404) {
+        persistVisits(upcomingVisits.filter((visit) => visit.id !== id));
+        const latestHistory = await listVisitHistory(session.token).catch(() => null);
+        if (latestHistory) setHistoryVisits(latestHistory.map(visitFromApi));
+        setVisitError('That visit is no longer available. The upcoming list has been refreshed.');
+      } else {
+        handleVisitError(err);
+      }
     } finally {
       setCancellingVisitId(null);
     }
@@ -260,6 +317,7 @@ export function BrokerDocuments() {
                 value={date}
                 onChange={(event) => setDate(event.target.value)}
                 aria-label="Visit date"
+                min={todayInputValue()}
                 disabled={!aadhaarVerified || savingVisit}
                 className="min-w-0 rounded-lg border border-hairline bg-bg px-3 py-2.5 text-sm text-ink outline-none focus:border-green disabled:cursor-not-allowed disabled:opacity-60"
               />
@@ -285,12 +343,68 @@ export function BrokerDocuments() {
             <button
               type="button"
               onClick={scheduleVisit}
-              disabled={!aadhaarVerified || savingVisit || !customerName.trim() || !date || !time}
+              disabled={!aadhaarVerified || savingVisit || !customerName.trim() || !date || !time || !isFutureDateTime(date, time)}
               className="self-start rounded-full bg-green px-5 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
             >
               {savingVisit ? 'Saving...' : 'Save visit'}
             </button>
           </div>
+        </TileShell>
+      </div>
+
+      <div className="mt-5">
+        <TileShell
+          icon={<CalendarIcon />}
+          accent="chrome"
+          title="Broker visit history"
+          description="Past completed visits and cancelled appointments are listed here."
+          statusLabel={loadingHistory ? 'Loading history' : historyVisits.length ? `${historyVisits.length} history records` : 'No visit history'}
+          statusTone={historyVisits.length ? 'neutral' : 'neutral'}
+        >
+          {loadingHistory ? (
+            <div className="rounded-xl border border-dashed border-hairline bg-bg px-4 py-6 text-sm text-ink-muted">
+              Loading visit history...
+            </div>
+          ) : historyVisits.length > 0 ? (
+            <div className="max-h-96 overflow-y-auto rounded-xl border border-hairline">
+              {historyVisits.map((visit, i) => (
+                <div
+                  key={visit.id}
+                  className={`grid gap-3 bg-bg px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center ${i > 0 ? 'border-t border-hairline' : ''}`}
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate text-sm font-semibold text-ink">{visit.customerName}</p>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                          visit.status === 'completed'
+                            ? 'bg-green/10 text-green'
+                            : 'bg-terracotta/10 text-terracotta'
+                        }`}
+                      >
+                        {visit.status === 'completed' ? 'Completed' : 'Cancelled'}
+                      </span>
+                    </div>
+                    <p className="truncate text-xs text-ink-muted">{visit.customerContact || 'No contact provided'}</p>
+                    {visit.notes && <p className="mt-1 line-clamp-2 text-xs leading-[1.5] text-ink-muted">{visit.notes}</p>}
+                  </div>
+                  <p className="text-sm font-semibold text-ink sm:text-right">{formatVisitDate(visit)}</p>
+                  <p className="text-xs font-semibold text-ink-muted sm:text-right">
+                    Created {new Date(visit.createdAt).toLocaleDateString('en-IN')}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-hairline bg-bg px-4 py-6 text-sm text-ink-muted">
+              No completed or cancelled site visits yet.
+            </div>
+          )}
+          {historyError && (
+            <p role="alert" className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              {historyError}
+            </p>
+          )}
         </TileShell>
       </div>
     </section>

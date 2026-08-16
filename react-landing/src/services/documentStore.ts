@@ -105,7 +105,7 @@ export interface ScheduledVisit {
   date: string;
   time: string;
   notes: string;
-  status: 'scheduled' | 'cancelled';
+  status: 'scheduled' | 'completed' | 'cancelled';
   createdAt: string;
 }
 
