@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { LandingPage } from './pages/LandingPage';
 import { CustomerPage } from './pages/CustomerPage';
 import { BrokerPage } from './pages/BrokerPage';
+import { BrokerCommissionPage } from './pages/BrokerCommissionPage';
 import { AuthModal } from './components/AuthModal';
 import { RoleRoute } from './components/RoleRoute';
 import { AuthProvider, useAuth } from './hooks/useAuth';
@@ -40,6 +41,14 @@ function App() {
             element={
               <RoleRoute role="broker">
                 <BrokerPage />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="/broker/commission"
+            element={
+              <RoleRoute role="broker">
+                <BrokerCommissionPage />
               </RoleRoute>
             }
           />

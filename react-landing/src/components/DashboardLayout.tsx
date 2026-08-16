@@ -11,9 +11,13 @@ interface DashboardLayoutProps {
   children: ReactNode;
   before?: ReactNode;
   after?: ReactNode;
+  contentLayout?: 'grid' | 'full';
 }
 
-export function DashboardLayout({ eyebrow, heading, subheading, children, before, after }: DashboardLayoutProps) {
+export function DashboardLayout({ eyebrow, heading, subheading, children, before, after, contentLayout = 'grid' }: DashboardLayoutProps) {
+  const contentClass =
+    contentLayout === 'grid' ? 'mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3' : 'mt-10';
+
   return (
     <>
       <Navbar />
@@ -27,7 +31,7 @@ export function DashboardLayout({ eyebrow, heading, subheading, children, before
 
           {before}
 
-          <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
+          <div className={contentClass}>{children}</div>
 
           {after}
         </div>
