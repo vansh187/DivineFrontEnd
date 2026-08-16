@@ -1,27 +1,13 @@
-import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth, getDisplayName } from '../hooks/useAuth';
 import { DashboardLayout, PlaceholderCard } from '../components/DashboardLayout';
-import { BrokerCommission } from '../components/BrokerCommission';
 import { BrokerDocuments } from '../components/BrokerDocuments';
 import { UsersIcon, TagIcon, ChartIcon } from '../components/DashboardIcons';
 
 export function BrokerPage() {
   const { session } = useAuth();
+  const navigate = useNavigate();
   const name = session ? getDisplayName(session) : 'there';
-  const email = session?.email ?? 'anonymous';
-  const [commissionOpen, setCommissionOpen] = useState(false);
-
-  if (commissionOpen) {
-    return (
-      <DashboardLayout
-        eyebrow="Broker workspace"
-        heading={<>Commission</>}
-        subheading="Calculate the broker's 1% commission and review commission records by payout status."
-      >
-        <BrokerCommission email={email} onBack={() => setCommissionOpen(false)} />
-      </DashboardLayout>
-    );
-  }
 
   return (
     <DashboardLayout
@@ -46,9 +32,9 @@ export function BrokerPage() {
         icon={<ChartIcon />}
         accent="green-soft"
         title="Commission"
-        description="Track closed bookings and payouts as they come in."
+        description="Add paid cash commission records and review payout status."
         actionLabel="Open details"
-        onAction={() => setCommissionOpen(true)}
+        onAction={() => navigate('/broker/commission')}
       />
     </DashboardLayout>
   );

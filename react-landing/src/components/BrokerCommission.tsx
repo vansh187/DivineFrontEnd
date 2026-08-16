@@ -1,22 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { townshipPricing } from '../data/townshipPricing';
+import * as commissionsApi from '../services/commissionsApi';
+import type { CommissionRecord, CommissionStatus, CommissionSummary } from '../services/commissionsApi';
 import { ChartIcon, RupeeIcon } from './DashboardIcons';
 
-type CommissionStatus = 'pending' | 'paid' | 'rejected';
-
-interface CommissionRecord {
-  id: string;
-  customerName: string;
-  township: string;
-  unitSold: string;
-  saleValue: number;
-  commissionAmount: number;
-  status: CommissionStatus;
-  createdAt: string;
-}
-
 interface BrokerCommissionProps {
-  email: string;
+  token: string;
+  brokerId: string;
   onBack: () => void;
 }
 
@@ -32,9 +22,11 @@ const statusClass: Record<CommissionStatus, string> = {
   rejected: 'bg-red-50 text-red-700',
 };
 
-function storageKey(email: string) {
-  return `dvi_commissions_${email.toLowerCase()}`;
-}
+const statusLabel: Record<CommissionStatus, string> = {
+  pending: 'Pending',
+  paid: 'Paid',
+  rejected: 'Rejected',
+};
 
 function formatCurrency(amount: number) {
   return new Intl.NumberFormat('en-IN', {
@@ -44,68 +36,113 @@ function formatCurrency(amount: number) {
   }).format(amount);
 }
 
-function loadCommissions(email: string): CommissionRecord[] {
-  try {
-    const raw = localStorage.getItem(storageKey(email));
-    if (!raw) return [];
-    return JSON.parse(raw) as CommissionRecord[];
-  } catch {
-    return [];
-  }
+function fallbackSummary(records: CommissionRecord[]): CommissionSummary {
+  return records.reduce(
+    (sum, record) => ({
+      pending: sum.pending + (record.status === 'pending' ? record.commissionAmount : 0),
+      paid: sum.paid + (record.status === 'paid' ? record.commissionAmount : 0),
+      rejected: sum.rejected + (record.status === 'rejected' ? record.commissionAmount : 0),
+    }),
+    { pending: 0, paid: 0, rejected: 0 },
+  );
 }
 
-function saveCommissions(email: string, records: CommissionRecord[]) {
-  localStorage.setItem(storageKey(email), JSON.stringify(records));
-}
-
-export function BrokerCommission({ email, onBack }: BrokerCommissionProps) {
-  const [records, setRecords] = useState<CommissionRecord[]>(() => loadCommissions(email));
+export function BrokerCommission({ token, brokerId, onBack }: BrokerCommissionProps) {
+  const [records, setRecords] = useState<CommissionRecord[]>([]);
+  const [summary, setSummary] = useState<CommissionSummary>({ pending: 0, paid: 0, rejected: 0 });
+  const [isLoading, setLoading] = useState(true);
+  const [isSubmitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [townshipId, setTownshipId] = useState(townshipPricing[0].id);
-  const [unitSold, setUnitSold] = useState('');
+  const [serialNumber, setSerialNumber] = useState('');
+  const [unitAddress, setUnitAddress] = useState('');
   const [saleValue, setSaleValue] = useState('');
+  const [manualCommission, setManualCommission] = useState('');
   const township = townshipPricing.find((item) => item.id === townshipId) ?? townshipPricing[0];
   const numericSaleValue = Number(saleValue);
-  const commissionAmount = Number.isFinite(numericSaleValue) && numericSaleValue > 0 ? numericSaleValue * 0.01 : 0;
+  const numericManualCommission = Number(manualCommission);
+  const estimatedCommission = Number.isFinite(numericSaleValue) && numericSaleValue > 0 ? numericSaleValue * 0.01 : 0;
+  const commissionAmount =
+    Number.isFinite(numericManualCommission) && numericManualCommission > 0 ? numericManualCommission : estimatedCommission;
+
+  useEffect(() => {
+    let active = true;
+    async function loadRecords() {
+      if (!token || !brokerId) {
+        setLoading(false);
+        setError('Please sign in again to load commission records.');
+        return;
+      }
+
+      setLoading(true);
+      setError('');
+      try {
+        const res = await commissionsApi.listBrokerCommissions(token, brokerId);
+        if (!active) return;
+        setRecords(res.commissions);
+        setSummary(res.summary ?? fallbackSummary(res.commissions));
+      } catch (err) {
+        if (!active) return;
+        setError(err instanceof Error ? err.message : 'Could not load commission records.');
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    void loadRecords();
+    return () => {
+      active = false;
+    };
+  }, [brokerId, token]);
 
   const sortedRecords = useMemo(
     () => [...records].sort((a, b) => statusOrder[a.status] - statusOrder[b.status] || b.createdAt.localeCompare(a.createdAt)),
     [records],
   );
 
-  const totals = useMemo(() => {
-    return records.reduce(
-      (sum, record) => ({
-        pending: sum.pending + (record.status === 'pending' ? record.commissionAmount : 0),
-        paid: sum.paid + (record.status === 'paid' ? record.commissionAmount : 0),
-        rejected: sum.rejected + (record.status === 'rejected' ? record.commissionAmount : 0),
-      }),
-      { pending: 0, paid: 0, rejected: 0 },
-    );
-  }, [records]);
+  const addCashCommission = async () => {
+    if (!serialNumber.trim() || !unitAddress.trim() || commissionAmount <= 0) return;
+    if (!token || !brokerId) {
+      setError('Please sign in again to add a commission record.');
+      return;
+    }
 
-  const addPendingCommission = () => {
-    if (!customerName.trim() || !unitSold.trim() || commissionAmount <= 0) return;
-    const nextRecord: CommissionRecord = {
-      id: `${Date.now()}`,
-      customerName: customerName.trim(),
-      township: township.label,
-      unitSold: unitSold.trim(),
-      saleValue: numericSaleValue,
-      commissionAmount,
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-    };
-    const nextRecords = [nextRecord, ...records];
-    setRecords(nextRecords);
-    saveCommissions(email, nextRecords);
-    setCustomerName('');
-    setUnitSold('');
-    setSaleValue('');
+    setSubmitting(true);
+    setError('');
+    setSuccessMessage('');
+    try {
+      const res = await commissionsApi.createBrokerCashCommission(token, {
+        brokerId,
+        serialNumber: serialNumber.trim(),
+        unitAddress: unitAddress.trim(),
+        customerName: customerName.trim() || undefined,
+        township: township.label,
+        saleValue: Number.isFinite(numericSaleValue) && numericSaleValue > 0 ? numericSaleValue : undefined,
+        commissionAmount,
+        transactionMode: 'cash',
+      });
+      const nextRecords = [res.commission, ...records];
+      setRecords(nextRecords);
+      setSummary(fallbackSummary(nextRecords));
+      setSuccessMessage('Paid commission record added.');
+      setCustomerName('');
+      setSerialNumber('');
+      setUnitAddress('');
+      setSaleValue('');
+      setManualCommission('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not add commission record.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
+  const canSubmit = Boolean(serialNumber.trim() && unitAddress.trim() && commissionAmount > 0 && !isSubmitting);
+
   return (
-    <section className="mt-10">
+    <section>
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="eyebrow-label text-terracotta">Broker commission</p>
@@ -120,6 +157,13 @@ export function BrokerCommission({ email, onBack }: BrokerCommissionProps) {
         </button>
       </div>
 
+      {error ? <div className="mb-5 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
+      {successMessage ? (
+        <div className="mb-5 rounded-xl border border-green/15 bg-green/10 px-4 py-3 text-sm font-semibold text-green">
+          {successMessage}
+        </div>
+      ) : null}
+
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(320px,1.05fr)]">
         <div className="rounded-2xl border border-hairline bg-surface p-6 shadow-[0_16px_40px_-26px_rgba(30,77,59,0.3)]">
           <div className="flex items-start gap-4">
@@ -127,8 +171,8 @@ export function BrokerCommission({ email, onBack }: BrokerCommissionProps) {
               <RupeeIcon />
             </span>
             <div>
-              <h3 className="font-display text-lg font-bold text-ink">Commission calculator</h3>
-              <p className="mt-1 text-sm leading-[1.6] text-ink-muted">Commission is calculated as 1% of the sold unit value.</p>
+              <h3 className="font-display text-lg font-bold text-ink">Add cash commission</h3>
+              <p className="mt-1 text-sm leading-[1.6] text-ink-muted">Add a paid cash commission record for the sold unit.</p>
             </div>
           </div>
 
@@ -136,7 +180,7 @@ export function BrokerCommission({ email, onBack }: BrokerCommissionProps) {
             <input
               value={customerName}
               onChange={(event) => setCustomerName(event.target.value)}
-              placeholder="Customer name"
+              placeholder="Customer name (optional)"
               className="rounded-lg border border-hairline bg-bg px-3 py-2.5 text-sm text-ink outline-none focus:border-green"
             />
             <select
@@ -151,9 +195,16 @@ export function BrokerCommission({ email, onBack }: BrokerCommissionProps) {
               ))}
             </select>
             <input
-              value={unitSold}
-              onChange={(event) => setUnitSold(event.target.value)}
-              placeholder="Unit sold / plot number"
+              value={serialNumber}
+              onChange={(event) => setSerialNumber(event.target.value)}
+              placeholder="Serial number"
+              className="rounded-lg border border-hairline bg-bg px-3 py-2.5 text-sm text-ink outline-none focus:border-green"
+            />
+            <textarea
+              value={unitAddress}
+              onChange={(event) => setUnitAddress(event.target.value)}
+              placeholder="Address of unit sold"
+              rows={3}
               className="rounded-lg border border-hairline bg-bg px-3 py-2.5 text-sm text-ink outline-none focus:border-green"
             />
             <input
@@ -161,20 +212,29 @@ export function BrokerCommission({ email, onBack }: BrokerCommissionProps) {
               min={0}
               value={saleValue}
               onChange={(event) => setSaleValue(event.target.value)}
-              placeholder="Sold value"
+              placeholder="Sold value (optional, auto-calculates 1%)"
+              className="rounded-lg border border-hairline bg-bg px-3 py-2.5 text-sm text-ink outline-none focus:border-green"
+            />
+            <input
+              type="number"
+              min={0}
+              value={manualCommission}
+              onChange={(event) => setManualCommission(event.target.value)}
+              placeholder="Commission price"
               className="rounded-lg border border-hairline bg-bg px-3 py-2.5 text-sm text-ink outline-none focus:border-green"
             />
             <div className="rounded-xl border border-hairline bg-bg px-4 py-3">
-              <p className="text-xs font-semibold uppercase text-ink-muted">Broker commission</p>
+              <p className="text-xs font-semibold uppercase text-ink-muted">Commission amount</p>
               <p className="mt-1 font-display text-2xl font-bold text-green">{formatCurrency(commissionAmount)}</p>
+              <p className="mt-1 text-xs text-ink-muted">New records are saved as paid and cannot be edited after adding.</p>
             </div>
             <button
               type="button"
-              onClick={addPendingCommission}
-              disabled={!customerName.trim() || !unitSold.trim() || commissionAmount <= 0}
+              onClick={addCashCommission}
+              disabled={!canSubmit}
               className="self-start rounded-full bg-green px-5 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Add as pending
+              {isSubmitting ? 'Adding...' : 'Add commission'}
             </button>
           </div>
         </div>
@@ -186,50 +246,57 @@ export function BrokerCommission({ email, onBack }: BrokerCommissionProps) {
             </span>
             <div>
               <h3 className="font-display text-lg font-bold text-ink">Commission summary</h3>
-              <p className="mt-1 text-sm leading-[1.6] text-ink-muted">Records are ordered by pending, paid, then rejected status.</p>
+              <p className="mt-1 text-sm leading-[1.6] text-ink-muted">Commission records appear by pending, paid, and rejected status.</p>
             </div>
           </div>
 
           <div className="mt-5 grid grid-cols-3 gap-3">
             <div className="rounded-xl bg-bg px-3 py-3">
               <p className="text-[11px] font-semibold uppercase text-terracotta">Pending</p>
-              <p className="mt-1 text-sm font-bold text-ink">{formatCurrency(totals.pending)}</p>
+              <p className="mt-1 text-sm font-bold text-ink">{formatCurrency(summary.pending)}</p>
             </div>
             <div className="rounded-xl bg-bg px-3 py-3">
               <p className="text-[11px] font-semibold uppercase text-green">Paid</p>
-              <p className="mt-1 text-sm font-bold text-ink">{formatCurrency(totals.paid)}</p>
+              <p className="mt-1 text-sm font-bold text-ink">{formatCurrency(summary.paid)}</p>
             </div>
             <div className="rounded-xl bg-bg px-3 py-3">
               <p className="text-[11px] font-semibold uppercase text-red-700">Rejected</p>
-              <p className="mt-1 text-sm font-bold text-ink">{formatCurrency(totals.rejected)}</p>
+              <p className="mt-1 text-sm font-bold text-ink">{formatCurrency(summary.rejected)}</p>
             </div>
           </div>
 
           <div className="mt-5 max-h-96 overflow-y-auto rounded-xl border border-hairline">
-            {sortedRecords.length > 0 ? (
+            {isLoading ? (
+              <div className="bg-bg px-4 py-6 text-sm text-ink-muted">Loading commission records...</div>
+            ) : sortedRecords.length > 0 ? (
               sortedRecords.map((record, i) => (
                 <div key={record.id} className={`bg-bg px-4 py-3 ${i > 0 ? 'border-t border-hairline' : ''}`}>
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-ink">{record.customerName}</p>
-                      <p className="truncate text-xs text-ink-muted">
-                        {record.unitSold} - {record.township}
-                      </p>
+                      <p className="truncate text-sm font-semibold text-ink">Serial {record.serialNumber}</p>
+                      <p className="truncate text-xs text-ink-muted">{record.unitAddress}</p>
+                      {record.customerName ? <p className="mt-0.5 truncate text-xs text-ink-muted">Customer: {record.customerName}</p> : null}
                     </div>
                     <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${statusClass[record.status]}`}>
-                      {record.status}
+                      {statusLabel[record.status]}
                     </span>
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
                     <div>
-                      <p className="font-semibold text-ink-muted">Sold value</p>
-                      <p className="mt-0.5 font-bold text-ink">{formatCurrency(record.saleValue)}</p>
+                      <p className="font-semibold text-ink-muted">Mode</p>
+                      <p className="mt-0.5 font-bold capitalize text-ink">{record.transactionMode}</p>
                     </div>
                     <div>
-                      <p className="font-semibold text-ink-muted">Commission</p>
+                      <p className="font-semibold text-ink-muted">Commission price</p>
                       <p className="mt-0.5 font-bold text-green">{formatCurrency(record.commissionAmount)}</p>
                     </div>
                   </div>
+                  {record.paidAt || record.rejectedAt ? (
+                    <p className="mt-3 text-xs text-ink-muted">
+                      {record.paidAt ? `Paid on ${new Date(record.paidAt).toLocaleDateString('en-IN')}` : null}
+                      {record.rejectedAt ? `Rejected on ${new Date(record.rejectedAt).toLocaleDateString('en-IN')}` : null}
+                    </p>
+                  ) : null}
                 </div>
               ))
             ) : (
