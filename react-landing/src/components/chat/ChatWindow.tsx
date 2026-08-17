@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { ConsentBanner } from './ConsentBanner';
 import { QuickActionBar } from './QuickActionBar';
 import { MessageList } from './MessageList';
@@ -40,8 +41,43 @@ export function ChatWindow({
   onMicStateChange,
   onMicPermissionDenied,
 }: ChatWindowProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  // The widget is a fixed overlay sitting on top of the page — without this,
+  // a wheel scroll anywhere over it (the header, quick actions, input bar,
+  // or the message thread once it's too short to overflow / already at an
+  // edge) falls through and scrolls the page behind it instead. Only let the
+  // scroll through natively when the message list can actually consume it.
+  // React's onWheel is registered as a passive listener, so preventDefault()
+  // inside a synthetic handler is silently ignored — this has to be a real
+  // native, non-passive listener.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+
+    const handleWheel = (event: WheelEvent) => {
+      const list = scrollRef.current;
+      if (!list || !list.contains(event.target as Node)) {
+        event.preventDefault();
+        return;
+      }
+      const atTop = list.scrollTop <= 0;
+      const atBottom = list.scrollTop + list.clientHeight >= list.scrollHeight - 1;
+      if ((event.deltaY < 0 && atTop) || (event.deltaY > 0 && atBottom)) {
+        event.preventDefault();
+      }
+    };
+
+    root.addEventListener('wheel', handleWheel, { passive: false });
+    return () => root.removeEventListener('wheel', handleWheel);
+  }, []);
+
   return (
-    <div className="flex h-[min(70vh,560px)] w-[min(calc(100vw-40px),380px)] flex-col overflow-hidden rounded-3xl border border-green/15 bg-surface shadow-[0_24px_70px_-28px_rgba(30,77,59,0.55)]">
+    <div
+      ref={rootRef}
+      className="flex h-[min(70vh,560px)] w-[min(calc(100vw-40px),380px)] flex-col overflow-hidden rounded-3xl border border-green/15 bg-surface shadow-[0_24px_70px_-28px_rgba(30,77,59,0.55)]"
+    >
       <div className="flex items-center gap-3 bg-chrome px-4 py-3 text-white">
         <img
           src={chatbotIcon}
@@ -70,7 +106,7 @@ export function ChatWindow({
         onDesktopContactCard={onDesktopContactCard}
       />
 
-      <MessageList messages={messages} isSending={isSending} interimStatusLine={interimStatusLine} />
+      <MessageList messages={messages} isSending={isSending} interimStatusLine={interimStatusLine} scrollRef={scrollRef} />
 
       <InputBar
         disabled={isSending}
