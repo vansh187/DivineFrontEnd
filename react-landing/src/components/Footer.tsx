@@ -127,6 +127,14 @@ export function Footer() {
       </div>
 
       <div className="mt-6 flex flex-wrap justify-between gap-4">
+        <a
+          href="https://www.webneststudio.co.in"
+          target="_blank"
+          rel="noreferrer"
+          className="eyebrow-label text-[10px] text-white/55 transition-colors hover:text-terracotta-light"
+        >
+          Built by WebNest Studio
+        </a>
         <div className="eyebrow-label text-[10px] text-white/55">
           {company.legalName} · Est. {company.foundedYear}
         </div>
