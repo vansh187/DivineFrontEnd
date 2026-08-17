@@ -8,7 +8,19 @@ type SiteVisitDrawerProps = {
 };
 
 const visitWindows = ['Today', 'Tomorrow', 'This weekend'];
-const directionLocations = ['Karnal', 'Ganaur', 'Kurukshetra', 'Corporate office'];
+const directionLocations = [
+  {
+    label: 'Karnal',
+    query:
+      'OPS Divine Greens, Village Gangar and Shamgarh, Tehsil Nilokheri, Sec-16, Taraori, Karnal, Haryana 132116',
+  },
+  {
+    label: 'Ganaur',
+    query: 'Suraksha Enclave, Village Garhi Kesri and Brahi, Sector 15, Ganaur, Sonipat, Haryana',
+  },
+  { label: 'Kurukshetra', query: `${company.legalName} Kurukshetra` },
+  { label: 'Corporate office', query: `${company.legalName} Corporate office` },
+];
 
 function getWhatsAppHref(windowLabel: string) {
   const phoneNumber = contact.phoneHref.replace('tel:', '').replace(/\D/g, '');
@@ -171,18 +183,17 @@ export function SiteVisitDrawer({ open, onClose }: SiteVisitDrawerProps) {
               {directionsOpen ? (
                 <div className="grid border-t border-hairline">
                   {directionLocations.map((location) => {
-                    const query = `${company.legalName} ${location}`;
-                    const href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+                    const href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location.query)}`;
 
                     return (
                       <a
-                        key={location}
+                        key={location.label}
                         href={href}
                         target="_blank"
                         rel="noreferrer"
                         className="flex items-center justify-between border-b border-hairline px-4 py-3 text-sm font-semibold text-ink-muted transition-colors last:border-b-0 hover:bg-green/5 hover:text-chrome"
                       >
-                        <span>{location}</span>
+                        <span>{location.label}</span>
                         <span aria-hidden="true">&#8599;</span>
                       </a>
                     );
