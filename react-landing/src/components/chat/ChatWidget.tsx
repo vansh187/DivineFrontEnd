@@ -5,20 +5,13 @@ import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion';
 import { ChatLauncher } from './ChatLauncher';
 import { ChatWindow } from './ChatWindow';
 
-// The confirmed /chatbot/message contract has no structured "asking for
-// location" signal (just reply/callback_confirmed/guardrail_passed/llm_provider),
-// so this text heuristic is the only way to detect the ask and trigger the
-// native geolocation prompt — matches the agent asking to check a precise
-// distance/location.
-const GEOLOCATION_ASK_PATTERN = /exact (distance|location)|share your location|check.{0,20}distance/i;
-
 export function ChatWidget() {
   const session = useChatSession();
   const reducedMotion = usePrefersReducedMotion();
   const [entered, setEntered] = useState(false);
   const greetedRef = useRef(false);
   const geoCoordsRef = useRef<{ lat: number; long: number } | null>(null);
-  const lastGeoAskedMessageId = useRef<string | null>(null);
+  const geoRequestedRef = useRef(false);
 
   useEffect(() => {
     if (!session.isOpen) {
@@ -41,24 +34,29 @@ export function ChatWidget() {
     // etc.), which would otherwise re-run this effect far more than needed.
   }, [session.isOpen, session.sessionId, session.messages.length, session.appendAgentMessage]);
 
+  // Ask for location proactively, once, as soon as the visitor opens the
+  // chat — rather than waiting for the AI to phrase a reply a specific way
+  // (which rarely happened in practice, so the browser's permission prompt
+  // was effectively never shown). This is the same "silent capture" timing
+  // as session/init, just gated on opening the widget instead of firing for
+  // every page load. Coordinates ride along with the visitor's next message
+  // (see withPendingGeo below) so they reach the backend/lead alongside real
+  // conversational activity rather than as an isolated, contextless call.
   useEffect(() => {
-    const last = session.messages[session.messages.length - 1];
-    if (!last || last.role !== 'agent' || last.variant.kind !== 'text') return;
-    if (lastGeoAskedMessageId.current === last.id) return;
-    if (!GEOLOCATION_ASK_PATTERN.test(last.variant.text)) return;
+    if (!session.isOpen || geoRequestedRef.current) return;
     if (!('geolocation' in navigator)) return;
+    geoRequestedRef.current = true;
 
-    lastGeoAskedMessageId.current = last.id;
     navigator.geolocation.getCurrentPosition(
       (position) => {
         geoCoordsRef.current = { lat: position.coords.latitude, long: position.coords.longitude };
       },
       () => {
-        // Denied or unavailable — spec says continue silently, no error message.
+        // Denied or unavailable — continue silently, no error message.
       },
       { timeout: 8000 },
     );
-  }, [session.messages]);
+  }, [session.isOpen]);
 
   const withPendingGeo = (extra: { message?: string; audio?: Blob }) => {
     const coords = geoCoordsRef.current;
