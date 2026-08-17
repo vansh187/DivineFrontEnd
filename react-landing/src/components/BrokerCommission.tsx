@@ -143,9 +143,12 @@ export function BrokerCommission({ token, brokerId, onBack }: BrokerCommissionPr
         commissionAmount,
         transactionMode: 'cash',
       });
-      const nextRecords = [res.commission, ...records];
-      setRecords(nextRecords);
-      setSummary(fallbackSummary(nextRecords));
+      // Show the new record immediately, then resync from the server so the
+      // summary reflects the backend's authoritative totals rather than a
+      // client-side re-derivation that can drift from it (e.g. rounding,
+      // other commission types, or concurrent updates from another tab).
+      setRecords((current) => [res.commission, ...current]);
+      void loadRecords({ quiet: true });
       setSuccessMessage('Paid commission record added.');
       setCustomerName('');
       setSerialNumber('');

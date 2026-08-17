@@ -4,6 +4,10 @@ import { company } from '../data/company';
 import { useAuth } from '../hooks/useAuth';
 import { DivineVisionLogo } from './DivineVisionLogo';
 
+const whatsappHref = `https://wa.me/${contact.phone.replace(/\D/g, '')}?text=${encodeURIComponent(
+  'Hi Divine Vision, I need help with property details.',
+)}`;
+
 export function Footer() {
   const year = new Date().getFullYear();
   const { session, logout, openModal } = useAuth();
@@ -92,6 +96,11 @@ export function Footer() {
             <li>
               <a href={contact.emailHref} className="text-sm text-white/70 transition-colors hover:text-terracotta-light">
                 {contact.email}
+              </a>
+            </li>
+            <li>
+              <a href={whatsappHref} target="_blank" rel="noreferrer" className="text-sm text-white/70 transition-colors hover:text-terracotta-light">
+                Chat on WhatsApp
               </a>
             </li>
           </ul>
