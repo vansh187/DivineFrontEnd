@@ -1,10 +1,13 @@
 import { useRef } from 'react';
 import { HeroMedia } from './HeroMedia';
 import { useHeroScrollTimeline } from '../hooks/useHeroScrollTimeline';
-import { contact } from '../data/contact';
 import { company } from '../data/company';
 
-export function HeroSection() {
+type HeroSectionProps = {
+  onBookVisit?: () => void;
+};
+
+export function HeroSection({ onBookVisit }: HeroSectionProps) {
   const sectionRef = useRef<HTMLElement>(null);
   const canvasWrapRef = useRef<HTMLDivElement>(null);
   const copyRef = useRef<HTMLDivElement>(null);
@@ -49,12 +52,13 @@ export function HeroSection() {
         </p>
 
         <div className="mt-2 flex flex-wrap items-center justify-center gap-4">
-          <a
-            href={contact.phoneHref}
+          <button
+            type="button"
+            onClick={onBookVisit}
             className="rounded-full bg-green px-7 py-3.5 text-sm font-semibold text-white shadow-[0_16px_40px_-14px_rgba(56,142,60,0.65)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-green-soft hover:shadow-[0_20px_44px_-14px_rgba(56,142,60,0.75)]"
           >
             Book a site visit
-          </a>
+          </button>
           <a
             href="#journey"
             className="eyebrow-label rounded-full border border-white/55 bg-black/25 px-7 py-3.5 text-white backdrop-blur-sm transition-colors duration-200 hover:border-white hover:bg-black/40"

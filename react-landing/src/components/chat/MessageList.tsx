@@ -22,7 +22,12 @@ export function MessageList({ messages, isSending, interimStatusLine, scrollRef 
   }, [messages, isSending, reducedMotion]);
 
   return (
-    <div ref={scrollRef} aria-live="polite" className="flex flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-4 py-4">
+    <div
+      ref={scrollRef}
+      aria-live="polite"
+      data-lenis-prevent
+      className="flex flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-4 py-4"
+    >
       {messages.map((message) =>
         message.role === 'user' ? (
           <UserMessage key={message.id} text={message.text} />
