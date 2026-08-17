@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { townshipPricing } from '../data/townshipPricing';
 import * as commissionsApi from '../services/commissionsApi';
 import type { CommissionRecord, CommissionStatus, CommissionSummary } from '../services/commissionsApi';
@@ -28,6 +28,15 @@ const statusLabel: Record<CommissionStatus, string> = {
   rejected: 'Rejected',
 };
 
+type CommissionFilter = 'all' | CommissionStatus;
+
+const filters: Array<{ value: CommissionFilter; label: string }> = [
+  { value: 'all', label: 'All' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'paid', label: 'Paid' },
+  { value: 'rejected', label: 'Rejected' },
+];
+
 function formatCurrency(amount: number) {
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
@@ -52,8 +61,10 @@ export function BrokerCommission({ token, brokerId, onBack }: BrokerCommissionPr
   const [summary, setSummary] = useState<CommissionSummary>({ pending: 0, paid: 0, rejected: 0 });
   const [isLoading, setLoading] = useState(true);
   const [isSubmitting, setSubmitting] = useState(false);
+  const [isRefreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [activeFilter, setActiveFilter] = useState<CommissionFilter>('all');
   const [customerName, setCustomerName] = useState('');
   const [townshipId, setTownshipId] = useState(townshipPricing[0].id);
   const [serialNumber, setSerialNumber] = useState('');
@@ -67,39 +78,48 @@ export function BrokerCommission({ token, brokerId, onBack }: BrokerCommissionPr
   const commissionAmount =
     Number.isFinite(numericManualCommission) && numericManualCommission > 0 ? numericManualCommission : estimatedCommission;
 
-  useEffect(() => {
-    let active = true;
-    async function loadRecords() {
+  const loadRecords = useCallback(
+    async (options: { quiet?: boolean } = {}) => {
       if (!token || !brokerId) {
         setLoading(false);
         setError('Please sign in again to load commission records.');
         return;
       }
 
-      setLoading(true);
+      if (options.quiet) setRefreshing(true);
+      else setLoading(true);
       setError('');
       try {
         const res = await commissionsApi.listBrokerCommissions(token, brokerId);
-        if (!active) return;
         setRecords(res.commissions);
         setSummary(res.summary ?? fallbackSummary(res.commissions));
       } catch (err) {
-        if (!active) return;
         setError(err instanceof Error ? err.message : 'Could not load commission records.');
       } finally {
-        if (active) setLoading(false);
+        setLoading(false);
+        setRefreshing(false);
       }
-    }
+    },
+    [brokerId, token],
+  );
 
+  const refreshRecords = () => {
+    setSuccessMessage('');
+    void loadRecords({ quiet: true });
+  };
+
+  useEffect(() => {
     void loadRecords();
-    return () => {
-      active = false;
-    };
-  }, [brokerId, token]);
+  }, [loadRecords]);
 
   const sortedRecords = useMemo(
     () => [...records].sort((a, b) => statusOrder[a.status] - statusOrder[b.status] || b.createdAt.localeCompare(a.createdAt)),
     [records],
+  );
+
+  const visibleRecords = useMemo(
+    () => (activeFilter === 'all' ? sortedRecords : sortedRecords.filter((record) => record.status === activeFilter)),
+    [activeFilter, sortedRecords],
   );
 
   const addCashCommission = async () => {
@@ -123,9 +143,12 @@ export function BrokerCommission({ token, brokerId, onBack }: BrokerCommissionPr
         commissionAmount,
         transactionMode: 'cash',
       });
-      const nextRecords = [res.commission, ...records];
-      setRecords(nextRecords);
-      setSummary(fallbackSummary(nextRecords));
+      // Show the new record immediately, then resync from the server so the
+      // summary reflects the backend's authoritative totals rather than a
+      // client-side re-derivation that can drift from it (e.g. rounding,
+      // other commission types, or concurrent updates from another tab).
+      setRecords((current) => [res.commission, ...current]);
+      void loadRecords({ quiet: true });
       setSuccessMessage('Paid commission record added.');
       setCustomerName('');
       setSerialNumber('');
@@ -240,14 +263,24 @@ export function BrokerCommission({ token, brokerId, onBack }: BrokerCommissionPr
         </div>
 
         <div className="rounded-2xl border border-hairline bg-surface p-6 shadow-[0_16px_40px_-26px_rgba(30,77,59,0.3)]">
-          <div className="flex items-start gap-4">
-            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-chrome/10 text-chrome">
-              <ChartIcon />
-            </span>
-            <div>
-              <h3 className="font-display text-lg font-bold text-ink">Commission summary</h3>
-              <p className="mt-1 text-sm leading-[1.6] text-ink-muted">Commission records appear by pending, paid, and rejected status.</p>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-start gap-4">
+              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-chrome/10 text-chrome">
+                <ChartIcon />
+              </span>
+              <div>
+                <h3 className="font-display text-lg font-bold text-ink">Commission summary</h3>
+                <p className="mt-1 text-sm leading-[1.6] text-ink-muted">Commission records appear by pending, paid, and rejected status.</p>
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={refreshRecords}
+              disabled={isLoading || isRefreshing}
+              className="self-start rounded-full border border-hairline bg-bg px-4 py-2 text-xs font-semibold text-ink-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isRefreshing ? 'Refreshing...' : 'Refresh'}
+            </button>
           </div>
 
           <div className="mt-5 grid grid-cols-3 gap-3">
@@ -265,11 +298,28 @@ export function BrokerCommission({ token, brokerId, onBack }: BrokerCommissionPr
             </div>
           </div>
 
+          <div className="mt-5 flex flex-wrap gap-2">
+            {filters.map((filter) => (
+              <button
+                key={filter.value}
+                type="button"
+                onClick={() => setActiveFilter(filter.value)}
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  activeFilter === filter.value
+                    ? 'border-green bg-green text-white'
+                    : 'border-hairline bg-bg text-ink-muted hover:text-ink'
+                }`}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
+
           <div className="mt-5 max-h-96 overflow-y-auto rounded-xl border border-hairline">
             {isLoading ? (
               <div className="bg-bg px-4 py-6 text-sm text-ink-muted">Loading commission records...</div>
-            ) : sortedRecords.length > 0 ? (
-              sortedRecords.map((record, i) => (
+            ) : visibleRecords.length > 0 ? (
+              visibleRecords.map((record, i) => (
                 <div key={record.id} className={`bg-bg px-4 py-3 ${i > 0 ? 'border-t border-hairline' : ''}`}>
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -300,7 +350,17 @@ export function BrokerCommission({ token, brokerId, onBack }: BrokerCommissionPr
                 </div>
               ))
             ) : (
-              <div className="bg-bg px-4 py-6 text-sm text-ink-muted">No commission records yet.</div>
+              <div className="flex flex-col items-center bg-bg px-4 py-8 text-center text-sm text-ink-muted">
+                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-green/10 text-green">
+                  <ChartIcon />
+                </span>
+                <p className="mt-3 font-semibold text-ink">
+                  {activeFilter === 'all' ? 'No commission records yet' : `No ${statusLabel[activeFilter].toLowerCase()} records`}
+                </p>
+                <p className="mt-1 max-w-[28ch]">
+                  {activeFilter === 'all' ? 'Add a paid cash commission to start tracking payouts.' : 'Try another status filter.'}
+                </p>
+              </div>
             )}
           </div>
         </div>

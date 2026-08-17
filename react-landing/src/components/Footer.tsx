@@ -2,6 +2,11 @@ import { navLinks } from '../data/navigation';
 import { contact } from '../data/contact';
 import { company } from '../data/company';
 import { useAuth } from '../hooks/useAuth';
+import { DivineVisionLogo } from './DivineVisionLogo';
+
+const whatsappHref = `https://wa.me/${contact.phone.replace(/\D/g, '')}?text=${encodeURIComponent(
+  'Hi Divine Vision, I need help with property details.',
+)}`;
 
 export function Footer() {
   const year = new Date().getFullYear();
@@ -14,7 +19,13 @@ export function Footer() {
 
       <div className="grid grid-cols-1 gap-8 border-b border-hairline-dark pb-10 sm:grid-cols-2 lg:grid-cols-[1.6fr_1fr_1fr_1fr_1fr]">
         <div>
-          <div className="font-display text-lg font-bold text-white">Divine Vision</div>
+          <a
+            href="/"
+            aria-label="Divine Vision home"
+            className="inline-flex max-w-full"
+          >
+            <DivineVisionLogo variant="footer" />
+          </a>
           <p className="mt-3.5 max-w-[28ch] text-sm text-white/70">{company.tagline}</p>
         </div>
 
@@ -85,6 +96,11 @@ export function Footer() {
             <li>
               <a href={contact.emailHref} className="text-sm text-white/70 transition-colors hover:text-terracotta-light">
                 {contact.email}
+              </a>
+            </li>
+            <li>
+              <a href={whatsappHref} target="_blank" rel="noreferrer" className="text-sm text-white/70 transition-colors hover:text-terracotta-light">
+                Chat on WhatsApp
               </a>
             </li>
           </ul>

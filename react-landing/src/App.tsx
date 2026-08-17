@@ -3,7 +3,11 @@ import { LandingPage } from './pages/LandingPage';
 import { CustomerPage } from './pages/CustomerPage';
 import { BrokerPage } from './pages/BrokerPage';
 import { BrokerCommissionPage } from './pages/BrokerCommissionPage';
+import { NotFoundPage } from './pages/NotFoundPage';
 import { AuthModal } from './components/AuthModal';
+import { ChatWidget } from './components/chat/ChatWidget';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { AppCrashFallback } from './components/AppCrashFallback';
 import { RoleRoute } from './components/RoleRoute';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import type { Role } from './services/authApi';
@@ -24,38 +28,46 @@ function HomeRoute() {
 
 function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<HomeRoute />} />
-          <Route
-            path="/customer"
-            element={
-              <RoleRoute role="customer">
-                <CustomerPage />
-              </RoleRoute>
-            }
-          />
-          <Route
-            path="/broker"
-            element={
-              <RoleRoute role="broker">
-                <BrokerPage />
-              </RoleRoute>
-            }
-          />
-          <Route
-            path="/broker/commission"
-            element={
-              <RoleRoute role="broker">
-                <BrokerCommissionPage />
-              </RoleRoute>
-            }
-          />
-        </Routes>
-        <AuthModal />
-      </BrowserRouter>
-    </AuthProvider>
+    <ErrorBoundary fallback={<AppCrashFallback />}>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<HomeRoute />} />
+            <Route
+              path="/customer"
+              element={
+                <RoleRoute role="customer">
+                  <CustomerPage />
+                </RoleRoute>
+              }
+            />
+            <Route
+              path="/broker"
+              element={
+                <RoleRoute role="broker">
+                  <BrokerPage />
+                </RoleRoute>
+              }
+            />
+            <Route
+              path="/broker/commission"
+              element={
+                <RoleRoute role="broker">
+                  <BrokerCommissionPage />
+                </RoleRoute>
+              }
+            />
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
+          <AuthModal />
+          {/* Isolated boundary: a bug in the (newer, less-tested) chat widget
+           * should never blank out the rest of the site. */}
+          <ErrorBoundary>
+            <ChatWidget />
+          </ErrorBoundary>
+        </BrowserRouter>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 
