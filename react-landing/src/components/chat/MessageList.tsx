@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import type { RefObject } from 'react';
 import type { ChatMessage } from '../../hooks/useChatSession';
 import { UserMessage } from './UserMessage';
 import { AgentMessage } from './AgentMessage';
@@ -9,9 +10,10 @@ interface MessageListProps {
   messages: ChatMessage[];
   isSending: boolean;
   interimStatusLine: string | null;
+  scrollRef: RefObject<HTMLDivElement | null>;
 }
 
-export function MessageList({ messages, isSending, interimStatusLine }: MessageListProps) {
+export function MessageList({ messages, isSending, interimStatusLine, scrollRef }: MessageListProps) {
   const endRef = useRef<HTMLDivElement>(null);
   const reducedMotion = usePrefersReducedMotion();
 
@@ -20,7 +22,7 @@ export function MessageList({ messages, isSending, interimStatusLine }: MessageL
   }, [messages, isSending, reducedMotion]);
 
   return (
-    <div aria-live="polite" className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
+    <div ref={scrollRef} aria-live="polite" className="flex flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-4 py-4">
       {messages.map((message) =>
         message.role === 'user' ? (
           <UserMessage key={message.id} text={message.text} />
