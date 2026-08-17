@@ -3,7 +3,7 @@ import { deliveredRecords } from '../data/deliveredRecords';
 
 export function DeliveredSection() {
   return (
-    <section id="record" className="px-6 py-20 sm:px-10 sm:py-28">
+    <section id="record" className="px-6 pt-8 pb-20 sm:px-10 sm:pt-10 sm:pb-28">
       <Reveal>
         <div className="eyebrow-label mb-3.5 text-terracotta">Handovers 2007 → 2017</div>
         <h2 className="font-display text-balance text-4xl font-bold text-ink sm:text-6xl">

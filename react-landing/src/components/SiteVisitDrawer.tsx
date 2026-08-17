@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { contact } from '../data/contact';
 import { company } from '../data/company';
+import { corporateOfficeLocation, getGoogleMapsSearchHref, siteMapLocations } from '../data/mapLocations';
 
 type SiteVisitDrawerProps = {
   open: boolean;
@@ -8,19 +9,7 @@ type SiteVisitDrawerProps = {
 };
 
 const visitWindows = ['Today', 'Tomorrow', 'This weekend'];
-const directionLocations = [
-  {
-    label: 'Karnal',
-    query:
-      'OPS Divine Greens, Village Gangar and Shamgarh, Tehsil Nilokheri, Sec-16, Taraori, Karnal, Haryana 132116',
-  },
-  {
-    label: 'Ganaur',
-    query: 'Suraksha Enclave, Village Garhi Kesri and Brahi, Sector 15, Ganaur, Sonipat, Haryana',
-  },
-  { label: 'Kurukshetra', query: `${company.legalName} Kurukshetra` },
-  { label: 'Corporate office', query: `${company.legalName} Corporate office` },
-];
+const directionLocations = [...siteMapLocations, corporateOfficeLocation];
 
 function getWhatsAppHref(windowLabel: string) {
   const phoneNumber = contact.phoneHref.replace('tel:', '').replace(/\D/g, '');
@@ -183,7 +172,7 @@ export function SiteVisitDrawer({ open, onClose }: SiteVisitDrawerProps) {
               {directionsOpen ? (
                 <div className="grid border-t border-hairline">
                   {directionLocations.map((location) => {
-                    const href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location.query)}`;
+                    const href = getGoogleMapsSearchHref(location.query);
 
                     return (
                       <a

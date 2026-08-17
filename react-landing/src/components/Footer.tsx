@@ -1,6 +1,7 @@
 import { navLinks } from '../data/navigation';
 import { contact } from '../data/contact';
 import { company } from '../data/company';
+import { getGoogleMapsSearchHref, siteMapLocations } from '../data/mapLocations';
 import { useAuth } from '../hooks/useAuth';
 import { DivineVisionLogo } from './DivineVisionLogo';
 
@@ -109,9 +110,16 @@ export function Footer() {
         <div className="sm:pl-6 lg:border-l lg:border-white/10 lg:pl-8">
           <h5 className="eyebrow-label mb-3.5 block text-terracotta-light">Where we build</h5>
           <ul className="flex flex-col gap-2.5">
-            {company.locations.map((location) => (
-              <li key={location} className="text-sm text-white/70">
-                {location}
+            {siteMapLocations.map((location) => (
+              <li key={location.label}>
+                <a
+                  href={getGoogleMapsSearchHref(location.query)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm text-white/70 transition-colors hover:text-terracotta-light"
+                >
+                  {location.label}
+                </a>
               </li>
             ))}
           </ul>
