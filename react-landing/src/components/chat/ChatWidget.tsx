@@ -3,15 +3,55 @@ import { useChatSession } from '../../hooks/useChatSession';
 import type { AgentMessageVariant } from '../../hooks/useChatSession';
 import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion';
 import { ChatLauncher } from './ChatLauncher';
+import { ChatTeaser } from './ChatTeaser';
 import { ChatWindow } from './ChatWindow';
+
+const TEASER_STORAGE_KEY = 'dvi_chat_teaser_dismissed';
+const TEASER_DELAY_MS = 1800;
+
+function readTeaserDismissed(): boolean {
+  try {
+    return sessionStorage.getItem(TEASER_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeTeaserDismissed() {
+  try {
+    sessionStorage.setItem(TEASER_STORAGE_KEY, '1');
+  } catch {
+    /* private-browsing / storage-disabled — teaser just won't persist its dismissal */
+  }
+}
 
 export function ChatWidget() {
   const session = useChatSession();
   const reducedMotion = usePrefersReducedMotion();
   const [entered, setEntered] = useState(false);
+  const [teaserVisible, setTeaserVisible] = useState(false);
   const greetedRef = useRef(false);
   const geoCoordsRef = useRef<{ lat: number; long: number } | null>(null);
   const geoRequestedRef = useRef(false);
+
+  // Shows once per tab session, after a short delay so it doesn't slap the
+  // visitor with a callout the instant the page paints. Dismissed for good
+  // (this tab) either by the close button or by opening the chat.
+  useEffect(() => {
+    if (readTeaserDismissed()) return;
+    const timer = window.setTimeout(() => setTeaserVisible(true), TEASER_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const dismissTeaser = () => {
+    writeTeaserDismissed();
+    setTeaserVisible(false);
+  };
+
+  const handleOpen = () => {
+    dismissTeaser();
+    session.open();
+  };
 
   useEffect(() => {
     if (!session.isOpen) {
@@ -121,7 +161,9 @@ export function ChatWidget() {
         </div>
       )}
 
-      {!session.isOpen && <ChatLauncher onOpen={session.open} />}
+      {!session.isOpen && teaserVisible && <ChatTeaser onOpen={handleOpen} onDismiss={dismissTeaser} />}
+
+      {!session.isOpen && <ChatLauncher onOpen={handleOpen} />}
     </div>
   );
 }
