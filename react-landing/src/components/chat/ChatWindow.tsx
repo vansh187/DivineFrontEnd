@@ -57,6 +57,8 @@ export function ChatWindow({
     if (!root) return;
 
     const handleWheel = (event: WheelEvent) => {
+      event.stopPropagation();
+
       const list = scrollRef.current;
       if (!list || !list.contains(event.target as Node)) {
         event.preventDefault();
@@ -69,13 +71,23 @@ export function ChatWindow({
       }
     };
 
+    const handleTouchMove = (event: TouchEvent) => {
+      event.stopPropagation();
+    };
+
     root.addEventListener('wheel', handleWheel, { passive: false });
-    return () => root.removeEventListener('wheel', handleWheel);
+    root.addEventListener('touchmove', handleTouchMove, { passive: true });
+
+    return () => {
+      root.removeEventListener('wheel', handleWheel);
+      root.removeEventListener('touchmove', handleTouchMove);
+    };
   }, []);
 
   return (
     <div
       ref={rootRef}
+      data-lenis-prevent
       className="flex h-[min(70vh,560px)] w-[min(calc(100vw-40px),380px)] flex-col overflow-hidden rounded-3xl border border-green/15 bg-surface shadow-[0_24px_70px_-28px_rgba(30,77,59,0.55)]"
     >
       <div className="flex items-center gap-3 bg-chrome px-4 py-3 text-white">

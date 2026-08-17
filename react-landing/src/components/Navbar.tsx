@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import { useScrolled } from '../hooks/useScrolled';
 import { navLinks } from '../data/navigation';
-import { contact } from '../data/contact';
 import { LoginMenu } from './LoginMenu';
 import { DivineVisionLogo } from './DivineVisionLogo';
 
-export function Navbar() {
+type NavbarProps = {
+  onBookVisit?: () => void;
+};
+
+export function Navbar({ onBookVisit }: NavbarProps) {
   const scrolled = useScrolled(50);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -38,13 +41,14 @@ export function Navbar() {
 
         <LoginMenu />
 
-        <a
-          href={contact.phoneHref}
+        <button
+          type="button"
+          onClick={onBookVisit}
           className="shrink-0 rounded-full bg-white px-3.5 py-2 text-[11px] font-semibold text-chrome shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-green hover:text-white hover:shadow-[0_10px_24px_-10px_rgba(56,142,60,0.7)] sm:px-5 sm:py-2.5 sm:text-xs"
         >
           <span className="sm:hidden">Visit</span>
           <span className="hidden sm:inline">Book a site visit</span>
-        </a>
+        </button>
 
         <button
           type="button"
