@@ -41,7 +41,7 @@ export function CostEstimator() {
   const monthly = Math.round(balance / tenure);
 
   return (
-    <section id="estimator" className="px-6 py-20 sm:px-10 sm:py-28">
+    <section id="estimator" className="px-6 pt-20 pb-10 sm:px-10 sm:pt-28 sm:pb-14">
       <div className="eyebrow-label mb-3.5 text-terracotta">Plan your budget</div>
       <h2 className="font-display text-balance text-4xl font-bold text-ink sm:text-6xl">
         What a plot actually costs you.

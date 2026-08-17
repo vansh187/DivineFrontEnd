@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { contact } from '../data/contact';
 import { company } from '../data/company';
+import { corporateOfficeLocation, getGoogleMapsSearchHref, siteMapLocations } from '../data/mapLocations';
 
 type SiteVisitDrawerProps = {
   open: boolean;
@@ -8,7 +9,7 @@ type SiteVisitDrawerProps = {
 };
 
 const visitWindows = ['Today', 'Tomorrow', 'This weekend'];
-const directionLocations = ['Karnal', 'Ganaur', 'Kurukshetra', 'Corporate office'];
+const directionLocations = [...siteMapLocations, corporateOfficeLocation];
 
 function getWhatsAppHref(windowLabel: string) {
   const phoneNumber = contact.phoneHref.replace('tel:', '').replace(/\D/g, '');
@@ -171,18 +172,17 @@ export function SiteVisitDrawer({ open, onClose }: SiteVisitDrawerProps) {
               {directionsOpen ? (
                 <div className="grid border-t border-hairline">
                   {directionLocations.map((location) => {
-                    const query = `${company.legalName} ${location}`;
-                    const href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+                    const href = getGoogleMapsSearchHref(location.query);
 
                     return (
                       <a
-                        key={location}
+                        key={location.label}
                         href={href}
                         target="_blank"
                         rel="noreferrer"
                         className="flex items-center justify-between border-b border-hairline px-4 py-3 text-sm font-semibold text-ink-muted transition-colors last:border-b-0 hover:bg-green/5 hover:text-chrome"
                       >
-                        <span>{location}</span>
+                        <span>{location.label}</span>
                         <span aria-hidden="true">&#8599;</span>
                       </a>
                     );
