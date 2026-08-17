@@ -3,22 +3,55 @@ import { useChatSession } from '../../hooks/useChatSession';
 import type { AgentMessageVariant } from '../../hooks/useChatSession';
 import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion';
 import { ChatLauncher } from './ChatLauncher';
+import { ChatTeaser } from './ChatTeaser';
 import { ChatWindow } from './ChatWindow';
 
-// The confirmed /chatbot/message contract has no structured "asking for
-// location" signal (just reply/callback_confirmed/guardrail_passed/llm_provider),
-// so this text heuristic is the only way to detect the ask and trigger the
-// native geolocation prompt — matches the agent asking to check a precise
-// distance/location.
-const GEOLOCATION_ASK_PATTERN = /exact (distance|location)|share your location|check.{0,20}distance/i;
+const TEASER_STORAGE_KEY = 'dvi_chat_teaser_dismissed';
+const TEASER_DELAY_MS = 1800;
+
+function readTeaserDismissed(): boolean {
+  try {
+    return sessionStorage.getItem(TEASER_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeTeaserDismissed() {
+  try {
+    sessionStorage.setItem(TEASER_STORAGE_KEY, '1');
+  } catch {
+    /* private-browsing / storage-disabled — teaser just won't persist its dismissal */
+  }
+}
 
 export function ChatWidget() {
   const session = useChatSession();
   const reducedMotion = usePrefersReducedMotion();
   const [entered, setEntered] = useState(false);
+  const [teaserVisible, setTeaserVisible] = useState(false);
   const greetedRef = useRef(false);
   const geoCoordsRef = useRef<{ lat: number; long: number } | null>(null);
-  const lastGeoAskedMessageId = useRef<string | null>(null);
+  const geoRequestedRef = useRef(false);
+
+  // Shows once per tab session, after a short delay so it doesn't slap the
+  // visitor with a callout the instant the page paints. Dismissed for good
+  // (this tab) either by the close button or by opening the chat.
+  useEffect(() => {
+    if (readTeaserDismissed()) return;
+    const timer = window.setTimeout(() => setTeaserVisible(true), TEASER_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const dismissTeaser = () => {
+    writeTeaserDismissed();
+    setTeaserVisible(false);
+  };
+
+  const handleOpen = () => {
+    dismissTeaser();
+    session.open();
+  };
 
   useEffect(() => {
     if (!session.isOpen) {
@@ -41,24 +74,29 @@ export function ChatWidget() {
     // etc.), which would otherwise re-run this effect far more than needed.
   }, [session.isOpen, session.sessionId, session.messages.length, session.appendAgentMessage]);
 
+  // Ask for location proactively, once, as soon as the visitor opens the
+  // chat — rather than waiting for the AI to phrase a reply a specific way
+  // (which rarely happened in practice, so the browser's permission prompt
+  // was effectively never shown). This is the same "silent capture" timing
+  // as session/init, just gated on opening the widget instead of firing for
+  // every page load. Coordinates ride along with the visitor's next message
+  // (see withPendingGeo below) so they reach the backend/lead alongside real
+  // conversational activity rather than as an isolated, contextless call.
   useEffect(() => {
-    const last = session.messages[session.messages.length - 1];
-    if (!last || last.role !== 'agent' || last.variant.kind !== 'text') return;
-    if (lastGeoAskedMessageId.current === last.id) return;
-    if (!GEOLOCATION_ASK_PATTERN.test(last.variant.text)) return;
+    if (!session.isOpen || geoRequestedRef.current) return;
     if (!('geolocation' in navigator)) return;
+    geoRequestedRef.current = true;
 
-    lastGeoAskedMessageId.current = last.id;
     navigator.geolocation.getCurrentPosition(
       (position) => {
         geoCoordsRef.current = { lat: position.coords.latitude, long: position.coords.longitude };
       },
       () => {
-        // Denied or unavailable — spec says continue silently, no error message.
+        // Denied or unavailable — continue silently, no error message.
       },
       { timeout: 8000 },
     );
-  }, [session.messages]);
+  }, [session.isOpen]);
 
   const withPendingGeo = (extra: { message?: string; audio?: Blob }) => {
     const coords = geoCoordsRef.current;
@@ -123,7 +161,9 @@ export function ChatWidget() {
         </div>
       )}
 
-      {!session.isOpen && <ChatLauncher onOpen={session.open} />}
+      {!session.isOpen && teaserVisible && <ChatTeaser onOpen={handleOpen} onDismiss={dismissTeaser} />}
+
+      {!session.isOpen && <ChatLauncher onOpen={handleOpen} />}
     </div>
   );
 }
