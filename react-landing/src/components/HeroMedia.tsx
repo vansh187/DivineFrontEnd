@@ -44,15 +44,9 @@ export function HeroMedia() {
     const video = videoRef.current;
     if (!video) return;
 
-    video.muted = false;
-    video
-      .play()
-      .then(() => setMuted(false))
-      .catch(() => {
-        video.muted = true;
-        setMuted(true);
-        video.play().catch(() => {});
-      });
+    video.muted = true;
+    setMuted(true);
+    video.play().catch(() => {});
   }, [reducedMotion]);
 
   if (reducedMotion) {
@@ -69,6 +63,7 @@ export function HeroMedia() {
     const video = videoRef.current;
     if (!video) return;
     const next = !video.muted;
+    video.volume = 1;
     video.muted = next;
     setMuted(next);
     if (!next) video.play().catch(() => {});
