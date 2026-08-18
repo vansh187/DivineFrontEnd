@@ -67,7 +67,7 @@ export function HeroSection({ onBookVisit }: HeroSectionProps) {
           </a>
         </div>
 
-        <div className="mt-1 flex w-full max-w-[340px] flex-col items-center justify-center gap-2 rounded-xl border border-white/15 bg-black/45 px-4 py-3 text-white/90 backdrop-blur-sm sm:mt-2 sm:max-w-none sm:flex-row sm:flex-wrap sm:gap-x-9 sm:gap-y-3 sm:rounded-2xl sm:px-8 sm:py-4">
+        <div className="mt-2 hidden flex-wrap items-center justify-center gap-x-9 gap-y-3 rounded-2xl border border-white/15 bg-black/45 px-8 py-4 text-white/90 backdrop-blur-sm sm:flex">
           <span className="text-sm">
             <strong className="font-display font-bold text-white">20</strong> yrs on the corridor
           </span>
