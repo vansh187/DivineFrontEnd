@@ -3,6 +3,8 @@ import { LandingPage } from './pages/LandingPage';
 import { CustomerPage } from './pages/CustomerPage';
 import { BrokerPage } from './pages/BrokerPage';
 import { BrokerCommissionPage } from './pages/BrokerCommissionPage';
+import { ResidencesPage } from './pages/ResidencesPage';
+import { OurStoryPage } from './pages/OurStoryPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { AuthModal } from './components/AuthModal';
 import { ChatWidget } from './components/chat/ChatWidget';
@@ -33,6 +35,8 @@ function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<HomeRoute />} />
+            <Route path="/residences" element={<ResidencesPage />} />
+            <Route path="/our-story" element={<OurStoryPage />} />
             <Route
               path="/customer"
               element={
