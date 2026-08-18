@@ -39,17 +39,30 @@
   box-sizing: border-box;
 }
 
+*, *::before, *::after {
+  min-width: 0;
+}
+
 html {
   overflow-x: hidden;
 }
 
 body {
+  width: 100%;
+  min-width: 0;
   overflow-x: hidden;
   background: var(--color-bg);
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+img,
+video,
+canvas,
+svg {
+  max-width: 100%;
 }
 
 ::selection {
