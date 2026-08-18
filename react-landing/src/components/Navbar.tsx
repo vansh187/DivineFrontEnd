@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useScrolled } from '../hooks/useScrolled';
 import { navLinks } from '../data/navigation';
 import { LoginMenu } from './LoginMenu';
@@ -6,16 +7,22 @@ import { DivineVisionLogo } from './DivineVisionLogo';
 
 type NavbarProps = {
   onBookVisit?: () => void;
+  transparentOnTop?: boolean;
 };
 
-export function Navbar({ onBookVisit }: NavbarProps) {
+export function Navbar({ onBookVisit, transparentOnTop = false }: NavbarProps) {
+  const { pathname } = useLocation();
   const scrolled = useScrolled(50);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const glass = transparentOnTop && !scrolled;
+  const links = pathname === '/' ? navLinks : [{ label: 'Home', href: '/' }, ...navLinks];
 
   return (
     <nav
-      className={`fixed inset-x-0 top-0 z-[90] flex min-w-0 items-center justify-between gap-2 bg-chrome px-3 py-3 transition-shadow duration-300 sm:gap-3 sm:px-10 sm:py-4 ${
-        scrolled ? 'shadow-[0_12px_30px_rgba(43,46,40,0.18)]' : 'shadow-none'
+      className={`fixed inset-x-0 top-0 z-[90] flex min-w-0 items-center justify-between gap-2 border-b px-3 py-3 transition-all duration-300 sm:gap-3 sm:px-10 sm:py-4 ${
+        glass
+          ? 'border-white/12 bg-chrome/58 shadow-none backdrop-blur-xl'
+          : 'border-transparent bg-chrome shadow-[0_12px_30px_rgba(43,46,40,0.18)]'
       }`}
     >
       <a
@@ -28,7 +35,7 @@ export function Navbar({ onBookVisit }: NavbarProps) {
 
       <div className="flex min-w-0 items-center gap-2 sm:gap-7">
         <div className="hidden gap-6 sm:flex">
-          {navLinks.map((link) => (
+          {links.map((link) => (
             <a
               key={link.href}
               href={link.href}
@@ -66,7 +73,7 @@ export function Navbar({ onBookVisit }: NavbarProps) {
       {mobileOpen ? (
         <div className="absolute inset-x-4 top-[calc(100%+8px)] rounded-xl border border-white/10 bg-chrome px-4 py-3 shadow-[0_18px_44px_-22px_rgba(0,0,0,0.75)] sm:hidden">
           <div className="flex flex-col gap-2">
-            {navLinks.map((link) => (
+            {links.map((link) => (
               <a
                 key={link.href}
                 href={link.href}
