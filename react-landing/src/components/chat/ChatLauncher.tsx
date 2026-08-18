@@ -11,7 +11,7 @@ export function ChatLauncher({ onOpen }: { onOpen: () => void }) {
       type="button"
       onClick={onOpen}
       aria-label="Open concierge chat"
-      className="group relative h-16 w-16 overflow-hidden rounded-full border border-terracotta-light/35 bg-chrome p-1.5 shadow-[0_18px_45px_-18px_rgba(30,77,59,0.75)] transition-transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-terracotta-light focus:ring-offset-2 focus:ring-offset-bg"
+      className="group relative h-14 w-14 overflow-hidden rounded-full border border-terracotta-light/35 bg-chrome p-1.5 shadow-[0_18px_45px_-18px_rgba(30,77,59,0.75)] transition-transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-terracotta-light focus:ring-offset-2 focus:ring-offset-bg sm:h-16 sm:w-16"
     >
       <span
         className={clsx(

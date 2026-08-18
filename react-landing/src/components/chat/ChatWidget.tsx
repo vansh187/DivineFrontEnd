@@ -131,7 +131,7 @@ export function ChatWidget() {
   };
 
   return (
-    <div className="fixed bottom-5 right-5 z-40 flex flex-col items-end gap-3 sm:bottom-6 sm:right-6">
+    <div className="fixed bottom-3 right-3 z-40 flex max-w-[calc(100dvw-24px)] flex-col items-end gap-3 sm:bottom-6 sm:right-6 sm:max-w-none">
       {session.isOpen && (
         <div
           className={

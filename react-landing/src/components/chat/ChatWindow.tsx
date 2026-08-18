@@ -88,7 +88,7 @@ export function ChatWindow({
     <div
       ref={rootRef}
       data-lenis-prevent
-      className="flex h-[min(70vh,560px)] w-[min(calc(100vw-40px),380px)] flex-col overflow-hidden rounded-3xl border border-green/15 bg-surface shadow-[0_24px_70px_-28px_rgba(30,77,59,0.55)]"
+      className="flex h-[min(74svh,560px)] w-[min(calc(100dvw-24px),380px)] flex-col overflow-hidden rounded-2xl border border-green/15 bg-surface shadow-[0_24px_70px_-28px_rgba(30,77,59,0.55)] sm:h-[min(70vh,560px)] sm:w-[min(calc(100vw-40px),380px)] sm:rounded-3xl"
     >
       <div className="flex items-center gap-3 bg-chrome px-4 py-3 text-white">
         <img
