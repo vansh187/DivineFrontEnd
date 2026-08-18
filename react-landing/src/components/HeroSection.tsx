@@ -22,10 +22,8 @@ export function HeroSection({ onBookVisit }: HeroSectionProps) {
       <div ref={canvasWrapRef} className="absolute inset-0 overflow-hidden">
         <HeroMedia />
         {/*
-          Full-bleed darkening pass — never dips light in the middle, so
-          copy stays AA-legible whether the crop underneath is bright sky
-          or dark foliage. Nav itself is opaque (bg-chrome) so this isn't
-          load-bearing for the logo/links, just the hero copy below it.
+          Full-bleed darkening pass keeps copy legible whether the crop
+          underneath is bright sky or dark foliage.
         */}
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.58)_0%,rgba(0,0,0,0.26)_42%,rgba(0,0,0,0.72)_100%)]" />
         {/* Vignette reinforces contrast directly behind the centred copy column. */}
@@ -35,20 +33,18 @@ export function HeroSection({ onBookVisit }: HeroSectionProps) {
       </div>
 
       <div ref={copyRef} className="relative z-10 mx-auto flex w-full max-w-4xl flex-col items-center gap-5 sm:gap-6">
-        <span className="eyebrow-label max-w-full rounded-full border border-white/35 bg-black/25 px-3 py-1.5 text-[10px] text-white backdrop-blur-sm sm:px-4 sm:text-xs">
-          Divine Vision · Est. {company.foundedYear} · NH-1 corridor
+        <span className="eyebrow-label max-w-[min(100%,19rem)] rounded-full border border-white/32 bg-black/22 px-3 py-1.5 text-center text-[10px] leading-relaxed text-white/92 backdrop-blur-sm sm:max-w-full sm:px-4 sm:text-xs">
+          <span className="sm:hidden">Established {company.foundedYear} | NH-1 corridor</span>
+          <span className="hidden sm:inline">Established {company.foundedYear} | NH-1 Delhi-Chandigarh corridor</span>
         </span>
 
-        <h1 className="max-w-[11ch] font-display text-balance text-[clamp(34px,10.8vw,76px)] font-bold leading-[1.05] text-white [text-shadow:0_2px_28px_rgba(0,0,0,0.55)] sm:max-w-[13ch]">
-          Divine Vision townships{' '}
-          <em className="rounded-lg bg-black/50 px-2 text-green-soft not-italic [-webkit-box-decoration-break:clone] [box-decoration-break:clone]">
-            built to be lived in.
-          </em>
+        <h1 className="max-w-[13ch] font-display text-balance text-[clamp(34px,9.6vw,72px)] font-bold leading-[1.06] text-white [text-shadow:0_2px_28px_rgba(0,0,0,0.55)] sm:max-w-[15ch]">
+          Plotted townships designed for real everyday living.
         </h1>
 
-        <p className="max-w-[60ch] text-balance text-[15px] leading-[1.65] text-white [text-shadow:0_1px_12px_rgba(0,0,0,0.5)] sm:text-[17px] sm:leading-[1.75]">
-          Five delivered communities, two active plotted townships, and one corridor you can
-          drive today across Ganaur, Karnal and Kurukshetra.
+        <p className="max-w-[62ch] text-balance text-[15px] leading-[1.68] text-white/92 [text-shadow:0_1px_12px_rgba(0,0,0,0.5)] sm:text-[17px] sm:leading-[1.72]">
+          From Ganaur to Karnal and Kurukshetra, Divine Vision has delivered five
+          communities and is now shaping two approved township destinations on one connected corridor.
         </p>
 
         <div className="mt-1 flex w-full max-w-[340px] flex-col items-stretch justify-center gap-3 sm:mt-2 sm:max-w-none sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
@@ -67,7 +63,7 @@ export function HeroSection({ onBookVisit }: HeroSectionProps) {
           </a>
         </div>
 
-        <div className="mt-2 hidden flex-wrap items-center justify-center gap-x-9 gap-y-3 rounded-2xl border border-white/15 bg-black/45 px-8 py-4 text-white/90 backdrop-blur-sm sm:flex">
+        <div className="mt-2 hidden flex-wrap items-center justify-center gap-x-8 gap-y-3 rounded-lg border border-white/14 bg-black/32 px-7 py-3.5 text-white/90 backdrop-blur-sm sm:flex">
           <span className="text-sm">
             <strong className="font-display font-bold text-white">20</strong> yrs on the corridor
           </span>

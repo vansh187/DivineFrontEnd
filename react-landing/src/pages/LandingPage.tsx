@@ -13,7 +13,7 @@ export function LandingPage() {
 
   return (
     <SmoothScrollProvider>
-      <Navbar onBookVisit={() => setSiteVisitOpen(true)} />
+      <Navbar onBookVisit={() => setSiteVisitOpen(true)} transparentOnTop />
       <HeroSection onBookVisit={() => setSiteVisitOpen(true)} />
       <JourneySection />
       <CostEstimator />
