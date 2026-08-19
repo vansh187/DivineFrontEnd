@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { townshipPricing } from '../data/townshipPricing';
 import * as commissionsApi from '../services/commissionsApi';
 import type { CommissionRecord, CommissionStatus, CommissionSummary } from '../services/commissionsApi';
 import { ChartIcon, RupeeIcon } from './DashboardIcons';
+import { formatCurrencyINR } from '../utils/currency';
 
 interface BrokerCommissionProps {
   token: string;
@@ -37,25 +38,6 @@ const filters: Array<{ value: CommissionFilter; label: string }> = [
   { value: 'rejected', label: 'Rejected' },
 ];
 
-function formatCurrency(amount: number) {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
-
-function fallbackSummary(records: CommissionRecord[]): CommissionSummary {
-  return records.reduce(
-    (sum, record) => ({
-      pending: sum.pending + (record.status === 'pending' ? record.commissionAmount : 0),
-      paid: sum.paid + (record.status === 'paid' ? record.commissionAmount : 0),
-      rejected: sum.rejected + (record.status === 'rejected' ? record.commissionAmount : 0),
-    }),
-    { pending: 0, paid: 0, rejected: 0 },
-  );
-}
-
 export function BrokerCommission({ token, brokerId, onBack }: BrokerCommissionProps) {
   const [records, setRecords] = useState<CommissionRecord[]>([]);
   const [summary, setSummary] = useState<CommissionSummary>({ pending: 0, paid: 0, rejected: 0 });
@@ -78,6 +60,10 @@ export function BrokerCommission({ token, brokerId, onBack }: BrokerCommissionPr
   const commissionAmount =
     Number.isFinite(numericManualCommission) && numericManualCommission > 0 ? numericManualCommission : estimatedCommission;
 
+  // Guards against a slow in-flight request (e.g. from a stale token before
+  // re-login) resolving after a newer one and overwriting fresher data.
+  const loadRequestId = useRef(0);
+
   const loadRecords = useCallback(
     async (options: { quiet?: boolean } = {}) => {
       if (!token || !brokerId) {
@@ -86,18 +72,23 @@ export function BrokerCommission({ token, brokerId, onBack }: BrokerCommissionPr
         return;
       }
 
+      const requestId = ++loadRequestId.current;
       if (options.quiet) setRefreshing(true);
       else setLoading(true);
       setError('');
       try {
         const res = await commissionsApi.listBrokerCommissions(token, brokerId);
+        if (requestId !== loadRequestId.current) return;
         setRecords(res.commissions);
-        setSummary(res.summary ?? fallbackSummary(res.commissions));
+        setSummary(res.summary);
       } catch (err) {
+        if (requestId !== loadRequestId.current) return;
         setError(err instanceof Error ? err.message : 'Could not load commission records.');
       } finally {
-        setLoading(false);
-        setRefreshing(false);
+        if (requestId === loadRequestId.current) {
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
     },
     [brokerId, token],
@@ -248,7 +239,7 @@ export function BrokerCommission({ token, brokerId, onBack }: BrokerCommissionPr
             />
             <div className="rounded-xl border border-hairline bg-bg px-4 py-3">
               <p className="text-xs font-semibold uppercase text-ink-muted">Commission amount</p>
-              <p className="mt-1 font-display text-2xl font-bold text-green">{formatCurrency(commissionAmount)}</p>
+              <p className="mt-1 font-display text-2xl font-bold text-green">{formatCurrencyINR(commissionAmount)}</p>
               <p className="mt-1 text-xs text-ink-muted">New records are saved as paid and cannot be edited after adding.</p>
             </div>
             <button
@@ -286,15 +277,15 @@ export function BrokerCommission({ token, brokerId, onBack }: BrokerCommissionPr
           <div className="mt-5 grid grid-cols-3 gap-3">
             <div className="rounded-xl bg-bg px-3 py-3">
               <p className="text-[11px] font-semibold uppercase text-terracotta">Pending</p>
-              <p className="mt-1 text-sm font-bold text-ink">{formatCurrency(summary.pending)}</p>
+              <p className="mt-1 text-sm font-bold text-ink">{formatCurrencyINR(summary.pending)}</p>
             </div>
             <div className="rounded-xl bg-bg px-3 py-3">
               <p className="text-[11px] font-semibold uppercase text-green">Paid</p>
-              <p className="mt-1 text-sm font-bold text-ink">{formatCurrency(summary.paid)}</p>
+              <p className="mt-1 text-sm font-bold text-ink">{formatCurrencyINR(summary.paid)}</p>
             </div>
             <div className="rounded-xl bg-bg px-3 py-3">
               <p className="text-[11px] font-semibold uppercase text-red-700">Rejected</p>
-              <p className="mt-1 text-sm font-bold text-ink">{formatCurrency(summary.rejected)}</p>
+              <p className="mt-1 text-sm font-bold text-ink">{formatCurrencyINR(summary.rejected)}</p>
             </div>
           </div>
 
@@ -338,7 +329,7 @@ export function BrokerCommission({ token, brokerId, onBack }: BrokerCommissionPr
                     </div>
                     <div>
                       <p className="font-semibold text-ink-muted">Commission price</p>
-                      <p className="mt-0.5 font-bold text-green">{formatCurrency(record.commissionAmount)}</p>
+                      <p className="mt-0.5 font-bold text-green">{formatCurrencyINR(record.commissionAmount)}</p>
                     </div>
                   </div>
                   {record.paidAt || record.rejectedAt ? (

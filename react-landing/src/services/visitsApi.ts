@@ -1,4 +1,4 @@
-import { ApiError, API_BASE_URL } from './authApi';
+import { authedRequest as authedRequestBase } from './authApi';
 
 export interface VisitRecord {
   id: string;
@@ -41,25 +41,8 @@ function messageForVisitsError(status: number, detail: unknown): string {
   return 'Something went wrong with site visits. Please try again.';
 }
 
-async function authedRequest<T>(path: string, token: string, init?: RequestInit): Promise<T> {
-  let res: Response;
-  try {
-    res = await fetch(`${API_BASE_URL}${path}`, {
-      ...init,
-      headers: { Authorization: `Bearer ${token}`, ...(init?.headers ?? {}) },
-    });
-  } catch {
-    throw new ApiError(0, null, 'Could not reach the server. Check your connection and try again.');
-  }
-
-  const data = await res.json().catch(() => null);
-
-  if (!res.ok) {
-    const detail = (data as { detail?: unknown } | null)?.detail;
-    throw new ApiError(res.status, detail, messageForVisitsError(res.status, detail));
-  }
-
-  return data as T;
+function authedRequest<T>(path: string, token: string, init?: RequestInit): Promise<T> {
+  return authedRequestBase<T>(path, token, messageForVisitsError, init);
 }
 
 export function listVisits(token: string): Promise<VisitRecord[]> {

@@ -4,7 +4,7 @@ import type { DocStatus } from '../services/documentStore';
 import { CheckIcon, FileIcon, IconBadge } from './DashboardIcons';
 import type { IconAccent } from './DashboardIcons';
 
-type StatusTone = 'done' | 'pending' | 'neutral' | 'failed';
+export type StatusTone = 'done' | 'pending' | 'neutral' | 'failed';
 export type { IconAccent };
 
 interface TileShellProps {
@@ -52,6 +52,7 @@ interface UploadDocumentTileProps {
   uploading?: boolean;
   accept?: string;
   accent?: IconAccent;
+  extra?: ReactNode;
 }
 
 export function UploadDocumentTile({
@@ -65,6 +66,7 @@ export function UploadDocumentTile({
   uploading = false,
   accept = 'image/*,application/pdf',
   accent,
+  extra,
 }: UploadDocumentTileProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -127,6 +129,7 @@ export function UploadDocumentTile({
           </button>
         )}
       </div>
+      {extra ? <div className="mt-4 border-t border-hairline pt-4">{extra}</div> : null}
     </TileShell>
   );
 }

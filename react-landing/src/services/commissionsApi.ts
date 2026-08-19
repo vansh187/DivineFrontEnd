@@ -1,4 +1,4 @@
-import { ApiError, API_BASE_URL } from './authApi';
+import { authedRequest as authedRequestBase } from './authApi';
 
 export type CommissionStatus = 'pending' | 'paid' | 'rejected';
 export type CommissionTransactionMode = 'cash' | 'booking';
@@ -113,25 +113,8 @@ function messageForCommissionError(status: number, detail: unknown): string {
   return 'Something went wrong with commissions. Please try again.';
 }
 
-async function authedRequest<T>(path: string, token: string, init?: RequestInit): Promise<T> {
-  let res: Response;
-  try {
-    res = await fetch(`${API_BASE_URL}${path}`, {
-      ...init,
-      headers: { Authorization: `Bearer ${token}`, ...(init?.headers ?? {}) },
-    });
-  } catch {
-    throw new ApiError(0, null, messageForCommissionError(0, null));
-  }
-
-  const data = await res.json().catch(() => null);
-
-  if (!res.ok) {
-    const detail = (data as { detail?: unknown } | null)?.detail;
-    throw new ApiError(res.status, detail, messageForCommissionError(res.status, detail));
-  }
-
-  return data as T;
+function authedRequest<T>(path: string, token: string, init?: RequestInit): Promise<T> {
+  return authedRequestBase<T>(path, token, messageForCommissionError, init);
 }
 
 export async function listBrokerCommissions(token: string, brokerId: string): Promise<ListCommissionsResponse> {

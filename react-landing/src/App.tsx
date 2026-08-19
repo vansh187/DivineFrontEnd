@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { LandingPage } from './pages/LandingPage';
 import { CustomerPage } from './pages/CustomerPage';
@@ -13,6 +14,10 @@ import { AppCrashFallback } from './components/AppCrashFallback';
 import { RoleRoute } from './components/RoleRoute';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import type { Role } from './services/authApi';
+
+const CustomerApplicationPage = lazy(() =>
+  import('./pages/CustomerApplicationPage').then((module) => ({ default: module.CustomerApplicationPage })),
+);
 
 const roleHome: Record<Role, string> = {
   customer: '/customer',
@@ -42,6 +47,16 @@ function App() {
               element={
                 <RoleRoute role="customer">
                   <CustomerPage />
+                </RoleRoute>
+              }
+            />
+            <Route
+              path="/customer/application"
+              element={
+                <RoleRoute role="customer">
+                  <Suspense fallback={<div className="min-h-svh bg-bg px-6 pt-28 text-sm font-semibold text-ink">Loading application form...</div>}>
+                    <CustomerApplicationPage />
+                  </Suspense>
                 </RoleRoute>
               }
             />
