@@ -8,7 +8,7 @@ export function JourneyPanel({ stop }: JourneyPanelProps) {
   return (
     <div className="relative grid w-screen flex-none grid-cols-1 md:grid-cols-2">
       <div className="flex flex-col justify-center px-6 py-20 sm:px-12 md:py-0">
-        <div className="max-w-xl rounded-2xl border border-hairline bg-surface/85 p-7 shadow-[0_24px_60px_-32px_rgba(30,77,59,0.35)] backdrop-blur-sm sm:p-9">
+        <div className="max-w-xl rounded-2xl border border-hairline bg-surface/88 p-7 shadow-[0_24px_60px_-32px_rgba(6,31,45,0.32)] backdrop-blur-sm sm:p-9">
           <div className="eyebrow-label mb-4 text-terracotta">{stop.eyebrow}</div>
 
           {stop.bigNumber && (

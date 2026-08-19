@@ -9,7 +9,7 @@ interface ChatTeaserProps {
 
 export function ChatTeaser({ onOpen, onDismiss }: ChatTeaserProps) {
   return (
-    <div className="flex w-[min(calc(100dvw-24px),280px)] items-start gap-2.5 rounded-2xl border border-green/15 bg-surface p-3 shadow-[0_18px_45px_-18px_rgba(30,77,59,0.55)]">
+    <div className="flex w-[min(calc(100dvw-24px),280px)] items-start gap-2.5 rounded-2xl border border-green/15 bg-surface p-3 shadow-[0_18px_45px_-18px_rgba(6,31,45,0.45)]">
       <img
         src={chatbotIcon}
         alt=""

@@ -135,7 +135,7 @@ export function SiteVisitDrawer({ open, onClose }: SiteVisitDrawerProps) {
           <div className="mt-6 grid gap-3">
             <a
               href={contact.phoneHref}
-              className="flex items-center justify-between rounded-lg bg-green px-4 py-4 text-sm font-bold text-white shadow-[0_18px_36px_-20px_rgba(56,142,60,0.75)] transition-all hover:-translate-y-0.5 hover:bg-green-soft"
+              className="flex items-center justify-between rounded-lg bg-green px-4 py-4 text-sm font-bold text-white shadow-[0_18px_36px_-20px_rgba(6,31,45,0.62)] transition-all hover:-translate-y-0.5 hover:bg-green-soft"
             >
               <span>Call sales now</span>
               <span aria-hidden="true" className="text-lg">

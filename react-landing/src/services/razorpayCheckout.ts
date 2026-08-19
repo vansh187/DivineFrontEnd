@@ -86,7 +86,7 @@ export async function openRazorpayCheckout(options: RazorpayCheckoutOptions): Pr
       description: options.description,
       order_id: options.orderId,
       prefill: { email: options.prefillEmail, name: options.prefillName },
-      theme: { color: '#1e4d3b' },
+      theme: { color: '#061f2d' },
       handler: (response) => resolve(response),
       modal: {
         ondismiss: () => reject(new Error('Payment cancelled.')),

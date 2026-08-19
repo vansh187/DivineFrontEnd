@@ -34,7 +34,7 @@ export function ResidencesPage() {
             return (
               <article
                 key={township.id}
-                className="overflow-hidden rounded-lg border border-hairline bg-surface shadow-[0_20px_54px_-34px_rgba(30,77,59,0.38)]"
+                className="overflow-hidden rounded-lg border border-hairline bg-surface shadow-[0_20px_54px_-34px_rgba(6,31,45,0.3)]"
               >
                 <div className="relative aspect-[4/3] overflow-hidden sm:aspect-[16/9]">
                   <img src={township.image.src} alt={township.image.alt} className="h-full w-full object-cover" />

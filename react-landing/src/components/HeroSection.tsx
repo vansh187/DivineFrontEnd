@@ -27,7 +27,7 @@ export function HeroSection({ onBookVisit }: HeroSectionProps) {
         */}
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.58)_0%,rgba(0,0,0,0.26)_42%,rgba(0,0,0,0.72)_100%)]" />
         {/* Vignette reinforces contrast directly behind the centred copy column. */}
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_62%_58%_at_50%_46%,rgba(9,16,11,0.4),transparent_72%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_62%_58%_at_50%_46%,rgba(6,31,45,0.52),transparent_72%)]" />
         {/* Bottom fade blends the hero into the cream section below. */}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[22%] bg-gradient-to-t from-bg via-bg/25 to-transparent" />
       </div>
@@ -51,7 +51,7 @@ export function HeroSection({ onBookVisit }: HeroSectionProps) {
           <button
             type="button"
             onClick={onBookVisit}
-            className="rounded-full bg-green px-5 py-3.5 text-sm font-semibold text-white shadow-[0_16px_40px_-14px_rgba(56,142,60,0.65)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-green-soft hover:shadow-[0_20px_44px_-14px_rgba(56,142,60,0.75)] sm:px-7"
+            className="rounded-full bg-green px-5 py-3.5 text-sm font-semibold text-white shadow-[0_16px_40px_-14px_rgba(6,31,45,0.68)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-green-soft hover:shadow-[0_20px_44px_-14px_rgba(10,49,69,0.72)] sm:px-7"
           >
             Book a site visit
           </button>

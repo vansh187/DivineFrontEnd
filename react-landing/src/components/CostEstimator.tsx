@@ -47,7 +47,7 @@ export function CostEstimator() {
         What a plot actually costs you.
       </h2>
 
-      <div className="mt-10 grid grid-cols-1 overflow-hidden rounded-2xl border border-hairline shadow-[0_30px_80px_-40px_rgba(30,77,59,0.35)] lg:grid-cols-2">
+      <div className="mt-10 grid grid-cols-1 overflow-hidden rounded-2xl border border-hairline shadow-[0_30px_80px_-40px_rgba(6,31,45,0.32)] lg:grid-cols-2">
         {/* Inputs */}
         <div className="bg-surface p-7 sm:p-9">
           <div className="eyebrow-label mb-3 text-ink-muted">Township</div>

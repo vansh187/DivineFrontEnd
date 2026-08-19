@@ -22,7 +22,7 @@ export function Navbar({ onBookVisit, transparentOnTop = false }: NavbarProps) {
       className={`fixed inset-x-0 top-0 z-[90] flex min-w-0 items-center justify-between gap-2 border-b px-3 py-3 transition-all duration-300 sm:gap-3 sm:px-10 sm:py-4 ${
         glass
           ? 'border-white/12 bg-chrome/58 shadow-none backdrop-blur-xl'
-          : 'border-transparent bg-chrome shadow-[0_12px_30px_rgba(43,46,40,0.18)]'
+          : 'border-transparent bg-chrome shadow-[0_12px_30px_rgba(6,31,45,0.26)]'
       }`}
     >
       <a
@@ -51,7 +51,7 @@ export function Navbar({ onBookVisit, transparentOnTop = false }: NavbarProps) {
         <button
           type="button"
           onClick={onBookVisit}
-          className="shrink-0 rounded-full bg-white px-3 py-2 text-[11px] font-semibold text-chrome shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-green hover:text-white hover:shadow-[0_10px_24px_-10px_rgba(56,142,60,0.7)] max-[360px]:hidden sm:px-5 sm:py-2.5 sm:text-xs"
+          className="shrink-0 rounded-full bg-white px-3 py-2 text-[11px] font-semibold text-chrome shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-green hover:text-white hover:shadow-[0_10px_24px_-10px_rgba(6,31,45,0.62)] max-[360px]:hidden sm:px-5 sm:py-2.5 sm:text-xs"
         >
           <span className="sm:hidden">Visit</span>
           <span className="hidden sm:inline">Book a site visit</span>
