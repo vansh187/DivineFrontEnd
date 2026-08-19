@@ -5,7 +5,7 @@ import * as store from '../services/documentStore';
 import type { CustomerDocState } from '../services/documentStore';
 import { generateDocument, getDocument, uploadPanPhoto } from '../services/documentsApi';
 import { ApiError } from '../services/authApi';
-import { blobToDataUrl } from '../services/applicationPdf';
+import { blobToDataUrl, openDataUrl } from '../services/applicationPdf';
 import { townshipPricing } from '../data/townshipPricing';
 import { TileShell, UploadDocumentTile } from './DocumentTile';
 import { AadhaarVerifyTile } from './AadhaarVerifyTile';
@@ -322,7 +322,7 @@ export function CustomerDocuments() {
               {docs.bookingApplication.pdfDataUrl && (
                 <button
                   type="button"
-                  onClick={() => window.open(docs.bookingApplication.pdfDataUrl as string, '_blank', 'noopener')}
+                  onClick={() => openDataUrl(docs.bookingApplication.pdfDataUrl as string)}
                   className="rounded-full border border-hairline px-4 py-2 text-xs font-semibold text-ink transition-colors hover:border-green hover:text-green"
                 >
                   Open application PDF
