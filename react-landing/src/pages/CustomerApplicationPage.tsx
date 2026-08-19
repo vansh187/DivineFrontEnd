@@ -8,7 +8,7 @@ import type { BookingApplicationFormData, CustomerDocState, SignatureStatus } fr
 import { applicationProjects } from '../data/applicationProjects';
 import { uploadGeneratedApplicationPdf } from '../services/documentsApi';
 import { ApiError } from '../services/authApi';
-import { blobToDataUrl, generateApplicationPdf, openDataUrl } from '../services/applicationPdf';
+import { blobToDataUrl, generateApplicationPdf, openDataUrl, openPdfBlob } from '../services/applicationPdf';
 import { createPaymentOrder, recordCashPayment, verifyPayment } from '../services/paymentsApi';
 import { openRazorpayCheckout } from '../services/razorpayCheckout';
 
@@ -429,7 +429,7 @@ export function CustomerApplicationPage() {
             error: null,
           },
         });
-        openDataUrl(pdfDataUrl);
+        openPdfBlob(blob);
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) {
           logout();

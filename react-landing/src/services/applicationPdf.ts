@@ -504,10 +504,22 @@ export function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
+function dataUrlToBlob(dataUrl: string): Blob {
+  const [meta, payload] = dataUrl.split(',');
+  if (!meta || !payload) throw new Error('Could not open generated PDF.');
+  const contentType = meta.match(/^data:([^;]+);base64$/)?.[1] ?? 'application/octet-stream';
+  const binary = window.atob(payload);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: contentType });
+}
+
+export function openPdfBlob(blob: Blob) {
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank', 'noopener');
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 export function openDataUrl(dataUrl: string) {
-  const link = document.createElement('a');
-  link.href = dataUrl;
-  link.target = '_blank';
-  link.rel = 'noopener';
-  link.click();
+  openPdfBlob(dataUrlToBlob(dataUrl));
 }
