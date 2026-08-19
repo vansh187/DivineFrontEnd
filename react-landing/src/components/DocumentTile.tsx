@@ -26,9 +26,9 @@ const toneClass: Record<StatusTone, string> = {
 
 export function TileShell({ icon, title, description, statusLabel, statusTone = 'neutral', accent = 'green', children }: TileShellProps) {
   return (
-    <div className="group relative rounded-2xl border border-hairline bg-surface p-6 shadow-[0_16px_40px_-26px_rgba(30,77,59,0.3)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_26px_50px_-24px_rgba(30,77,59,0.4)]">
+    <div className="group relative rounded-2xl border border-hairline bg-surface p-6 shadow-[0_16px_40px_-26px_rgba(6,31,45,0.24)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_26px_50px_-24px_rgba(6,31,45,0.28)]">
       {statusTone === 'done' && (
-        <span className="absolute right-5 top-5 flex h-7 w-7 items-center justify-center rounded-full bg-green text-white shadow-[0_4px_14px_-2px_rgba(56,142,60,0.65)] ring-2 ring-surface">
+        <span className="absolute right-5 top-5 flex h-7 w-7 items-center justify-center rounded-full bg-green text-white shadow-[0_4px_14px_-2px_rgba(6,31,45,0.56)] ring-2 ring-surface">
           <CheckIcon />
         </span>
       )}

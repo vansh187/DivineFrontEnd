@@ -16,19 +16,19 @@ export type IconAccent = 'chrome' | 'green' | 'green-soft' | 'terracotta';
  * real depth instead of sitting flat on the card. */
 const accentClass: Record<IconAccent, { badge: string; icon: string }> = {
   chrome: {
-    badge: 'bg-gradient-to-br from-chrome/16 via-chrome/6 to-transparent ring-1 ring-chrome/15 shadow-[0_10px_22px_-10px_rgba(30,77,59,0.55)]',
+    badge: 'bg-gradient-to-br from-chrome/16 via-chrome/6 to-transparent ring-1 ring-chrome/15 shadow-[0_10px_22px_-10px_rgba(6,31,45,0.45)]',
     icon: 'text-chrome',
   },
   green: {
-    badge: 'bg-gradient-to-br from-green/20 via-green/7 to-transparent ring-1 ring-green/18 shadow-[0_10px_22px_-10px_rgba(56,142,60,0.5)]',
+    badge: 'bg-gradient-to-br from-green/20 via-green/7 to-transparent ring-1 ring-green/18 shadow-[0_10px_22px_-10px_rgba(6,31,45,0.44)]',
     icon: 'text-green',
   },
   'green-soft': {
-    badge: 'bg-gradient-to-br from-green-soft/22 via-green-soft/8 to-transparent ring-1 ring-green-soft/18 shadow-[0_10px_22px_-10px_rgba(79,166,83,0.5)]',
+    badge: 'bg-gradient-to-br from-green-soft/22 via-green-soft/8 to-transparent ring-1 ring-green-soft/18 shadow-[0_10px_22px_-10px_rgba(10,49,69,0.4)]',
     icon: 'text-green-soft',
   },
   terracotta: {
-    badge: 'bg-gradient-to-br from-terracotta/18 via-terracotta/6 to-transparent ring-1 ring-terracotta/18 shadow-[0_10px_22px_-10px_rgba(192,57,15,0.5)]',
+    badge: 'bg-gradient-to-br from-terracotta/18 via-terracotta/6 to-transparent ring-1 ring-terracotta/18 shadow-[0_10px_22px_-10px_rgba(14,66,88,0.38)]',
     icon: 'text-terracotta',
   },
 };

@@ -506,7 +506,7 @@ export function AuthModal() {
                 <button
                   type="submit"
                   disabled={resetting}
-                  className="mt-1 rounded-full bg-green px-6 py-3 text-sm font-semibold text-white shadow-[0_16px_36px_-14px_rgba(56,142,60,0.65)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-green-soft hover:shadow-[0_20px_40px_-14px_rgba(56,142,60,0.75)] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60 disabled:shadow-none"
+                  className="mt-1 rounded-full bg-green px-6 py-3 text-sm font-semibold text-white shadow-[0_16px_36px_-14px_rgba(6,31,45,0.62)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-green-soft hover:shadow-[0_20px_40px_-14px_rgba(10,49,69,0.68)] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60 disabled:shadow-none"
                 >
                   {resetting ? 'Resetting…' : 'Reset password'}
                 </button>
@@ -605,7 +605,7 @@ export function AuthModal() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="mt-1 rounded-full bg-green px-6 py-3 text-sm font-semibold text-white shadow-[0_16px_36px_-14px_rgba(56,142,60,0.65)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-green-soft hover:shadow-[0_20px_40px_-14px_rgba(56,142,60,0.75)] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60 disabled:shadow-none"
+                  className="mt-1 rounded-full bg-green px-6 py-3 text-sm font-semibold text-white shadow-[0_16px_36px_-14px_rgba(6,31,45,0.62)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-green-soft hover:shadow-[0_20px_40px_-14px_rgba(10,49,69,0.68)] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-60 disabled:shadow-none"
                 >
                   {submitting ? 'Please wait…' : isSignup ? 'Create account' : 'Sign in'}
                 </button>

@@ -7,40 +7,21 @@ export function DivineVisionLogo({ variant = 'nav' }: DivineVisionLogoProps) {
 
   return (
     <span
-      className={`group/logo relative flex shrink-0 items-center overflow-hidden rounded-2xl border border-terracotta-light/25 bg-bg text-left shadow-[0_14px_36px_-24px_rgba(0,0,0,0.75)] ring-1 ring-white/15 ${
+      className={`relative flex shrink-0 items-center justify-center overflow-hidden border border-concrete-grey/35 bg-white shadow-[0_12px_28px_-22px_rgba(0,0,0,0.75)] ${
         isFooter
-          ? 'h-16 w-[238px] px-2.5'
-          : 'h-11 w-[clamp(148px,43vw,184px)] rounded-xl px-1.5 sm:h-[52px] sm:w-[198px] sm:rounded-2xl sm:px-2'
+          ? 'h-[72px] w-[280px] max-w-full px-4'
+          : 'h-11 w-[clamp(166px,45vw,216px)] px-3 sm:h-[54px] sm:w-[248px] sm:px-4'
       }`}
     >
-      <span className="pointer-events-none absolute -left-5 top-1/2 h-14 w-14 -translate-y-1/2 rounded-full bg-green/9" />
-      <span className="pointer-events-none absolute -right-3 -top-4 h-12 w-12 rounded-full bg-terracotta-light/14" />
-      <span className="pointer-events-none absolute bottom-1.5 left-4 h-0.5 w-12 rounded-full bg-green/30" />
-      <span className="pointer-events-none absolute bottom-1.5 left-[66px] h-0.5 w-5 rounded-full bg-terracotta-light/50" />
-      <span className="relative flex w-full min-w-0 flex-col items-center text-center">
-        <span className="flex items-baseline justify-center gap-1.5">
-          <span
-            className={`font-display font-bold leading-none text-green [text-shadow:0_1px_0_rgba(255,255,255,0.55)] ${
-            isFooter ? 'text-[22px]' : 'text-[clamp(15px,4.2vw,18.5px)] sm:text-[20px]'
-            }`}
-          >
-            Divine
-          </span>
-          <span
-            className={`font-display font-bold leading-none text-chrome [text-shadow:0_1px_0_rgba(255,255,255,0.55)] ${
-            isFooter ? 'text-[22px]' : 'text-[clamp(15px,4.2vw,18.5px)] sm:text-[20px]'
-            }`}
-          >
-            Vision
-          </span>
-        </span>
-        <span
-          className={`mt-1 block whitespace-nowrap font-semibold leading-none text-terracotta ${
-            isFooter ? 'text-[9px]' : 'text-[clamp(5.4px,1.55vw,6.75px)] sm:text-[7.25px]'
-          }`}
-        >
-          Elegant, Nature-Inspired, Community-Focused
-        </span>
+      <span
+        aria-hidden="true"
+        className={`block whitespace-nowrap font-display font-bold uppercase leading-none text-chrome ${
+          isFooter
+            ? 'text-[31px] tracking-[0.12em]'
+            : 'text-[clamp(19px,5.05vw,25px)] tracking-[0.085em] sm:text-[28px] sm:tracking-[0.105em]'
+        }`}
+      >
+        Divine Vision
       </span>
     </span>
   );

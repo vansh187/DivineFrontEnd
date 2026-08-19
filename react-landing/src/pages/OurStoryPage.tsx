@@ -69,7 +69,7 @@ export function OurStoryPage() {
       <main className="bg-bg pb-20">
         <section className="relative overflow-hidden border-b border-hairline bg-bg px-4 pb-10 pt-24 text-ink sm:px-10 sm:pb-12 sm:pt-28">
           <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,#ffffff_0%,#f5f2ea_58%,#ece7d9_100%)]" />
-          <div className="pointer-events-none absolute inset-0 opacity-[0.45] [background-image:linear-gradient(rgba(30,77,59,0.055)_1px,transparent_1px),linear-gradient(90deg,rgba(30,77,59,0.055)_1px,transparent_1px)] [background-size:88px_88px]" />
+          <div className="pointer-events-none absolute inset-0 opacity-[0.45] [background-image:linear-gradient(rgba(6,31,45,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(6,31,45,0.06)_1px,transparent_1px)] [background-size:88px_88px]" />
           <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-chrome" />
 
           <div className="relative z-10 mx-auto grid max-w-7xl gap-8 lg:grid-cols-[minmax(340px,0.68fr)_minmax(580px,1.32fr)] lg:items-start">
@@ -93,7 +93,7 @@ export function OurStoryPage() {
                 neighbourhood experience that can support real everyday life, not only a promise
                 on paper.
               </p>
-              <div className="mt-7 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-hairline bg-hairline shadow-[0_22px_54px_-38px_rgba(30,77,59,0.45)]">
+              <div className="mt-7 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-hairline bg-hairline shadow-[0_22px_54px_-38px_rgba(6,31,45,0.34)]">
                 {[
                   ['20+', 'years'],
                   ['5', 'delivered'],
@@ -108,7 +108,7 @@ export function OurStoryPage() {
             </div>
 
             <div className="relative mx-auto flex w-full max-w-4xl flex-col lg:pt-2">
-              <div className="relative overflow-hidden rounded-xl border border-hairline bg-black shadow-[0_24px_64px_-44px_rgba(30,77,59,0.55)]">
+              <div className="relative overflow-hidden rounded-xl border border-hairline bg-black shadow-[0_24px_64px_-44px_rgba(6,31,45,0.42)]">
                 <video
                   ref={videoRef}
                   className="block aspect-video h-auto w-full object-contain"
@@ -131,7 +131,7 @@ export function OurStoryPage() {
                   {muted ? <SpeakerMutedIcon /> : <SpeakerOnIcon />}
                 </button>
               </div>
-              <div className="mt-4 grid gap-4 rounded-lg border border-hairline bg-surface p-5 shadow-[0_18px_48px_-36px_rgba(30,77,59,0.35)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+              <div className="mt-4 grid gap-4 rounded-lg border border-hairline bg-surface p-5 shadow-[0_18px_48px_-36px_rgba(6,31,45,0.28)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
                 <div>
                   <span className="eyebrow-label text-chrome">Leadership Message</span>
                   <p className="mt-2 max-w-3xl text-sm leading-[1.75] text-ink-muted">
@@ -142,7 +142,7 @@ export function OurStoryPage() {
                 </div>
                 <span className="text-xs font-semibold text-ink-muted">Divine Vision Infratech Pvt. Ltd.</span>
               </div>
-              <div className="mt-4 rounded-lg border border-hairline bg-surface p-5 shadow-[0_18px_48px_-36px_rgba(30,77,59,0.35)]">
+              <div className="mt-4 rounded-lg border border-hairline bg-surface p-5 shadow-[0_18px_48px_-36px_rgba(6,31,45,0.28)]">
                 <p className="eyebrow-label text-terracotta">Today</p>
                 <h2 className="mt-2 font-display text-2xl font-bold leading-tight text-ink">
                   The next chapter is more refined, more connected and more deliberate.

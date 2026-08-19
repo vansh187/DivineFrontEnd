@@ -188,7 +188,7 @@ export function BrokerCommission({ token, brokerId, onBack }: BrokerCommissionPr
       ) : null}
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(320px,1.05fr)]">
-        <div className="rounded-2xl border border-hairline bg-surface p-6 shadow-[0_16px_40px_-26px_rgba(30,77,59,0.3)]">
+        <div className="rounded-2xl border border-hairline bg-surface p-6 shadow-[0_16px_40px_-26px_rgba(6,31,45,0.24)]">
           <div className="flex items-start gap-4">
             <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-green/10 text-green">
               <RupeeIcon />
@@ -262,7 +262,7 @@ export function BrokerCommission({ token, brokerId, onBack }: BrokerCommissionPr
           </div>
         </div>
 
-        <div className="rounded-2xl border border-hairline bg-surface p-6 shadow-[0_16px_40px_-26px_rgba(30,77,59,0.3)]">
+        <div className="rounded-2xl border border-hairline bg-surface p-6 shadow-[0_16px_40px_-26px_rgba(6,31,45,0.24)]">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex items-start gap-4">
               <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-chrome/10 text-chrome">

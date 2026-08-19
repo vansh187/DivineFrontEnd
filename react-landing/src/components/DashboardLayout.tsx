@@ -52,7 +52,7 @@ interface PlaceholderCardProps {
 
 export function PlaceholderCard({ icon, title, description, accent = 'chrome', actionLabel, onAction }: PlaceholderCardProps) {
   return (
-    <div className="group relative rounded-2xl border border-hairline bg-surface p-6 shadow-[0_16px_40px_-26px_rgba(30,77,59,0.3)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_26px_50px_-24px_rgba(30,77,59,0.4)]">
+    <div className="group relative rounded-2xl border border-hairline bg-surface p-6 shadow-[0_16px_40px_-26px_rgba(6,31,45,0.24)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_26px_50px_-24px_rgba(6,31,45,0.28)]">
       <IconBadge icon={icon} accent={accent} interactive />
       <h3 className="mt-4 font-display text-lg font-bold text-ink">{title}</h3>
       <p className="mt-1.5 text-sm leading-[1.6] text-ink-muted">{description}</p>
