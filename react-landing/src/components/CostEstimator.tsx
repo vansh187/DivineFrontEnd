@@ -1,17 +1,12 @@
 import { useState } from 'react';
 import { townshipPricing } from '../data/townshipPricing';
 import { contact } from '../data/contact';
+import { formatCurrencyINR } from '../utils/currency';
 
 const DOWN_PAYMENT_MIN = 10;
 const DOWN_PAYMENT_MAX = 50;
 const TENURE_MIN = 12;
 const TENURE_MAX = 60;
-
-const currency = new Intl.NumberFormat('en-IN', {
-  style: 'currency',
-  currency: 'INR',
-  maximumFractionDigits: 0,
-});
 
 function sliderFill(value: number, min: number, max: number) {
   const pct = ((value - min) / (max - min)) * 100;
@@ -122,24 +117,24 @@ export function CostEstimator() {
           <div>
             <p className="eyebrow-label text-terracotta-light">Indicative total</p>
             <p className="mt-2 font-display text-[clamp(34px,4.5vw,52px)] font-bold leading-none text-white">
-              {currency.format(total)}
+              {formatCurrencyINR(total)}
             </p>
             <p className="mt-2 text-sm text-white/60">
-              {currency.format(township.ratePerSqYd)} per sq yd
+              {formatCurrencyINR(township.ratePerSqYd)} per sq yd
             </p>
 
             <div className="mt-7 divide-y divide-white/10 border-y border-white/10">
               <div className="flex items-center justify-between py-3.5">
                 <span className="text-sm text-white/70">Booking amount</span>
-                <span className="text-sm font-semibold text-white">{currency.format(booking)}</span>
+                <span className="text-sm font-semibold text-white">{formatCurrencyINR(booking)}</span>
               </div>
               <div className="flex items-center justify-between py-3.5">
                 <span className="text-sm text-white/70">Balance</span>
-                <span className="text-sm font-semibold text-white">{currency.format(balance)}</span>
+                <span className="text-sm font-semibold text-white">{formatCurrencyINR(balance)}</span>
               </div>
               <div className="flex items-center justify-between py-3.5">
                 <span className="text-sm text-white/70">Monthly instalment</span>
-                <span className="text-sm font-semibold text-white">{currency.format(monthly)}</span>
+                <span className="text-sm font-semibold text-white">{formatCurrencyINR(monthly)}</span>
               </div>
             </div>
 

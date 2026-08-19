@@ -115,3 +115,106 @@ svg {
   border-radius: 999px;
   background: transparent;
 }
+
+.application-notebook {
+  position: relative;
+  perspective: 1800px;
+}
+
+.application-notebook > * {
+  display: none;
+}
+
+.application-notebook > *::before {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 18px;
+  background: linear-gradient(90deg, rgba(6, 31, 45, 0.12), transparent);
+}
+
+.application-notebook[data-page='0'] > :nth-child(1),
+.application-notebook[data-page='1'] > :nth-child(2),
+.application-notebook[data-page='2'] > :nth-child(3),
+.application-notebook[data-page='3'] > :nth-child(4),
+.application-notebook[data-page='4'] > :nth-child(5),
+.application-notebook[data-page='5'] > :nth-child(6),
+.application-notebook[data-page='6'] > :nth-child(7),
+.application-notebook[data-page='7'] > :nth-child(8),
+.application-notebook[data-page='8'] > :nth-child(9),
+.application-notebook[data-page='9'] > :nth-child(10),
+.application-notebook[data-page='10'] > :nth-child(11),
+.application-notebook[data-page='11'] > :nth-child(12),
+.application-notebook[data-page='12'] > :nth-child(13) {
+  display: block;
+  min-height: min(72svh, 760px);
+  transform-origin: left center;
+  backface-visibility: hidden;
+  will-change: transform, opacity;
+}
+
+.application-notebook.notebook-forward[data-page='0'] > :nth-child(1),
+.application-notebook.notebook-forward[data-page='1'] > :nth-child(2),
+.application-notebook.notebook-forward[data-page='2'] > :nth-child(3),
+.application-notebook.notebook-forward[data-page='3'] > :nth-child(4),
+.application-notebook.notebook-forward[data-page='4'] > :nth-child(5),
+.application-notebook.notebook-forward[data-page='5'] > :nth-child(6),
+.application-notebook.notebook-forward[data-page='6'] > :nth-child(7),
+.application-notebook.notebook-forward[data-page='7'] > :nth-child(8),
+.application-notebook.notebook-forward[data-page='8'] > :nth-child(9),
+.application-notebook.notebook-forward[data-page='9'] > :nth-child(10),
+.application-notebook.notebook-forward[data-page='10'] > :nth-child(11),
+.application-notebook.notebook-forward[data-page='11'] > :nth-child(12),
+.application-notebook.notebook-forward[data-page='12'] > :nth-child(13) {
+  animation: notebook-page-forward 420ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.application-notebook.notebook-back[data-page='0'] > :nth-child(1),
+.application-notebook.notebook-back[data-page='1'] > :nth-child(2),
+.application-notebook.notebook-back[data-page='2'] > :nth-child(3),
+.application-notebook.notebook-back[data-page='3'] > :nth-child(4),
+.application-notebook.notebook-back[data-page='4'] > :nth-child(5),
+.application-notebook.notebook-back[data-page='5'] > :nth-child(6),
+.application-notebook.notebook-back[data-page='6'] > :nth-child(7),
+.application-notebook.notebook-back[data-page='7'] > :nth-child(8),
+.application-notebook.notebook-back[data-page='8'] > :nth-child(9),
+.application-notebook.notebook-back[data-page='9'] > :nth-child(10),
+.application-notebook.notebook-back[data-page='10'] > :nth-child(11),
+.application-notebook.notebook-back[data-page='11'] > :nth-child(12),
+.application-notebook.notebook-back[data-page='12'] > :nth-child(13) {
+  animation: notebook-page-back 420ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+@keyframes notebook-page-forward {
+  from {
+    opacity: 0;
+    transform: rotateY(-16deg) translateX(18px);
+    box-shadow: -28px 18px 46px -38px rgba(6, 31, 45, 0.55);
+  }
+  to {
+    opacity: 1;
+    transform: rotateY(0deg) translateX(0);
+    box-shadow: 0 18px 44px -32px rgba(6, 31, 45, 0.28);
+  }
+}
+
+@keyframes notebook-page-back {
+  from {
+    opacity: 0;
+    transform: rotateY(12deg) translateX(-14px);
+    box-shadow: 28px 18px 46px -38px rgba(6, 31, 45, 0.55);
+  }
+  to {
+    opacity: 1;
+    transform: rotateY(0deg) translateX(0);
+    box-shadow: 0 18px 44px -32px rgba(6, 31, 45, 0.28);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .application-notebook.notebook-forward[data-page] > *,
+  .application-notebook.notebook-back[data-page] > * {
+    animation: none;
+  }
+}

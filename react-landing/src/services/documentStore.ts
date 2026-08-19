@@ -21,9 +21,9 @@ export interface DocStatus {
   error: string | null;
 }
 
-/** Aadhaar now verifies against the real UIDAI-backed /kyc/aadhaar/* API —
- * a single request either verifies or fails outright, so unlike DocStatus
- * there's no "uploaded, pending verification" middle state. */
+/** Aadhaar verifies against the real UIDAI-backed /kyc/aadhaar/* API, but a
+ * failed attempt is only a pending KYC state. Customers can still upload
+ * documents and pay while support or the customer retries verification later. */
 export interface AadhaarStatus {
   verified: boolean;
   verifiedAt: string | null;
@@ -76,6 +76,7 @@ export interface GeneratedDocStatus {
  * after the backend confirms it (Razorpay's signature check, or the cash-entry response
  * itself since cash settles immediately), never from client-side say-so. */
 export interface PaymentStatus {
+  paymentId: string | null;
   amount: number | null;
   status: 'created' | 'paid' | 'failed' | null;
   method: 'razorpay' | 'cash' | null;
@@ -86,7 +87,191 @@ export interface PaymentStatus {
 }
 
 export function emptyPaymentStatus(): PaymentStatus {
-  return { amount: null, status: null, method: null, razorpayOrderId: null, razorpayPaymentId: null, paidAt: null, error: null };
+  return { paymentId: null, amount: null, status: null, method: null, razorpayOrderId: null, razorpayPaymentId: null, paidAt: null, error: null };
+}
+
+export interface SignatureStatus {
+  fileName: string | null;
+  fileSize: number | null;
+  uploadedAt: string | null;
+  dataUrl: string | null;
+  error: string | null;
+}
+
+export function emptySignatureStatus(): SignatureStatus {
+  return { fileName: null, fileSize: null, uploadedAt: null, dataUrl: null, error: null };
+}
+
+export interface BookingApplicationFormData {
+  projectId: '' | 'ops-divine-greens' | 'suraksha-enclave';
+  applicantName: string;
+  guardianName: string;
+  dob: string;
+  gender: string;
+  pan: string;
+  email: string;
+  aadhaar: string;
+  phone: string;
+  mobile: string;
+  residentialStatus: string;
+  permanentAddress: string;
+  correspondenceAddress: string;
+  coApplicantName: string;
+  coApplicantGuardianName: string;
+  coApplicantDob: string;
+  coApplicantGender: string;
+  coApplicantPan: string;
+  coApplicantAadhaar: string;
+  coApplicantPhone: string;
+  coApplicantMobile: string;
+  coApplicantEmail: string;
+  coApplicantResidentialStatus: string;
+  coApplicantPermanentAddress: string;
+  coApplicantCorrespondenceAddress: string;
+  unitNo: string;
+  plotAreaSqYd: string;
+  plotAreaSqMtr: string;
+  unitType: string;
+  ratePerSqYd: string;
+  basicSalePrice: string;
+  plcRatePerSqYd: string;
+  plcPrice: string;
+  totalAmount: string;
+  amountInFigure: string;
+  bookingAmount: string;
+  bookingAmountWords: string;
+  paymentMode: string;
+  bookingMode: string;
+  employeeName: string;
+  employeeCode: string;
+  chequeNo: string;
+  chequeDate: string;
+  bankName: string;
+  channelPartnerName: string;
+  channelPartnerCode: string;
+  channelPartnerAddress: string;
+  channelPartnerMobile: string;
+  channelPartnerAuthorizedSignatory: string;
+  channelPartnerFirmName: string;
+  channelPartnerDeclarationAccepted: boolean;
+  pricingNotesAccepted: boolean;
+  applicantDeclarationAccepted: boolean;
+  termsAccepted: boolean;
+  paymentPlanAccepted: boolean;
+  form60FullNameAddress: string;
+  form60TransactionParticulars: string;
+  form60TransactionAmount: string;
+  form60AssessedToTax: string;
+  form60WardCircleRange: string;
+  form60NoPanReason: string;
+  form60AddressProofDocument: string;
+  form60VerificationName: string;
+  form60VerificationDate: string;
+  form60VerificationDay: string;
+  form60VerificationPlace: string;
+  form60Accepted: boolean;
+  checklistAccepted: boolean;
+  applicationDate: string;
+  place: string;
+}
+
+export interface BookingApplicationStatus {
+  formData: BookingApplicationFormData;
+  generatedAt: string | null;
+  pdfFileName: string | null;
+  pdfDataUrl: string | null;
+  backendDocumentId: string | null;
+  signedUrl: string | null;
+  signedUrlExpiresAt: number | null;
+  error: string | null;
+}
+
+export function emptyBookingApplicationFormData(): BookingApplicationFormData {
+  return {
+    projectId: '',
+    applicantName: '',
+    guardianName: '',
+    dob: '',
+    gender: '',
+    pan: '',
+    email: '',
+    aadhaar: '',
+    phone: '',
+    mobile: '',
+    residentialStatus: '',
+    permanentAddress: '',
+    correspondenceAddress: '',
+    coApplicantName: '',
+    coApplicantGuardianName: '',
+    coApplicantDob: '',
+    coApplicantGender: '',
+    coApplicantPan: '',
+    coApplicantAadhaar: '',
+    coApplicantPhone: '',
+    coApplicantMobile: '',
+    coApplicantEmail: '',
+    coApplicantResidentialStatus: '',
+    coApplicantPermanentAddress: '',
+    coApplicantCorrespondenceAddress: '',
+    unitNo: '',
+    plotAreaSqYd: '',
+    plotAreaSqMtr: '',
+    unitType: '',
+    ratePerSqYd: '',
+    basicSalePrice: '',
+    plcRatePerSqYd: '',
+    plcPrice: '',
+    totalAmount: '',
+    amountInFigure: '',
+    bookingAmount: '',
+    bookingAmountWords: '',
+    paymentMode: '',
+    bookingMode: '',
+    employeeName: '',
+    employeeCode: '',
+    chequeNo: '',
+    chequeDate: '',
+    bankName: '',
+    channelPartnerName: '',
+    channelPartnerCode: '',
+    channelPartnerAddress: '',
+    channelPartnerMobile: '',
+    channelPartnerAuthorizedSignatory: '',
+    channelPartnerFirmName: '',
+    channelPartnerDeclarationAccepted: false,
+    pricingNotesAccepted: false,
+    applicantDeclarationAccepted: false,
+    termsAccepted: false,
+    paymentPlanAccepted: false,
+    form60FullNameAddress: '',
+    form60TransactionParticulars: '',
+    form60TransactionAmount: '',
+    form60AssessedToTax: '',
+    form60WardCircleRange: '',
+    form60NoPanReason: '',
+    form60AddressProofDocument: '',
+    form60VerificationName: '',
+    form60VerificationDate: '',
+    form60VerificationDay: '',
+    form60VerificationPlace: '',
+    form60Accepted: false,
+    checklistAccepted: false,
+    applicationDate: '',
+    place: '',
+  };
+}
+
+export function emptyBookingApplicationStatus(): BookingApplicationStatus {
+  return {
+    formData: emptyBookingApplicationFormData(),
+    generatedAt: null,
+    pdfFileName: null,
+    pdfDataUrl: null,
+    backendDocumentId: null,
+    signedUrl: null,
+    signedUrlExpiresAt: null,
+    error: null,
+  };
 }
 
 export interface CustomerDocState {
@@ -94,7 +279,10 @@ export interface CustomerDocState {
   aadharFront: AadhaarPhotoStatus;
   aadharBack: AadhaarPhotoStatus;
   pan: DocStatus;
+  applicantSignature: SignatureStatus;
+  coApplicantSignature: SignatureStatus;
   generatedDoc: GeneratedDocStatus;
+  bookingApplication: BookingApplicationStatus;
   payment: PaymentStatus;
 }
 
@@ -165,7 +353,9 @@ export function loadCustomerDocs(email: string): CustomerDocState {
     if (!raw) throw new Error('none');
     // Partial<> because state cached before aadharFront/aadharBack existed won't have
     // them - back-fill defaults rather than trust the cast and hand back `undefined`.
-    const parsed = JSON.parse(raw) as Partial<CustomerDocState>;
+    // `signature` is a legacy key from before applicant/co-applicant signatures were
+    // split out - fold it into applicantSignature for anyone with an old cached blob.
+    const parsed = JSON.parse(raw) as Partial<CustomerDocState> & { signature?: SignatureStatus };
     return {
       aadhar: parsed.aadhar ?? emptyAadhaarStatus(),
       aadharFront: parsed.aadharFront ?? emptyAadhaarPhotoStatus(),
@@ -173,7 +363,17 @@ export function loadCustomerDocs(email: string): CustomerDocState {
       // Spread over the defaults (not just `??`) so state cached before documentId/
       // signedUrl/error existed on DocStatus still back-fills those specific fields.
       pan: { ...emptyDocStatus(), ...parsed.pan },
+      applicantSignature: { ...emptySignatureStatus(), ...(parsed.applicantSignature ?? parsed.signature) },
+      coApplicantSignature: { ...emptySignatureStatus(), ...parsed.coApplicantSignature },
       generatedDoc: parsed.generatedDoc ?? emptyGeneratedDocStatus(),
+      bookingApplication: {
+        ...emptyBookingApplicationStatus(),
+        ...parsed.bookingApplication,
+        formData: {
+          ...emptyBookingApplicationFormData(),
+          ...parsed.bookingApplication?.formData,
+        },
+      },
       payment: { ...emptyPaymentStatus(), ...parsed.payment },
     };
   } catch {
@@ -182,7 +382,10 @@ export function loadCustomerDocs(email: string): CustomerDocState {
       aadharFront: emptyAadhaarPhotoStatus(),
       aadharBack: emptyAadhaarPhotoStatus(),
       pan: emptyDocStatus(),
+      applicantSignature: emptySignatureStatus(),
+      coApplicantSignature: emptySignatureStatus(),
       generatedDoc: emptyGeneratedDocStatus(),
+      bookingApplication: emptyBookingApplicationStatus(),
       payment: emptyPaymentStatus(),
     };
   }

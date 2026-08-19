@@ -1,16 +1,18 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth, getDisplayName } from '../hooks/useAuth';
 import * as store from '../services/documentStore';
 import type { CustomerDocState } from '../services/documentStore';
 import { generateDocument, getDocument, uploadPanPhoto } from '../services/documentsApi';
 import { ApiError } from '../services/authApi';
+import { blobToDataUrl } from '../services/applicationPdf';
 import { townshipPricing } from '../data/townshipPricing';
 import { TileShell, UploadDocumentTile } from './DocumentTile';
 import { AadhaarVerifyTile } from './AadhaarVerifyTile';
-import { PaymentTile } from './PaymentTile';
 import { CardIcon, FileIcon } from './DashboardIcons';
 
 export function CustomerDocuments() {
+  const navigate = useNavigate();
   const { session, logout, openModal } = useAuth();
   const email = session?.email ?? 'anonymous';
 
@@ -75,6 +77,31 @@ export function CustomerDocuments() {
       });
       setVerifyingPan(false);
     }, 1100);
+  };
+
+  const handleSignatureUpload = async (kind: 'applicant' | 'coApplicant', file: File) => {
+    const key = kind === 'applicant' ? 'applicantSignature' : 'coApplicantSignature';
+    try {
+      const dataUrl = await blobToDataUrl(file);
+      persist({
+        ...docs,
+        [key]: {
+          fileName: file.name,
+          fileSize: file.size,
+          uploadedAt: new Date().toISOString(),
+          dataUrl,
+          error: null,
+        },
+      });
+    } catch (err) {
+      persist({
+        ...docs,
+        [key]: {
+          ...docs[key],
+          error: err instanceof Error ? err.message : 'Could not read signature image.',
+        },
+      });
+    }
   };
 
   // "Generate documents" tile — its own small applicant-details form.
@@ -196,9 +223,8 @@ export function CustomerDocuments() {
     <section className="mt-14">
       <p className="eyebrow-label text-terracotta">Document upload</p>
       <h2 className="mt-2 font-display text-2xl font-bold text-ink sm:text-3xl">Aadhar, PAN &amp; document generation</h2>
-      <p className="mt-2 max-w-[60ch] text-sm leading-[1.6] text-ink-muted">
-        Verify your Aadhaar with UIDAI, upload your PAN card, and generate your plot booking application as a
-        real PDF. PAN verification and signature checks are still simulated pending that part of the backend.
+      <p className="mt-2 max-w-[64ch] text-sm leading-[1.6] text-ink-muted">
+        Aadhaar verification, Aadhaar photo upload, PAN upload, document generation, and signature checks can be completed later if verification is pending.
       </p>
 
       <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -219,21 +245,63 @@ export function CustomerDocuments() {
         <UploadDocumentTile
           icon={<CardIcon />}
           accent="terracotta"
-          title="PAN card"
-          description="Upload a clear photo of your PAN card."
+          title="PAN card & signatures"
+          description="Upload a clear PAN card photo plus first applicant and co-applicant signatures for the booking application."
           status={docs.pan}
           onUpload={handlePanUpload}
           onVerify={handlePanVerify}
           verifying={verifyingPan}
           uploading={uploadingPan}
           accept="image/jpeg,image/png"
+          extra={
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-semibold text-ink">First applicant signature</p>
+              <input
+                type="file"
+                accept="image/jpeg,image/png"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void handleSignatureUpload('applicant', file);
+                  event.target.value = '';
+                }}
+                className="text-xs text-ink-muted file:mr-3 file:rounded-full file:border-0 file:bg-green file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white"
+              />
+              {docs.applicantSignature.fileName && (
+                <span className="text-[11px] font-semibold text-green">Uploaded - {docs.applicantSignature.fileName}</span>
+              )}
+              {docs.applicantSignature.error && (
+                <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                  {docs.applicantSignature.error}
+                </p>
+              )}
+              <p className="mt-2 text-xs font-semibold text-ink">Co-applicant signature</p>
+              <input
+                type="file"
+                accept="image/jpeg,image/png"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void handleSignatureUpload('coApplicant', file);
+                  event.target.value = '';
+                }}
+                className="text-xs text-ink-muted file:mr-3 file:rounded-full file:border-0 file:bg-green file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white"
+              />
+              {docs.coApplicantSignature.fileName && (
+                <span className="text-[11px] font-semibold text-green">Uploaded - {docs.coApplicantSignature.fileName}</span>
+              )}
+              {docs.coApplicantSignature.error && (
+                <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                  {docs.coApplicantSignature.error}
+                </p>
+              )}
+            </div>
+          }
         />
 
         <TileShell
           icon={<FileIcon />}
           accent="green"
           title="Document generation"
-          description="Generate your booking application as a PDF — it includes your Aadhaar and PAN photos, then verify your signature."
+          description="Fill the project-specific booking application form, then generate the signed PDF packet."
           statusLabel={genStatusLabel}
           statusTone={genStatusTone}
         >
@@ -244,6 +312,22 @@ export function CustomerDocuments() {
           )}
           {!formOpen ? (
             <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => navigate('/customer/application')}
+                className="rounded-full bg-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft"
+              >
+                Fill application
+              </button>
+              {docs.bookingApplication.pdfDataUrl && (
+                <button
+                  type="button"
+                  onClick={() => window.open(docs.bookingApplication.pdfDataUrl as string, '_blank', 'noopener')}
+                  className="rounded-full border border-hairline px-4 py-2 text-xs font-semibold text-ink transition-colors hover:border-green hover:text-green"
+                >
+                  Open application PDF
+                </button>
+              )}
               {docs.generatedDoc.generated && (
                 <button
                   type="button"
@@ -258,7 +342,7 @@ export function CustomerDocuments() {
                 type="button"
                 onClick={() => setFormOpen(true)}
                 disabled={!documentsReady}
-                className="rounded-full border border-hairline px-4 py-2 text-xs font-semibold text-ink transition-colors hover:border-green hover:text-green disabled:cursor-not-allowed disabled:opacity-60"
+                className="hidden rounded-full border border-hairline px-4 py-2 text-xs font-semibold text-ink transition-colors hover:border-green hover:text-green disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {docs.generatedDoc.generated ? 'Generate again' : 'Fill applicant details'}
               </button>
@@ -339,17 +423,6 @@ export function CustomerDocuments() {
           )}
         </TileShell>
 
-        <PaymentTile
-          token={session?.token ?? ''}
-          email={session?.email ?? ''}
-          name={applicantName || (session ? getDisplayName(session) : '')}
-          status={docs.payment}
-          onChange={(next) => persist({ ...docs, payment: next })}
-          onSessionExpired={() => {
-            logout();
-            openModal('signin', 'customer');
-          }}
-        />
       </div>
     </section>
   );

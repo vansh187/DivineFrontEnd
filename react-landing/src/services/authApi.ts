@@ -141,6 +141,35 @@ export function resetPassword(_role: Role, _input: ResetPasswordInput): Promise<
   return new Promise((resolve) => window.setTimeout(resolve, 900));
 }
 
+// Shared by the other service modules (documentsApi, commissionsApi, paymentsApi,
+// visitsApi) for bearer-authed calls — each supplies its own status/detail -> message
+// mapping since the meaning of a given status code differs per endpoint family.
+export async function authedRequest<T>(
+  path: string,
+  token: string,
+  messageForError: (status: number, detail: unknown) => string,
+  init?: RequestInit,
+): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      headers: { Authorization: `Bearer ${token}`, ...(init?.headers ?? {}) },
+    });
+  } catch {
+    throw new ApiError(0, null, messageForError(0, null));
+  }
+
+  const data = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    const detail = (data as { detail?: unknown } | null)?.detail;
+    throw new ApiError(res.status, detail, messageForError(res.status, detail));
+  }
+
+  return data as T;
+}
+
 export function decodeJwtClaims(token: string): JwtClaims | null {
   try {
     const payload = token.split('.')[1];

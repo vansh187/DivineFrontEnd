@@ -6,6 +6,7 @@ import type { AadhaarPhotoSide } from '../services/documentsApi';
 import { ApiError } from '../services/authApi';
 import type { AadhaarStatus, AadhaarPhotoStatus } from '../services/documentStore';
 import { TileShell } from './DocumentTile';
+import type { StatusTone } from './DocumentTile';
 import { IdCardIcon } from './DashboardIcons';
 
 function failureMessage(reason: string | null): string {
@@ -123,8 +124,8 @@ export function AadhaarVerifyTile({
   const [backFile, setBackFile] = useState<File | null>(null);
   const [uploadingBack, setUploadingBack] = useState(false);
 
-  const statusLabel = status.verified ? 'Verified' : 'Not verified';
-  const statusTone = status.verified ? 'done' : 'failed';
+  const statusLabel = status.verified ? 'Verified' : status.lastAttemptError ? 'Verification failed' : 'Pending verification';
+  const statusTone: StatusTone = status.verified ? 'done' : status.lastAttemptError ? 'failed' : 'pending';
 
   const describeError = (err: unknown): string => {
     if (err instanceof ApiError) {
@@ -157,7 +158,15 @@ export function AadhaarVerifyTile({
       const result = await verifyAadhaarQr(token, qrFile);
       applyResult(result);
     } catch (err) {
-      setError(describeError(err));
+      const message = describeError(err);
+      setError(message);
+      if (!(err instanceof ApiError && err.status === 401)) {
+        onStatusChange({
+          ...status,
+          verified: false,
+          lastAttemptError: message,
+        });
+      }
     } finally {
       setVerifying(false);
     }
@@ -202,7 +211,7 @@ export function AadhaarVerifyTile({
       icon={<IdCardIcon />}
       accent="chrome"
       title="Aadhaar card"
-      description="Upload your Aadhaar QR code to verify with UIDAI, and front/back photos for your records."
+      description="Upload Aadhaar photos for records and verify the QR with UIDAI when available. Failed verification will not stop booking payment."
       statusLabel={statusLabel}
       statusTone={statusTone}
     >
@@ -233,6 +242,11 @@ export function AadhaarVerifyTile({
             {(error || status.lastAttemptError) && (
               <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
                 {error ?? status.lastAttemptError}
+              </p>
+            )}
+            {(error || status.lastAttemptError) && (
+              <p className="rounded-lg border border-hairline bg-bg px-3 py-2 text-xs text-ink-muted">
+                You can continue uploading documents and pay the booking amount. Aadhaar verification can be retried later.
               </p>
             )}
           </div>
