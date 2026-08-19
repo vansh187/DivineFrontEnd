@@ -29,18 +29,20 @@ export type AadhaarPhotoSide = 'front' | 'back';
 
 function messageForDocumentsError(status: number, detail: unknown): string {
   if (status === 401) {
-    if (detail === 'missing_token') return 'Please sign in before uploading the application PDF.';
+    if (detail === 'missing_token') return 'Please sign in before uploading documents.';
     if (detail === 'invalid_token') return 'Your session is invalid. Please sign in again.';
     if (detail === 'token_expired') return 'Your session has expired. Please sign in again.';
     return 'Please sign in again to continue.';
   }
-  if (status === 403) return 'This payment belongs to a different user. Please use the correct customer account.';
+  if (status === 403) return 'You can only upload documents for your own account.';
   if (status === 404) return 'That document could not be found.';
   if (status === 429) return 'Too many attempts. Please wait a minute and try again.';
   if (status === 400) {
-    if (detail === 'empty_file') return 'The generated PDF is empty. Please try generating it again.';
-    if (detail === 'file_too_large') return 'The generated PDF is larger than 15 MB. Please contact support.';
-    if (detail === 'unsupported_file_type') return 'The generated file is not a valid PDF. Please generate it again.';
+    if (detail === 'empty_file') return 'That file is empty. Please choose a different file.';
+    if (detail === 'file_too_large') return 'That file is too large. Please upload a file under 15 MB.';
+    if (detail === 'unsupported_file_type') return 'Please upload a JPG, PNG, or generated PDF file.';
+    if (detail === 'side_required') return 'Please choose whether this is the Aadhaar front or back photo.';
+    if (detail === 'invalid_side') return 'Please upload the Aadhaar front and back photos separately.';
     if (detail === 'document_type_required') return 'Document type is missing. Please refresh and try again.';
     if (detail === 'project_id_required') return 'Project is missing. Please select the project and try again.';
     if (detail === 'payment_id_required') return 'Payment reference is missing. Please complete payment again before generating the PDF.';
@@ -54,13 +56,13 @@ function messageForDocumentsError(status: number, detail: unknown): string {
   }
   if (typeof detail === 'string' && detail.startsWith('storage_')) {
     if (detail === 'storage_not_configured') return 'Document storage is not configured on the server. Please contact support.';
-    if (detail.startsWith('storage_upload_failed:')) return 'Storage upload failed. Please try generating the PDF again.';
-    if (detail.startsWith('storage_sign_failed:')) return 'The PDF uploaded, but the download link could not be created. Please try opening it later.';
+    if (detail.startsWith('storage_upload_failed:')) return 'Storage upload failed. Please try uploading the file again.';
+    if (detail.startsWith('storage_sign_failed:')) return 'The file uploaded, but the download link could not be created. Please try opening it later.';
     return 'Something went wrong uploading your document. Please try again.';
   }
   if (status === 422) return 'Required upload fields are missing. Please refresh and try again.';
   if (status === 502) return 'Document storage is temporarily unavailable. Please try again.';
-  if (status === 500) return 'The server could not save the application PDF. Please try again.';
+  if (status === 500) return 'The server could not save the document. Please try again.';
   return 'Something went wrong. Please try again.';
 }
 
@@ -83,6 +85,11 @@ export function getDocument(token: string, documentId: string): Promise<Generate
 /** Uploads a raw Aadhaar front/back photo straight to storage for later use in document
  * generation - no parsing or KYC verification, unlike kycApi's verifyAadhaarQr. */
 export function uploadAadhaarPhoto(token: string, file: File, side: AadhaarPhotoSide): Promise<GeneratedDocument> {
+  if (!file.size) throw new ApiError(400, 'empty_file', messageForDocumentsError(400, 'empty_file'));
+  if (file.size > 15 * 1024 * 1024) throw new ApiError(400, 'file_too_large', messageForDocumentsError(400, 'file_too_large'));
+  if (!['image/jpeg', 'image/png'].includes(file.type)) {
+    throw new ApiError(400, 'unsupported_file_type', messageForDocumentsError(400, 'unsupported_file_type'));
+  }
   const formData = new FormData();
   formData.append('file', file);
   formData.append('side', side);
