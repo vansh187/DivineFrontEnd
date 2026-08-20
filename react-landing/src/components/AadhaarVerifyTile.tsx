@@ -181,11 +181,18 @@ export function AadhaarVerifyTile({
     if (!file) return;
     setUploading(true);
     try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error('Could not read Aadhaar photo.'));
+        reader.readAsDataURL(file);
+      });
       const doc = await uploadAadhaarPhoto(token, file, side);
       onChange({
         fileName: file.name,
         fileSize: file.size,
         uploadedAt: new Date().toISOString(),
+        dataUrl,
         documentId: doc.id,
         signedUrl: doc.signed_url,
         signedUrlExpiresAt: Date.now() + doc.signed_url_expires_in * 1000,
@@ -196,6 +203,7 @@ export function AadhaarVerifyTile({
         fileName: file.name,
         fileSize: file.size,
         uploadedAt: null,
+        dataUrl: null,
         documentId: null,
         signedUrl: null,
         signedUrlExpiresAt: null,

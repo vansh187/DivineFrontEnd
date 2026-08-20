@@ -368,6 +368,18 @@ export function CustomerApplicationPage() {
       setError('Select the project before generating the application PDF.');
       return;
     }
+    if (!docs.aadharFront.documentId || (!docs.aadharFront.dataUrl && !docs.aadharFront.signedUrl)) {
+      setError('Upload the Aadhaar front photo before generating the application PDF.');
+      return;
+    }
+    if (!docs.aadharBack.documentId || (!docs.aadharBack.dataUrl && !docs.aadharBack.signedUrl)) {
+      setError('Upload the Aadhaar back photo before generating the application PDF.');
+      return;
+    }
+    if (!docs.pan.documentId || (!docs.pan.dataUrl && !docs.pan.signedUrl)) {
+      setError('Upload the PAN card photo before generating the application PDF.');
+      return;
+    }
     if (!applicantSignature) {
       setError('Upload the first applicant signature before generating the application PDF.');
       return;
@@ -403,6 +415,26 @@ export function CustomerApplicationPage() {
         formData: docs.bookingApplication.formData,
         applicantSignatureDataUrl: applicantSignature,
         coApplicantSignatureDataUrl: docs.coApplicantSignature.dataUrl,
+        identityAttachments: [
+          {
+            title: 'Aadhaar Card - Front',
+            fileName: docs.aadharFront.fileName,
+            dataUrl: docs.aadharFront.dataUrl,
+            signedUrl: docs.aadharFront.signedUrl,
+          },
+          {
+            title: 'Aadhaar Card - Back',
+            fileName: docs.aadharBack.fileName,
+            dataUrl: docs.aadharBack.dataUrl,
+            signedUrl: docs.aadharBack.signedUrl,
+          },
+          {
+            title: 'PAN Card',
+            fileName: docs.pan.fileName,
+            dataUrl: docs.pan.dataUrl,
+            signedUrl: docs.pan.signedUrl,
+          },
+        ],
       });
       const fileName = `${docs.bookingApplication.formData.projectId || 'project'}-booking-application-${Date.now()}.pdf`;
       const pdfFile = blobToFile(blob, fileName);
