@@ -35,12 +35,16 @@ interface PageCursor {
 }
 
 const pageSize: [number, number] = [595.28, 841.89];
-const marginX = 42;
+const marginX = 48;
 const topY = 792;
-const contentBottomY = 116;
+const contentBottomY = 128;
+const signatureTopY = 102;
+const contentWidth = pageSize[0] - marginX * 2;
+const labelColumnWidth = 150;
 const navy = rgb(0.024, 0.122, 0.176);
 const divineGreen = rgb(0.0, 0.36, 0.18);
-const paleGreen = rgb(0.92, 0.97, 0.94);
+const paleGreen = rgb(0.94, 0.98, 0.95);
+const tableTint = rgb(0.985, 0.99, 0.985);
 const ink = rgb(0.05, 0.12, 0.16);
 const muted = rgb(0.35, 0.45, 0.5);
 const hairline = rgb(0.78, 0.84, 0.87);
@@ -164,22 +168,47 @@ function joinValues(values: string[]): string {
   return filled.length ? filled.join(' / ') : '-';
 }
 
-function wrapText(text: string, maxChars: number): string[] {
-  const source = valueOrDash(text);
-  const words = source.split(/\s+/);
-  const lines: string[] = [];
+function splitLongWord(font: PDFFont, word: string, size: number, maxWidth: number): string[] {
+  const chunks: string[] = [];
   let current = '';
-  for (const word of words) {
-    const next = current ? `${current} ${word}` : word;
-    if (next.length > maxChars && current) {
-      lines.push(current);
-      current = word;
+  for (const character of word) {
+    const next = `${current}${character}`;
+    if (current && font.widthOfTextAtSize(next, size) > maxWidth) {
+      chunks.push(current);
+      current = character;
     } else {
       current = next;
     }
   }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+function wrapTextToWidth(font: PDFFont, text: string, size: number, maxWidth: number): string[] {
+  const source = valueOrDash(text);
+  const words = source.split(/\s+/);
+  const lines: string[] = [];
+  let current = '';
+
+  for (const word of words) {
+    const wordParts = font.widthOfTextAtSize(word, size) > maxWidth ? splitLongWord(font, word, size, maxWidth) : [word];
+    for (const part of wordParts) {
+      const next = current ? `${current} ${part}` : part;
+      if (current && font.widthOfTextAtSize(next, size) > maxWidth) {
+        lines.push(current);
+        current = part;
+      } else {
+        current = next;
+      }
+    }
+  }
+
   if (current) lines.push(current);
   return lines;
+}
+
+function drawTextRight(page: PDFPage, text: string, xRight: number, y: number, size: number, font: PDFFont, color = ink) {
+  page.drawText(text, { x: xRight - font.widthOfTextAtSize(text, size), y, size, font, color });
 }
 
 async function embedSignature(pdfDoc: PDFDocument, dataUrl: string) {
@@ -217,11 +246,11 @@ async function appendIdentityAttachmentPages(ctx: PdfContext, attachments: Ident
     const page = ctx.pdfDoc.addPage(pageSize);
     ctx.pageNumber += 1;
     drawPageHeader(ctx, page, 'Attached Identity Document', attachment.title);
-    if (attachment.fileName) page.drawText(attachment.fileName, { x: marginX, y: topY - 56, size: 8, font: ctx.font, color: muted });
-    page.drawRectangle({ x: marginX, y: 112, width: pageSize[0] - marginX * 2, height: 590, borderColor: hairline, borderWidth: 1 });
+    if (attachment.fileName) page.drawText(attachment.fileName, { x: marginX, y: topY - 58, size: 8, font: ctx.font, color: muted });
+    page.drawRectangle({ x: marginX, y: 128, width: contentWidth, height: 560, borderColor: hairline, borderWidth: 1 });
     try {
       const image = await embedImageFromSource(ctx.pdfDoc, source);
-      drawTemplateImage(page, image, marginX + 18, 132, pageSize[0] - marginX * 2 - 36, 550);
+      drawTemplateImage(page, image, marginX + 18, 148, contentWidth - 36, 520);
     } catch {
       page.drawText('Could not embed this uploaded image. Please re-upload the document and generate again.', {
         x: marginX + 18,
@@ -241,40 +270,44 @@ async function appendTemplateCoverPage(ctx: PdfContext) {
   const [coverPage] = await ctx.pdfDoc.copyPages(templateDoc, [0]);
   ctx.pdfDoc.addPage(coverPage);
   ctx.pageNumber += 1;
-  drawFooterSignatures(ctx, coverPage);
 }
 
 function drawFooterSignatures(ctx: PdfContext, page: PDFPage) {
   const { width } = page.getSize();
-  const sigWidth = 118;
+  const sigWidth = 108;
   const sigHeight = sigWidth / 3.25;
   page.drawRectangle({ x: 0, y: 0, width, height: 22, color: divineGreen });
-  page.drawLine({ start: { x: marginX, y: 102 }, end: { x: width - marginX, y: 102 }, thickness: 0.8, color: hairline });
-  page.drawImage(ctx.applicantSignature, { x: width - sigWidth - marginX, y: 48, width: sigWidth, height: sigHeight, opacity: 0.92 });
-  page.drawText('Applicant Signature', { x: width - sigWidth - marginX, y: 34, size: 7.5, font: ctx.bold, color: ink });
+  page.drawLine({ start: { x: marginX, y: signatureTopY }, end: { x: width - marginX, y: signatureTopY }, thickness: 0.8, color: hairline });
+  page.drawImage(ctx.applicantSignature, { x: width - sigWidth - marginX, y: 52, width: sigWidth, height: sigHeight, opacity: 0.92 });
+  page.drawText('Applicant Signature', { x: width - sigWidth - marginX, y: 38, size: 7.5, font: ctx.bold, color: ink });
   if (ctx.coApplicantSignature) {
-    page.drawImage(ctx.coApplicantSignature, { x: marginX, y: 48, width: sigWidth, height: sigHeight, opacity: 0.92 });
-    page.drawText('Co-applicant Signature', { x: marginX, y: 34, size: 7.5, font: ctx.bold, color: ink });
+    page.drawImage(ctx.coApplicantSignature, { x: marginX, y: 52, width: sigWidth, height: sigHeight, opacity: 0.92 });
+    page.drawText('Co-applicant Signature', { x: marginX, y: 38, size: 7.5, font: ctx.bold, color: ink });
   }
   page.drawText(`Page ${ctx.pageNumber}`, { x: width / 2 - 18, y: 7, size: 7.5, font: ctx.font, color: rgb(1, 1, 1) });
 }
 
 function drawPageHeader(ctx: PdfContext, page: PDFPage, title: string, subtitle?: string) {
   const { width } = page.getSize();
-  page.drawRectangle({ x: 0, y: topY + 18, width, height: 32, color: divineGreen });
+  page.drawRectangle({ x: 0, y: topY + 14, width, height: 36, color: divineGreen });
   page.drawText(ctx.project.label.toUpperCase(), { x: marginX, y: topY + 29, size: 12, font: ctx.bold, color: rgb(1, 1, 1) });
-  page.drawText(ctx.project.company, { x: width - marginX - 150, y: topY + 30, size: 7.5, font: ctx.font, color: rgb(1, 1, 1) });
-  page.drawText(title.toUpperCase(), { x: marginX, y: topY - 8, size: 16, font: ctx.bold, color: divineGreen });
-  if (subtitle) page.drawText(subtitle, { x: marginX, y: topY - 27, size: 8.5, font: ctx.font, color: muted });
-  page.drawLine({ start: { x: marginX, y: topY - 38 }, end: { x: width - marginX, y: topY - 38 }, thickness: 1, color: hairline });
+  drawTextRight(page, ctx.project.company, width - marginX, topY + 30, 7.5, ctx.font, rgb(1, 1, 1));
+  page.drawText(title.toUpperCase(), { x: marginX, y: topY - 9, size: 15.5, font: ctx.bold, color: divineGreen });
+  if (subtitle) {
+    const subtitleLines = wrapTextToWidth(ctx.font, subtitle, 8.5, contentWidth).slice(0, 2);
+    subtitleLines.forEach((line, index) => {
+      page.drawText(line, { x: marginX, y: topY - 28 - index * 10, size: 8.5, font: ctx.font, color: muted });
+    });
+  }
+  page.drawLine({ start: { x: marginX, y: topY - 45 }, end: { x: width - marginX, y: topY - 45 }, thickness: 1, color: hairline });
 }
 
-function addPage(ctx: PdfContext, title: string, subtitle?: string): PageCursor {
+function addPage(ctx: PdfContext, title: string, subtitle?: string, options?: { signatures?: boolean }): PageCursor {
   ctx.pageNumber += 1;
   const page = ctx.pdfDoc.addPage(pageSize);
   drawPageHeader(ctx, page, title, subtitle);
-  drawFooterSignatures(ctx, page);
-  return { page, y: topY - 68, title };
+  if (options?.signatures !== false) drawFooterSignatures(ctx, page);
+  return { page, y: topY - 74, title };
 }
 
 function ensureSpace(ctx: PdfContext, cursor: PageCursor, needed: number): PageCursor {
@@ -283,38 +316,52 @@ function ensureSpace(ctx: PdfContext, cursor: PageCursor, needed: number): PageC
 }
 
 function drawParagraph(ctx: PdfContext, cursor: PageCursor, text: string, options?: { bullet?: string; maxChars?: number; size?: number }): PageCursor {
-  const size = options?.size ?? 9;
-  const maxChars = options?.maxChars ?? 88;
-  const lines = wrapText(text, maxChars);
-  const height = lines.length * (size + 3) + 8;
+  const size = options?.size ?? 9.4;
+  const lineHeight = size + 4;
+  const bulletWidth = options?.bullet ? 30 : 0;
+  const textWidth = contentWidth - bulletWidth;
+  const lines = wrapTextToWidth(ctx.font, text, size, textWidth);
+  const height = lines.length * lineHeight + 8;
   let next = ensureSpace(ctx, cursor, height);
-  const textX = options?.bullet ? marginX + 14 : marginX;
-  if (options?.bullet) next.page.drawText(options.bullet, { x: marginX, y: next.y, size, font: ctx.bold, color: navy });
+  const textX = marginX + bulletWidth;
+  if (options?.bullet) next.page.drawText(options.bullet, { x: marginX, y: next.y, size, font: ctx.bold, color: divineGreen });
   lines.forEach((line, index) => {
-    next.page.drawText(line, { x: textX, y: next.y - index * (size + 3), size, font: ctx.font, color: ink });
+    next.page.drawText(line, { x: textX, y: next.y - index * lineHeight, size, font: ctx.font, color: ink });
   });
   next.y -= height;
   return next;
 }
 
-function drawRows(ctx: PdfContext, cursor: PageCursor, rows: Array<[string, string]>, options?: { maxChars?: number }): PageCursor {
+function drawRows(ctx: PdfContext, cursor: PageCursor, rows: Array<[string, string]>): PageCursor {
   let next = cursor;
-  rows.forEach(([label, value]) => {
-    const lines = wrapText(value, options?.maxChars ?? 58);
-    const height = Math.max(30, lines.length * 11 + 15);
+  rows.forEach(([label, value], index) => {
+    const valueSize = 9.5;
+    const lineHeight = 12.5;
+    const valueX = marginX + labelColumnWidth + 16;
+    const valueWidth = contentWidth - labelColumnWidth - 28;
+    const lines = wrapTextToWidth(ctx.font, value, valueSize, valueWidth);
+    const height = Math.max(34, lines.length * lineHeight + 18);
     next = ensureSpace(ctx, next, height);
     next.page.drawRectangle({
       x: marginX,
       y: next.y - height + 7,
-      width: pageSize[0] - marginX * 2,
+      width: contentWidth,
       height: height - 3,
-      color: paleGreen,
+      color: index % 2 === 0 ? tableTint : paleGreen,
       borderColor: hairline,
       borderWidth: 0.6,
     });
-    next.page.drawText(label.toUpperCase(), { x: marginX + 10, y: next.y - 7, size: 7.2, font: ctx.bold, color: divineGreen });
+    next.page.drawLine({
+      start: { x: marginX + labelColumnWidth, y: next.y - height + 7 },
+      end: { x: marginX + labelColumnWidth, y: next.y + 4 },
+      thickness: 0.5,
+      color: hairline,
+    });
+    wrapTextToWidth(ctx.bold, label.toUpperCase(), 7.2, labelColumnWidth - 18).slice(0, 2).forEach((line, lineIndex) => {
+      next.page.drawText(line, { x: marginX + 10, y: next.y - 7 - lineIndex * 9, size: 7.2, font: ctx.bold, color: divineGreen });
+    });
     lines.forEach((line, index) => {
-      next.page.drawText(line, { x: 190, y: next.y - 7 - index * 11, size: 8.8, font: ctx.font, color: ink });
+      next.page.drawText(line, { x: valueX, y: next.y - 8 - index * lineHeight, size: valueSize, font: ctx.font, color: ink });
     });
     next.y -= height;
   });
@@ -334,7 +381,7 @@ function drawAccepted(ctx: PdfContext, cursor: PageCursor, label: string, accept
 
 function renderProjectPage(ctx: PdfContext, formData: BookingApplicationFormData) {
   const project = getApplicationProject(requireProjectId(formData.projectId));
-  let cursor = addPage(ctx, 'Page 1 - Project');
+  let cursor = addPage(ctx, 'Page 1 - Project', undefined, { signatures: false });
   cursor = drawRows(ctx, cursor, [
     ['Application form project', `${project.label} - ${project.location}`],
     ['Developer entity', project.company],
