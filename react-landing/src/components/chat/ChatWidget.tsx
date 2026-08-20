@@ -177,8 +177,10 @@ export function ChatWidget() {
     if (LOGOUT_PATTERN.test(text.trim())) {
       session.appendUserMessage(text);
       logout();
-      navigate('/');
       session.appendAgentMessage({ kind: 'text', text: 'You are logged out now.' });
+      session.close();
+      navigate('/', { replace: true });
+      window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: 'auto' }));
       return;
     }
 
