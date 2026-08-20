@@ -25,12 +25,18 @@ export function CustomerDocuments() {
     store.saveCustomerDocs(email, next);
   };
 
-  const handlePanUpload = (file: File) => {
+  const handlePanUpload = async (file: File) => {
     if (!session) return;
     setUploadingPan(true);
+    let dataUrl: string | null = null;
+    try {
+      dataUrl = await blobToDataUrl(file);
+    } catch {
+      dataUrl = null;
+    }
     persist({
       ...docs,
-      pan: { ...docs.pan, fileName: file.name, fileSize: file.size, documentId: null, error: null },
+      pan: { ...docs.pan, fileName: file.name, fileSize: file.size, dataUrl, documentId: null, error: null },
     });
     uploadPanPhoto(session.token, file)
       .then((doc) => {
@@ -42,6 +48,7 @@ export function CustomerDocuments() {
               fileName: file.name,
               fileSize: file.size,
               uploadedAt: new Date().toISOString(),
+              dataUrl,
               documentId: doc.id,
               signedUrl: doc.signed_url,
               signedUrlExpiresAt: Date.now() + doc.signed_url_expires_in * 1000,

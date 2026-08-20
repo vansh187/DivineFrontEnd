@@ -8,6 +8,14 @@ interface GenerateApplicationPdfInput {
   formData: BookingApplicationFormData;
   applicantSignatureDataUrl: string;
   coApplicantSignatureDataUrl?: string | null;
+  identityAttachments?: IdentityAttachment[];
+}
+
+export interface IdentityAttachment {
+  title: string;
+  fileName?: string | null;
+  dataUrl?: string | null;
+  signedUrl?: string | null;
 }
 
 interface PdfContext {
@@ -33,6 +41,7 @@ const navy = rgb(0.024, 0.122, 0.176);
 const ink = rgb(0.05, 0.12, 0.16);
 const muted = rgb(0.35, 0.45, 0.5);
 const hairline = rgb(0.78, 0.84, 0.87);
+const templateInk = rgb(0.02, 0.02, 0.02);
 
 const pricingNotes = [
   'Price of plot per sq. meter = Total Price Amount / Area of Plots in Sq. meter.',
@@ -175,6 +184,185 @@ async function embedSignature(pdfDoc: PDFDocument, dataUrl: string) {
   const bytes = dataUrlToBytes(dataUrl);
   if (dataUrl.startsWith('data:image/png')) return pdfDoc.embedPng(bytes);
   return pdfDoc.embedJpg(bytes);
+}
+
+async function bytesFromUrl(url: string): Promise<Uint8Array> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error('Could not load booking form template.');
+  return new Uint8Array(await response.arrayBuffer());
+}
+
+async function embedImageFromSource(pdfDoc: PDFDocument, source: string): Promise<PDFImage> {
+  const bytes = source.startsWith('data:') ? dataUrlToBytes(source) : await bytesFromUrl(source);
+  if (source.startsWith('data:image/png') || source.toLowerCase().includes('.png')) return pdfDoc.embedPng(bytes);
+  return pdfDoc.embedJpg(bytes);
+}
+
+function drawTemplateText(
+  ctx: PdfContext,
+  page: PDFPage,
+  text: string | null | undefined,
+  x: number,
+  y: number,
+  options?: { size?: number; maxChars?: number; width?: number },
+) {
+  const value = valueOrDash(text);
+  const size = options?.size ?? 8;
+  const lines = wrapText(value, options?.maxChars ?? 38).slice(0, options?.width ? 3 : 2);
+  lines.forEach((line, index) => {
+    page.drawText(line, { x, y: y - index * (size + 2), size, font: ctx.font, color: templateInk });
+  });
+}
+
+function drawTemplateCheck(ctx: PdfContext, page: PDFPage, checked: boolean, x: number, y: number) {
+  if (!checked) return;
+  page.drawText('X', { x, y, size: 10, font: ctx.bold, color: templateInk });
+}
+
+function drawTemplateImage(page: PDFPage, image: PDFImage, x: number, y: number, maxWidth: number, maxHeight: number) {
+  const scale = Math.min(maxWidth / image.width, maxHeight / image.height);
+  const width = image.width * scale;
+  const height = image.height * scale;
+  page.drawImage(image, { x: x + (maxWidth - width) / 2, y: y + (maxHeight - height) / 2, width, height, opacity: 0.94 });
+}
+
+async function appendIdentityAttachmentPages(ctx: PdfContext, attachments: IdentityAttachment[] = []) {
+  const available = attachments.filter((attachment) => attachment.dataUrl || attachment.signedUrl);
+  if (!available.length) return;
+
+  for (const attachment of available) {
+    const source = attachment.dataUrl || attachment.signedUrl;
+    if (!source) continue;
+    const page = ctx.pdfDoc.addPage(pageSize);
+    ctx.pageNumber += 1;
+    page.drawText('ATTACHED IDENTITY DOCUMENT', { x: marginX, y: topY, size: 16, font: ctx.bold, color: navy });
+    page.drawText(attachment.title, { x: marginX, y: topY - 22, size: 10, font: ctx.bold, color: ink });
+    if (attachment.fileName) page.drawText(attachment.fileName, { x: marginX, y: topY - 38, size: 8, font: ctx.font, color: muted });
+    page.drawRectangle({ x: marginX, y: 112, width: pageSize[0] - marginX * 2, height: 620, borderColor: hairline, borderWidth: 1 });
+    try {
+      const image = await embedImageFromSource(ctx.pdfDoc, source);
+      drawTemplateImage(page, image, marginX + 18, 132, pageSize[0] - marginX * 2 - 36, 580);
+    } catch {
+      page.drawText('Could not embed this uploaded image. Please re-upload the document and generate again.', {
+        x: marginX + 18,
+        y: 430,
+        size: 9,
+        font: ctx.bold,
+        color: muted,
+      });
+    }
+    drawFooterSignatures(ctx, page);
+  }
+}
+
+function overlayTemplatePages(ctx: PdfContext, formData: BookingApplicationFormData) {
+  const [p1, p2, p3, p4, p5, p6, p7, p8, p12, p16] = [
+    ctx.pdfDoc.getPage(0),
+    ctx.pdfDoc.getPage(1),
+    ctx.pdfDoc.getPage(2),
+    ctx.pdfDoc.getPage(3),
+    ctx.pdfDoc.getPage(4),
+    ctx.pdfDoc.getPage(5),
+    ctx.pdfDoc.getPage(6),
+    ctx.pdfDoc.getPage(7),
+    ctx.pdfDoc.getPage(11),
+    ctx.pdfDoc.getPage(15),
+  ];
+  const applicantSigWidth = 112;
+  const applicantSigHeight = applicantSigWidth / 3.25;
+  const coSigWidth = 112;
+  const coSigHeight = coSigWidth / 3.25;
+
+  drawTemplateText(ctx, p1, new Date().toLocaleDateString('en-IN'), 426, 704, { size: 8, maxChars: 18 });
+  drawTemplateText(ctx, p1, formData.bookingAmount, 204, 390, { size: 8, maxChars: 22 });
+  drawTemplateText(ctx, p1, formData.chequeNo, 232, 365, { size: 8, maxChars: 24 });
+  drawTemplateText(ctx, p1, formData.chequeDate, 410, 365, { size: 8, maxChars: 16 });
+  drawTemplateText(ctx, p1, formData.bankName, 188, 340, { size: 8, maxChars: 42 });
+
+  drawTemplateText(ctx, p2, formData.applicantName, 194, 682, { size: 8, maxChars: 48 });
+  drawTemplateText(ctx, p2, formData.guardianName, 194, 657, { size: 8, maxChars: 48 });
+  drawTemplateText(ctx, p2, formData.dob, 132, 632, { size: 8, maxChars: 14 });
+  drawTemplateText(ctx, p2, formData.gender, 310, 632, { size: 8, maxChars: 14 });
+  drawTemplateText(ctx, p2, formData.pan, 132, 607, { size: 8, maxChars: 20 });
+  drawTemplateText(ctx, p2, formData.aadhaar, 352, 607, { size: 8, maxChars: 20 });
+  drawTemplateText(ctx, p2, formData.email, 132, 582, { size: 8, maxChars: 46 });
+  drawTemplateText(ctx, p2, formData.mobile, 382, 582, { size: 8, maxChars: 18 });
+  drawTemplateText(ctx, p2, formData.phone, 146, 558, { size: 8, maxChars: 18 });
+  drawTemplateText(ctx, p2, formData.residentialStatus, 382, 558, { size: 8, maxChars: 22 });
+  drawTemplateText(ctx, p2, formData.permanentAddress, 132, 518, { size: 7.5, maxChars: 72 });
+  drawTemplateText(ctx, p2, formData.correspondenceAddress, 132, 455, { size: 7.5, maxChars: 72 });
+  p2.drawImage(ctx.applicantSignature, { x: 394, y: 152, width: applicantSigWidth, height: applicantSigHeight, opacity: 0.92 });
+
+  drawTemplateText(ctx, p3, formData.coApplicantName, 194, 704, { size: 8, maxChars: 48 });
+  drawTemplateText(ctx, p3, formData.coApplicantGuardianName, 194, 679, { size: 8, maxChars: 48 });
+  drawTemplateText(ctx, p3, formData.coApplicantDob, 132, 654, { size: 8, maxChars: 14 });
+  drawTemplateText(ctx, p3, formData.coApplicantGender, 310, 654, { size: 8, maxChars: 14 });
+  drawTemplateText(ctx, p3, formData.coApplicantPan, 132, 629, { size: 8, maxChars: 20 });
+  drawTemplateText(ctx, p3, formData.coApplicantAadhaar, 352, 629, { size: 8, maxChars: 20 });
+  drawTemplateText(ctx, p3, formData.coApplicantPhone, 146, 604, { size: 8, maxChars: 18 });
+  drawTemplateText(ctx, p3, formData.coApplicantMobile, 382, 604, { size: 8, maxChars: 18 });
+  drawTemplateText(ctx, p3, formData.coApplicantEmail, 132, 580, { size: 8, maxChars: 46 });
+  drawTemplateText(ctx, p3, formData.coApplicantResidentialStatus, 382, 580, { size: 8, maxChars: 22 });
+  drawTemplateText(ctx, p3, formData.coApplicantPermanentAddress, 132, 535, { size: 7.5, maxChars: 72 });
+  drawTemplateText(ctx, p3, formData.coApplicantCorrespondenceAddress, 132, 472, { size: 7.5, maxChars: 72 });
+  if (ctx.coApplicantSignature) p3.drawImage(ctx.coApplicantSignature, { x: 394, y: 152, width: coSigWidth, height: coSigHeight, opacity: 0.92 });
+
+  drawTemplateText(ctx, p4, formData.unitNo, 150, 676, { size: 8, maxChars: 28 });
+  drawTemplateText(ctx, p4, formData.plotAreaSqYd, 300, 676, { size: 8, maxChars: 16 });
+  drawTemplateText(ctx, p4, formData.plotAreaSqMtr, 452, 676, { size: 8, maxChars: 16 });
+  drawTemplateText(ctx, p4, formData.unitType, 150, 650, { size: 8, maxChars: 30 });
+
+  drawTemplateText(ctx, p5, formData.ratePerSqYd, 302, 636, { size: 8, maxChars: 16 });
+  drawTemplateText(ctx, p5, formData.basicSalePrice, 430, 636, { size: 8, maxChars: 18 });
+  drawTemplateText(ctx, p5, formData.plcRatePerSqYd, 302, 610, { size: 8, maxChars: 16 });
+  drawTemplateText(ctx, p5, formData.plcPrice, 430, 610, { size: 8, maxChars: 18 });
+  drawTemplateText(ctx, p5, formData.totalAmount, 430, 585, { size: 8, maxChars: 18 });
+  drawTemplateText(ctx, p5, formData.amountInFigure, 184, 552, { size: 8, maxChars: 24 });
+  drawTemplateText(ctx, p5, formData.bookingAmountWords, 184, 528, { size: 7.5, maxChars: 62 });
+  drawTemplateText(ctx, p5, formData.bookingMode, 166, 270, { size: 8, maxChars: 30 });
+  drawTemplateText(ctx, p5, formData.employeeName, 166, 246, { size: 8, maxChars: 34 });
+  drawTemplateText(ctx, p5, formData.employeeCode, 392, 246, { size: 8, maxChars: 20 });
+
+  drawTemplateCheck(ctx, p6, formData.pricingNotesAccepted, 72, 150);
+  drawTemplateText(ctx, p7, formData.channelPartnerName, 162, 704, { size: 8, maxChars: 36 });
+  drawTemplateText(ctx, p7, formData.channelPartnerCode, 406, 704, { size: 8, maxChars: 18 });
+  drawTemplateText(ctx, p7, formData.channelPartnerAddress, 162, 678, { size: 7.5, maxChars: 62 });
+  drawTemplateText(ctx, p7, formData.channelPartnerMobile, 162, 620, { size: 8, maxChars: 18 });
+  drawTemplateText(ctx, p7, formData.channelPartnerAuthorizedSignatory, 378, 620, { size: 8, maxChars: 28 });
+  drawTemplateText(ctx, p7, formData.channelPartnerFirmName, 162, 596, { size: 8, maxChars: 36 });
+  drawTemplateCheck(ctx, p7, formData.channelPartnerDeclarationAccepted, 72, 144);
+
+  drawTemplateText(ctx, p8, formData.applicationDate, 120, 168, { size: 8, maxChars: 16 });
+  drawTemplateText(ctx, p8, formData.place, 330, 168, { size: 8, maxChars: 28 });
+  drawTemplateCheck(ctx, p8, formData.applicantDeclarationAccepted, 72, 144);
+
+  drawTemplateCheck(ctx, p12, formData.termsAccepted, 72, 144);
+  drawTemplateCheck(ctx, p16, formData.paymentPlanAccepted, 72, 144);
+
+  const form60Page = ctx.pdfDoc.getPage(16);
+  drawTemplateText(ctx, form60Page, formData.form60FullNameAddress, 224, 642, { size: 7.5, maxChars: 52 });
+  drawTemplateText(ctx, form60Page, formData.form60TransactionParticulars, 224, 580, { size: 7.5, maxChars: 52 });
+  drawTemplateText(ctx, form60Page, formData.form60TransactionAmount, 224, 552, { size: 8, maxChars: 18 });
+  drawTemplateText(ctx, form60Page, formData.form60AssessedToTax, 224, 525, { size: 8, maxChars: 12 });
+  drawTemplateText(ctx, form60Page, formData.form60WardCircleRange, 224, 500, { size: 8, maxChars: 30 });
+  drawTemplateText(ctx, form60Page, formData.form60NoPanReason, 224, 474, { size: 7.5, maxChars: 52 });
+  drawTemplateText(ctx, form60Page, formData.form60AddressProofDocument, 224, 420, { size: 8, maxChars: 36 });
+
+  const checklistPage = ctx.pdfDoc.getPage(17);
+  drawTemplateCheck(ctx, checklistPage, formData.checklistAccepted, 72, 218);
+}
+
+async function tryCreateTemplatePdf(ctx: PdfContext, formData: BookingApplicationFormData, attachments: IdentityAttachment[] = []) {
+  const templateUrl = `/application-forms/${formData.projectId}-booking-form.pdf`;
+  const templateBytes = await bytesFromUrl(templateUrl);
+  const templateDoc = await PDFDocument.load(templateBytes);
+  const copiedPages = await ctx.pdfDoc.copyPages(templateDoc, templateDoc.getPageIndices());
+  copiedPages.forEach((page) => {
+    ctx.pdfDoc.addPage(page);
+    ctx.pageNumber += 1;
+  });
+  overlayTemplatePages(ctx, formData);
+  await appendIdentityAttachmentPages(ctx, attachments);
 }
 
 function drawFooterSignatures(ctx: PdfContext, page: PDFPage) {
@@ -465,6 +653,7 @@ export async function generateApplicationPdf({
   formData,
   applicantSignatureDataUrl,
   coApplicantSignatureDataUrl,
+  identityAttachments = [],
 }: GenerateApplicationPdfInput): Promise<Blob> {
   if (!formData.projectId) {
     throw new Error('Select the project before generating the application PDF.');
@@ -476,19 +665,24 @@ export async function generateApplicationPdf({
   const coApplicantSignature = coApplicantSignatureDataUrl ? await embedSignature(pdfDoc, coApplicantSignatureDataUrl) : null;
   const ctx: PdfContext = { pdfDoc, font, bold, applicantSignature, coApplicantSignature, pageNumber: 0 };
 
-  renderProjectPage(ctx, formData);
-  renderFillApplicationPage(ctx, formData);
-  renderApplicantPage(ctx, formData);
-  renderCoApplicantPage(ctx, formData);
-  renderPlotPage(ctx, formData);
-  renderPricingPage(ctx, formData);
-  renderPricingNotesPage(ctx, formData);
-  renderChannelPartnerPage(ctx, formData);
-  renderApplicantDeclarationPage(ctx, formData);
-  renderTermsPage(ctx, formData);
-  renderPaymentPlanPage(ctx, formData);
-  renderForm60Page(ctx, formData);
-  renderChecklistPage(ctx, formData);
+  try {
+    await tryCreateTemplatePdf(ctx, formData, identityAttachments);
+  } catch {
+    renderProjectPage(ctx, formData);
+    renderFillApplicationPage(ctx, formData);
+    renderApplicantPage(ctx, formData);
+    renderCoApplicantPage(ctx, formData);
+    renderPlotPage(ctx, formData);
+    renderPricingPage(ctx, formData);
+    renderPricingNotesPage(ctx, formData);
+    renderChannelPartnerPage(ctx, formData);
+    renderApplicantDeclarationPage(ctx, formData);
+    renderTermsPage(ctx, formData);
+    renderPaymentPlanPage(ctx, formData);
+    renderForm60Page(ctx, formData);
+    renderChecklistPage(ctx, formData);
+    await appendIdentityAttachmentPages(ctx, identityAttachments);
+  }
 
   const bytes = await pdfDoc.save();
   const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;

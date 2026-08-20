@@ -13,6 +13,7 @@ export interface DocStatus {
   uploadedAt: string | null;
   verified: boolean;
   verifiedAt: string | null;
+  dataUrl: string | null;
   /** Set once the file has actually reached storage (POST /documents/pan-photo) - fileName
    * alone can be set optimistically before the upload confirms. */
   documentId: string | null;
@@ -44,6 +45,7 @@ export interface AadhaarPhotoStatus {
   fileName: string | null;
   fileSize: number | null;
   uploadedAt: string | null;
+  dataUrl: string | null;
   documentId: string | null;
   signedUrl: string | null;
   signedUrlExpiresAt: number | null;
@@ -55,6 +57,7 @@ export function emptyAadhaarPhotoStatus(): AadhaarPhotoStatus {
     fileName: null,
     fileSize: null,
     uploadedAt: null,
+    dataUrl: null,
     documentId: null,
     signedUrl: null,
     signedUrlExpiresAt: null,
@@ -311,6 +314,7 @@ export function emptyDocStatus(): DocStatus {
     uploadedAt: null,
     verified: false,
     verifiedAt: null,
+    dataUrl: null,
     documentId: null,
     signedUrl: null,
     signedUrlExpiresAt: null,
@@ -358,8 +362,8 @@ export function loadCustomerDocs(email: string): CustomerDocState {
     const parsed = JSON.parse(raw) as Partial<CustomerDocState> & { signature?: SignatureStatus };
     return {
       aadhar: parsed.aadhar ?? emptyAadhaarStatus(),
-      aadharFront: parsed.aadharFront ?? emptyAadhaarPhotoStatus(),
-      aadharBack: parsed.aadharBack ?? emptyAadhaarPhotoStatus(),
+      aadharFront: { ...emptyAadhaarPhotoStatus(), ...parsed.aadharFront },
+      aadharBack: { ...emptyAadhaarPhotoStatus(), ...parsed.aadharBack },
       // Spread over the defaults (not just `??`) so state cached before documentId/
       // signedUrl/error existed on DocStatus still back-fills those specific fields.
       pan: { ...emptyDocStatus(), ...parsed.pan },
@@ -402,8 +406,8 @@ export function loadBrokerDocs(email: string): BrokerDocState {
     const parsed = JSON.parse(raw) as Partial<BrokerDocState>;
     return {
       aadhar: parsed.aadhar ?? emptyAadhaarStatus(),
-      aadharFront: parsed.aadharFront ?? emptyAadhaarPhotoStatus(),
-      aadharBack: parsed.aadharBack ?? emptyAadhaarPhotoStatus(),
+      aadharFront: { ...emptyAadhaarPhotoStatus(), ...parsed.aadharFront },
+      aadharBack: { ...emptyAadhaarPhotoStatus(), ...parsed.aadharBack },
       visits: normalizeVisits(parsed.visits),
     };
   } catch {

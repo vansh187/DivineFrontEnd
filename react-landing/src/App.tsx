@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import type { ReactNode } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { LandingPage } from './pages/LandingPage';
 import { CustomerPage } from './pages/CustomerPage';
 import { BrokerPage } from './pages/BrokerPage';
@@ -33,51 +34,70 @@ function HomeRoute() {
   return <LandingPage />;
 }
 
+function RouteCrashBoundary({ children }: { children: ReactNode }) {
+  const location = useLocation();
+  return (
+    <ErrorBoundary resetKeys={[location.pathname]} fallback={<AppCrashFallback onRetry={() => window.location.reload()} />}>
+      {children}
+    </ErrorBoundary>
+  );
+}
+
+function AppRoutes() {
+  return (
+    <RouteCrashBoundary>
+      <Routes>
+        <Route path="/" element={<HomeRoute />} />
+        <Route path="/residences" element={<ResidencesPage />} />
+        <Route path="/our-story" element={<OurStoryPage />} />
+        <Route
+          path="/customer"
+          element={
+            <RoleRoute role="customer">
+              <CustomerPage />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="/customer/application"
+          element={
+            <RoleRoute role="customer">
+              <ErrorBoundary fallback={<AppCrashFallback />}>
+                <Suspense fallback={<div className="min-h-svh bg-bg px-6 pt-28 text-sm font-semibold text-ink">Loading application form...</div>}>
+                  <CustomerApplicationPage />
+                </Suspense>
+              </ErrorBoundary>
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="/broker"
+          element={
+            <RoleRoute role="broker">
+              <BrokerPage />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="/broker/commission"
+          element={
+            <RoleRoute role="broker">
+              <BrokerCommissionPage />
+            </RoleRoute>
+          }
+        />
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
+    </RouteCrashBoundary>
+  );
+}
+
 function App() {
   return (
     <ErrorBoundary fallback={<AppCrashFallback />}>
       <AuthProvider>
         <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<HomeRoute />} />
-            <Route path="/residences" element={<ResidencesPage />} />
-            <Route path="/our-story" element={<OurStoryPage />} />
-            <Route
-              path="/customer"
-              element={
-                <RoleRoute role="customer">
-                  <CustomerPage />
-                </RoleRoute>
-              }
-            />
-            <Route
-              path="/customer/application"
-              element={
-                <RoleRoute role="customer">
-                  <Suspense fallback={<div className="min-h-svh bg-bg px-6 pt-28 text-sm font-semibold text-ink">Loading application form...</div>}>
-                    <CustomerApplicationPage />
-                  </Suspense>
-                </RoleRoute>
-              }
-            />
-            <Route
-              path="/broker"
-              element={
-                <RoleRoute role="broker">
-                  <BrokerPage />
-                </RoleRoute>
-              }
-            />
-            <Route
-              path="/broker/commission"
-              element={
-                <RoleRoute role="broker">
-                  <BrokerCommissionPage />
-                </RoleRoute>
-              }
-            />
-            <Route path="*" element={<NotFoundPage />} />
-          </Routes>
+          <AppRoutes />
           <AuthModal />
           {/* Isolated boundary: a bug in the (newer, less-tested) chat widget
            * should never blank out the rest of the site. */}

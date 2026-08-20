@@ -1,4 +1,8 @@
-export function AppCrashFallback() {
+interface AppCrashFallbackProps {
+  onRetry?: () => void;
+}
+
+export function AppCrashFallback({ onRetry }: AppCrashFallbackProps) {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-bg px-6 text-center">
       <p className="eyebrow-label text-terracotta">Something went wrong</p>
@@ -12,10 +16,10 @@ export function AppCrashFallback() {
       </p>
       <button
         type="button"
-        onClick={() => window.location.reload()}
+        onClick={onRetry ?? (() => window.location.reload())}
         className="mt-2 inline-flex items-center rounded-full bg-green px-6 py-3 text-sm font-semibold text-white shadow-[0_16px_36px_-14px_rgba(6,31,45,0.62)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-green-soft"
       >
-        Reload page
+        {onRetry ? 'Try again' : 'Reload page'}
       </button>
     </div>
   );

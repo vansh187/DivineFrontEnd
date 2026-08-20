@@ -8,10 +8,15 @@ interface ErrorBoundaryProps {
    * without taking the rest of the page down with it. */
   fallback?: ReactNode;
   onError?: (error: Error, info: ErrorInfo) => void;
+  resetKeys?: unknown[];
 }
 
 interface ErrorBoundaryState {
   hasError: boolean;
+}
+
+function changedArray(a: unknown[] = [], b: unknown[] = []) {
+  return a.length !== b.length || a.some((item, index) => !Object.is(item, b[index]));
 }
 
 /** Catches render/lifecycle errors in its subtree so one broken component
@@ -30,6 +35,12 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     if (import.meta.env.DEV) {
       // eslint-disable-next-line no-console
       console.error('ErrorBoundary caught an error:', error, info);
+    }
+  }
+
+  componentDidUpdate(prevProps: ErrorBoundaryProps) {
+    if (this.state.hasError && changedArray(prevProps.resetKeys, this.props.resetKeys)) {
+      this.setState({ hasError: false });
     }
   }
 
