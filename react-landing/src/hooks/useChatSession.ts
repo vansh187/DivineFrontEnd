@@ -37,6 +37,7 @@ type ChatAction =
   | { type: 'SET_INTERIM_STATUS'; text: string | null }
   | { type: 'DISMISS_CONSENT' }
   | { type: 'APPEND_AGENT_MESSAGE'; variant: AgentMessageVariant }
+  | { type: 'APPEND_USER_MESSAGE'; text: string }
   | { type: 'MIC_STATE_CHANGED'; micState: ChatState['micState'] };
 
 const SESSION_STORAGE_KEY = 'dvi_chat_session_id';
@@ -132,6 +133,8 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, consentShown: true };
     case 'APPEND_AGENT_MESSAGE':
       return { ...state, messages: [...state.messages, { id: makeId(), role: 'agent', variant: action.variant }] };
+    case 'APPEND_USER_MESSAGE':
+      return { ...state, messages: [...state.messages, { id: makeId(), role: 'user', text: action.text }] };
     case 'MIC_STATE_CHANGED':
       return { ...state, micState: action.micState };
     default:
@@ -212,6 +215,7 @@ export function useChatSession() {
   const close = useCallback(() => dispatch({ type: 'CLOSE_WIDGET' }), []);
   const dismissConsent = useCallback(() => dispatch({ type: 'DISMISS_CONSENT' }), []);
   const appendAgentMessage = useCallback((variant: AgentMessageVariant) => dispatch({ type: 'APPEND_AGENT_MESSAGE', variant }), []);
+  const appendUserMessage = useCallback((text: string) => dispatch({ type: 'APPEND_USER_MESSAGE', text }), []);
   const setMicState = useCallback((micState: ChatState['micState']) => dispatch({ type: 'MIC_STATE_CHANGED', micState }), []);
 
   const send = useCallback(
@@ -277,6 +281,7 @@ export function useChatSession() {
     dismissConsent,
     send,
     appendAgentMessage,
+    appendUserMessage,
     setMicState,
   };
 }
