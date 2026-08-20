@@ -53,13 +53,13 @@ function inferChatRole(messages: ReturnType<typeof useChatSession>['messages']):
 }
 
 function inferChatSignupCredentials(messages: ReturnType<typeof useChatSession>['messages']) {
-  let email: string | null = null;
+  let username: string | null = null;
   let password: string | null = null;
 
   messages.forEach((message, index) => {
     if (message.role !== 'user') return;
-    const emailMatch = message.text.match(EMAIL_PATTERN);
-    if (emailMatch) email = emailMatch[0];
+    const usernameMatch = message.text.match(EMAIL_PATTERN);
+    if (usernameMatch) username = usernameMatch[0];
 
     const previousAgent = [...messages.slice(0, index)].reverse().find((candidate) => candidate.role === 'agent');
     if (
@@ -72,12 +72,18 @@ function inferChatSignupCredentials(messages: ReturnType<typeof useChatSession>[
     }
   });
 
-  return email && password ? { email, password } : null;
+  return username && password ? { username, password } : null;
+}
+
+function toAuthLoginInput(credentials: { username: string; password: string }) {
+  // The backend login field is named `username`. useAuth.login accepts `email`
+  // and authApi.login maps it to the backend username payload.
+  return { email: credentials.username, password: credentials.password };
 }
 
 export function ChatWidget() {
   const session = useChatSession();
-  const { login } = useAuth();
+  const { login, signup } = useAuth();
   const navigate = useNavigate();
   const reducedMotion = usePrefersReducedMotion();
   const [entered, setEntered] = useState(false);
@@ -156,6 +162,16 @@ export function ChatWidget() {
     return coords ? { ...extra, lat: coords.lat, long: coords.long } : extra;
   };
 
+  const loginAfterChatSignup = async (role: Role, credentials: { username: string; password: string }) => {
+    try {
+      await login(role, toAuthLoginInput(credentials));
+    } catch (err) {
+      if (!(err instanceof ApiError) || err.status !== 401) throw err;
+      await signup(role, { email: credentials.username, password: credentials.password });
+      await login(role, toAuthLoginInput(credentials));
+    }
+  };
+
   const handleSendText = (text: string) => {
     const lastMessage = session.messages[session.messages.length - 1];
     if (
@@ -174,7 +190,7 @@ export function ChatWidget() {
         return;
       }
 
-      void login(role, credentials)
+      void loginAfterChatSignup(role, credentials)
         .then(() => {
           navigate(roleHome[role]);
           session.appendAgentMessage({
@@ -193,17 +209,17 @@ export function ChatWidget() {
 
     if (lastMessage?.role === 'agent' && isPasswordLoginPrompt(lastMessage.variant)) {
       session.appendUserMessage(text);
-      const email = session.messages
+      const username = session.messages
         .map((message) => (message.role === 'user' ? message.text.match(EMAIL_PATTERN)?.[0] : null))
         .filter(Boolean)
         .at(-1);
       const role = inferChatRole(session.messages);
-      if (!email) {
+      if (!username) {
         session.appendAgentMessage({ kind: 'text', text: 'Please enter your email first, then I can log you in.' });
         return;
       }
 
-      void login(role, { email, password: text })
+      void login(role, toAuthLoginInput({ username, password: text }))
         .then(() => {
           navigate(roleHome[role]);
           session.appendAgentMessage({ kind: 'text', text: `You are logged in as ${role}.` });
