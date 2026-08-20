@@ -415,6 +415,7 @@ export function CustomerApplicationPage() {
         formData: docs.bookingApplication.formData,
         applicantSignatureDataUrl: applicantSignature,
         coApplicantSignatureDataUrl: docs.coApplicantSignature.dataUrl,
+        paymentInfo: docs.payment,
         identityAttachments: [
           {
             title: 'Aadhaar Card - Front',

@@ -2,13 +2,14 @@ import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import type { PDFImage, PDFPage, PDFFont } from 'pdf-lib';
 import { getApplicationProject } from '../data/applicationProjects';
 import type { ApplicationProject, ApplicationProjectId } from '../data/applicationProjects';
-import type { BookingApplicationFormData } from './documentStore';
+import type { BookingApplicationFormData, PaymentStatus } from './documentStore';
 
 interface GenerateApplicationPdfInput {
   formData: BookingApplicationFormData;
   applicantSignatureDataUrl: string;
   coApplicantSignatureDataUrl?: string | null;
   identityAttachments?: IdentityAttachment[];
+  paymentInfo?: PaymentStatus | null;
 }
 
 export interface IdentityAttachment {
@@ -152,6 +153,24 @@ function dataUrlToBytes(dataUrl: string): Uint8Array {
 
 function yesNo(value: boolean): string {
   return value ? 'Accepted' : 'Not accepted';
+}
+
+function formatCurrencyINR(value: number | null | undefined): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
+  return `Rs. ${value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+}
+
+function formatDateTimeIN(value: string | null | undefined): string {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('en-IN');
+}
+
+function formatPaymentMethod(value: PaymentStatus['method']): string {
+  if (value === 'razorpay') return 'Online payment - Razorpay';
+  if (value === 'cash') return 'Cash payment';
+  return '-';
 }
 
 function valueOrDash(value: string | null | undefined): string {
@@ -593,7 +612,30 @@ function renderChecklistPage(ctx: PdfContext, formData: BookingApplicationFormDa
   cursor = drawAccepted(ctx, cursor, 'Checklist confirmed', formData.checklistAccepted);
 }
 
-async function renderReadableApplicationPacket(ctx: PdfContext, formData: BookingApplicationFormData, identityAttachments: IdentityAttachment[]) {
+function renderPaymentInformationPage(ctx: PdfContext, paymentInfo: PaymentStatus | null | undefined) {
+  let cursor = addPage(ctx, 'Payment confirmation', 'Booking payment details recorded before identity document attachments.');
+  cursor = drawRows(ctx, cursor, [
+    ['Payment status', paymentInfo?.status === 'paid' ? 'Paid' : valueOrDash(paymentInfo?.status)],
+    ['Amount paid', formatCurrencyINR(paymentInfo?.amount)],
+    ['Payment method', formatPaymentMethod(paymentInfo?.method ?? null)],
+    ['Paid on', formatDateTimeIN(paymentInfo?.paidAt)],
+    ['Payment reference ID', valueOrDash(paymentInfo?.paymentId)],
+    ['Razorpay order ID', valueOrDash(paymentInfo?.razorpayOrderId)],
+    ['Razorpay payment ID', valueOrDash(paymentInfo?.razorpayPaymentId)],
+  ]);
+  cursor = drawParagraph(
+    ctx,
+    cursor,
+    'This payment information is displayed before the Aadhaar and PAN attachments as confirmation that the booking payment was completed before document submission.',
+  );
+}
+
+async function renderReadableApplicationPacket(
+  ctx: PdfContext,
+  formData: BookingApplicationFormData,
+  identityAttachments: IdentityAttachment[],
+  paymentInfo?: PaymentStatus | null,
+) {
   if (formData.projectId === 'ops-divine-greens') {
     try {
       await appendTemplateCoverPage(ctx);
@@ -616,6 +658,7 @@ async function renderReadableApplicationPacket(ctx: PdfContext, formData: Bookin
   renderPaymentPlanPage(ctx, formData);
   renderForm60Page(ctx, formData);
   renderChecklistPage(ctx, formData);
+  renderPaymentInformationPage(ctx, paymentInfo);
   await appendIdentityAttachmentPages(ctx, identityAttachments);
 }
 
@@ -624,6 +667,7 @@ export async function generateApplicationPdf({
   applicantSignatureDataUrl,
   coApplicantSignatureDataUrl,
   identityAttachments = [],
+  paymentInfo = null,
 }: GenerateApplicationPdfInput): Promise<Blob> {
   if (!formData.projectId) {
     throw new Error('Select the project before generating the application PDF.');
@@ -636,7 +680,7 @@ export async function generateApplicationPdf({
   const coApplicantSignature = coApplicantSignatureDataUrl ? await embedSignature(pdfDoc, coApplicantSignatureDataUrl) : null;
   const ctx: PdfContext = { pdfDoc, font, bold, applicantSignature, coApplicantSignature, pageNumber: 0, project };
 
-  await renderReadableApplicationPacket(ctx, formData, identityAttachments);
+  await renderReadableApplicationPacket(ctx, formData, identityAttachments, paymentInfo);
 
   const bytes = await pdfDoc.save();
   const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
