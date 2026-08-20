@@ -334,13 +334,18 @@ function ensureSpace(ctx: PdfContext, cursor: PageCursor, needed: number): PageC
   return addPage(ctx, `${cursor.title} (continued)`);
 }
 
-function drawParagraph(ctx: PdfContext, cursor: PageCursor, text: string, options?: { bullet?: string; maxChars?: number; size?: number }): PageCursor {
+function drawParagraph(
+  ctx: PdfContext,
+  cursor: PageCursor,
+  text: string,
+  options?: { bullet?: string; maxChars?: number; size?: number; lineHeight?: number; bottomGap?: number },
+): PageCursor {
   const size = options?.size ?? 9.4;
-  const lineHeight = size + 4;
+  const lineHeight = options?.lineHeight ?? size + 4;
   const bulletWidth = options?.bullet ? 30 : 0;
   const textWidth = contentWidth - bulletWidth;
   const lines = wrapTextToWidth(ctx.font, text, size, textWidth);
-  const height = lines.length * lineHeight + 8;
+  const height = lines.length * lineHeight + (options?.bottomGap ?? 8);
   let next = ensureSpace(ctx, cursor, height);
   const textX = marginX + bulletWidth;
   if (options?.bullet) next.page.drawText(options.bullet, { x: marginX, y: next.y, size, font: ctx.bold, color: divineGreen });
@@ -387,9 +392,9 @@ function drawRows(ctx: PdfContext, cursor: PageCursor, rows: Array<[string, stri
   return next;
 }
 
-function drawSectionLabel(ctx: PdfContext, cursor: PageCursor, label: string): PageCursor {
+function drawSectionLabel(ctx: PdfContext, cursor: PageCursor, label: string, options?: { yOffset?: number }): PageCursor {
   const next = ensureSpace(ctx, cursor, 26);
-  next.page.drawText(label.toUpperCase(), { x: marginX, y: next.y, size: 10, font: ctx.bold, color: navy });
+  next.page.drawText(label.toUpperCase(), { x: marginX, y: next.y + (options?.yOffset ?? 0), size: 10, font: ctx.bold, color: navy });
   next.y -= 20;
   return next;
 }
@@ -590,9 +595,9 @@ function renderForm60Page(ctx: PdfContext, formData: BookingApplicationFormData)
     ['Place', formData.form60VerificationPlace],
     ['Form 60 accepted', yesNo(formData.form60Accepted)],
   ]);
-  cursor = drawSectionLabel(ctx, cursor, 'Address proof instructions');
+  cursor = drawSectionLabel(ctx, cursor, 'Address proof instructions', { yOffset: -4 });
   ['Passport', 'Driving License', 'Identity Card issued by any Institution', 'Electricity/telephone bill showing residential address', 'Document or communication issued by Central/State Government or local bodies showing residential address', 'Any other documentary evidence in support of the address given in the declaration'].forEach((item) => {
-    cursor = drawParagraph(ctx, cursor, item, { bullet: '-', maxChars: 78, size: 8.2 });
+    cursor = drawParagraph(ctx, cursor, item, { bullet: '-', size: 8, lineHeight: 10.4, bottomGap: 2 });
   });
 }
 
