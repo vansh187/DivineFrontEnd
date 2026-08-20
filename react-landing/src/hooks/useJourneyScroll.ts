@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from 'react';
+import { useLayoutEffect, type RefObject } from 'react';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
@@ -16,7 +16,7 @@ interface UseJourneyScrollOptions {
  * image.
  */
 export function useJourneyScroll({ containerRef, trackRef, progressRef }: UseJourneyScrollOptions) {
-  useEffect(() => {
+  useLayoutEffect(() => {
     const container = containerRef.current;
     const track = trackRef.current;
     if (!container || !track) return;
