@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useLayoutEffect } from 'react';
 import type { ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { LandingPage } from './pages/LandingPage';
@@ -41,6 +41,28 @@ function RouteCrashBoundary({ children }: { children: ReactNode }) {
       {children}
     </ErrorBoundary>
   );
+}
+
+function ScrollToRouteTop() {
+  const { pathname } = useLocation();
+
+  useLayoutEffect(() => {
+    const reset = () => {
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      window.scrollTo(0, 0);
+    };
+
+    reset();
+    const firstFrame = window.requestAnimationFrame(() => {
+      reset();
+      window.requestAnimationFrame(reset);
+    });
+
+    return () => window.cancelAnimationFrame(firstFrame);
+  }, [pathname]);
+
+  return null;
 }
 
 function AppRoutes() {
@@ -97,6 +119,7 @@ function App() {
     <ErrorBoundary fallback={<AppCrashFallback />}>
       <AuthProvider>
         <BrowserRouter>
+          <ScrollToRouteTop />
           <AppRoutes />
           <AuthModal />
           {/* Isolated boundary: a bug in the (newer, less-tested) chat widget
