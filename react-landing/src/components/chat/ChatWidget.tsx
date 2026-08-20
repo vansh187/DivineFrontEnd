@@ -14,6 +14,7 @@ const TEASER_STORAGE_KEY = 'dvi_chat_teaser_dismissed';
 const TEASER_DELAY_MS = 1800;
 const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 const AFFIRMATIVE_LOGIN_PATTERN = /^(yes|yeah|yep|ya|sure|ok|okay|login|log in|sign in|signin)$/i;
+const LOGOUT_PATTERN = /^(logout|log out|sign out|signout)$/i;
 const roleHome: Record<Role, string> = {
   customer: '/customer',
   broker: '/broker',
@@ -83,7 +84,7 @@ function toAuthLoginInput(credentials: { username: string; password: string }) {
 
 export function ChatWidget() {
   const session = useChatSession();
-  const { login, signup } = useAuth();
+  const { login, logout, signup } = useAuth();
   const navigate = useNavigate();
   const reducedMotion = usePrefersReducedMotion();
   const [entered, setEntered] = useState(false);
@@ -173,6 +174,14 @@ export function ChatWidget() {
   };
 
   const handleSendText = (text: string) => {
+    if (LOGOUT_PATTERN.test(text.trim())) {
+      session.appendUserMessage(text);
+      logout();
+      navigate('/');
+      session.appendAgentMessage({ kind: 'text', text: 'You are logged out now.' });
+      return;
+    }
+
     const lastMessage = session.messages[session.messages.length - 1];
     if (
       lastMessage?.role === 'agent' &&
