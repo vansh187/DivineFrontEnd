@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { SiteVisitDrawer } from '../components/SiteVisitDrawer';
@@ -36,36 +37,48 @@ export function ResidencesPage() {
                 key={township.id}
                 className="overflow-hidden rounded-lg border border-hairline bg-surface shadow-[0_20px_54px_-34px_rgba(6,31,45,0.3)]"
               >
-                <div className="relative aspect-[4/3] overflow-hidden sm:aspect-[16/9]">
-                  <img src={township.image.src} alt={township.image.alt} className="h-full w-full object-cover" />
-                  <span className="eyebrow-label absolute left-4 top-4 rounded bg-bg/95 px-2.5 py-1.5 text-[10px] text-ink/80 shadow-sm">
-                    {township.reraId ? `RERA: ${township.reraId}` : township.image.tag}
-                  </span>
-                </div>
-                <div className="p-5 sm:p-7">
-                  <p className="eyebrow-label text-terracotta">{township.eyebrow}</p>
-                  <h2 className="mt-2 font-display text-2xl font-bold text-ink sm:text-3xl">
-                    {township.heading} <em className="text-green not-italic">{township.headingEmphasis}</em>
-                  </h2>
-                  <p className="mt-3 text-sm leading-[1.7] text-ink-muted">{township.description}</p>
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    {township.chips?.map((chip) => (
-                      <span key={chip} className="rounded-full border border-hairline bg-bg px-3 py-2 text-xs font-semibold text-ink/80">
-                        {chip}
-                      </span>
-                    ))}
+                <Link to={`/residences/${township.id}`} className="block">
+                  <div className="relative aspect-[4/3] overflow-hidden sm:aspect-[16/9]">
+                    <img src={township.image.src} alt={township.image.alt} className="h-full w-full object-cover" />
+                    <span className="eyebrow-label absolute left-4 top-4 rounded bg-bg/95 px-2.5 py-1.5 text-[10px] text-ink/80 shadow-sm">
+                      {township.reraId ? `RERA: ${township.reraId}` : township.image.tag}
+                    </span>
                   </div>
+                  <div className="p-5 pb-0 sm:p-7 sm:pb-0">
+                    <p className="eyebrow-label text-chrome">{township.eyebrow}</p>
+                    <h2 className="mt-2 font-display text-2xl font-bold text-ink sm:text-3xl">
+                      {township.heading} <em className="text-green not-italic">{township.headingEmphasis}</em>
+                    </h2>
+                    <p className="mt-3 text-sm leading-[1.7] text-ink-muted">{township.description}</p>
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      {township.chips?.map((chip) => (
+                        <span key={chip} className="rounded-full border border-hairline bg-bg px-3 py-2 text-xs font-semibold text-ink/80">
+                          {chip}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </Link>
+                <div className="p-5 pt-0 sm:p-7 sm:pt-0">
                   <div className="mt-6 flex flex-col gap-3 border-t border-hairline pt-5 sm:flex-row sm:items-center sm:justify-between">
                     <span className="text-sm font-semibold text-ink">
                       {pricing ? `From ${pricing.minSqYd}-${pricing.maxSqYd} sq yd` : 'Site visit available'}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setSiteVisitOpen(true)}
-                      className="rounded-full bg-green px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-green-soft"
-                    >
-                      Book a site visit
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <Link
+                        to={`/residences/${township.id}`}
+                        className="text-sm font-semibold text-ink underline underline-offset-4 hover:text-terracotta"
+                      >
+                        View details
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => setSiteVisitOpen(true)}
+                        className="rounded-full bg-green px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-green-soft"
+                      >
+                        Book a site visit
+                      </button>
+                    </div>
                   </div>
                 </div>
               </article>

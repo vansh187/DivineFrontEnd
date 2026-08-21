@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import type { JourneyStop } from '../data/types';
 
 interface JourneyPanelProps {
@@ -9,7 +10,13 @@ export function JourneyPanel({ stop }: JourneyPanelProps) {
     <div className="relative grid w-screen flex-none grid-cols-1 md:grid-cols-2">
       <div className="flex flex-col justify-center px-6 py-20 sm:px-12 md:py-0">
         <div className="max-w-xl rounded-2xl border border-hairline bg-surface/88 p-7 shadow-[0_24px_60px_-32px_rgba(6,31,45,0.32)] backdrop-blur-sm sm:p-9">
-          <div className="eyebrow-label mb-4 text-terracotta">{stop.eyebrow}</div>
+          {stop.reraId ? (
+            <Link to={`/residences/${stop.id}`} className="eyebrow-label mb-4 block text-chrome hover:text-terracotta">
+              {stop.eyebrow}
+            </Link>
+          ) : (
+            <div className="eyebrow-label mb-4 text-chrome">{stop.eyebrow}</div>
+          )}
 
           {stop.bigNumber && (
             <div className="font-display text-[clamp(52px,8vw,120px)] font-bold leading-[0.9] text-green">

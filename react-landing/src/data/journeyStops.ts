@@ -17,12 +17,13 @@ export const journeyStops: JourneyStop[] = [
   },
   {
     id: 'suraksha-enclave',
-    eyebrow: 'STOP 1 — Sector 15, Ganaur · Sonipat',
+    eyebrow: 'Suraksha Enclave — Sector 15, Ganaur · Sonipat',
     heading: 'Suraksha',
     headingEmphasis: 'Enclave',
     description:
       'DDJAY-approved, 250 metres off the highway. Phase 1 is already occupied — largely by paramilitary families — so the neighbourhood exists before you book.',
     reraId: 'RERA-PKL-890-2020',
+    heroSrc: '/townships/suraksha-hero.jpg',
     chips: ['120–180 sq yd', 'DDJAY', '24-hr security', 'Yoga podium', 'Community centre'],
     image: {
       src: '/townships/suraksha-entrance.jpg',
@@ -32,12 +33,13 @@ export const journeyStops: JourneyStop[] = [
   },
   {
     id: 'ops-divine-greens',
-    eyebrow: 'STOP 2 — Karnal · Bang on NH-1',
+    eyebrow: 'OPS Divine Greens — Karnal · Bang on NH-1',
     heading: 'OPS Divine',
     headingEmphasis: 'Greens',
     description:
       "368 plots around a 24-metre spine road, with the Florence Club, cricket pitch, tennis court, amphitheatre and two children's parks inside the gate. Launched March 2023.",
     reraId: 'HRERA-PKL-KRL-621-2024',
+    heroSrc: '/townships/ops-hero.jpg',
     chips: ['125–180 sq yd', '368 plots', 'Florence Club', 'Karnal Haveli 4 min', 'Station 17 min'],
     image: {
       src: '/townships/ops-entrance.jpg',
