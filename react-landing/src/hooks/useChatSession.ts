@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import * as chatApi from '../services/chatApi';
+import type { ChatButton } from '../services/chatApi';
 import { ApiError } from '../services/authApi';
 import { useIsMobile } from './useIsMobile';
 
+export type { ChatButton };
+
 export type AgentMessageVariant =
-  | { kind: 'text'; text: string }
+  | { kind: 'text'; text: string; buttons?: ChatButton[] | null }
   | { kind: 'contact_card'; phone: string; phoneHref: string };
 
 export type ChatMessage =
@@ -32,7 +35,7 @@ type ChatAction =
   | { type: 'SESSION_INIT_FAILED' }
   | { type: 'SESSION_EXPIRED' }
   | { type: 'SEND_START'; localMessage?: ChatMessage; intentIsCallback?: boolean }
-  | { type: 'SEND_SUCCESS'; reply: string; callbackConfirmed: boolean }
+  | { type: 'SEND_SUCCESS'; reply: string; buttons: ChatButton[] | null; callbackConfirmed: boolean }
   | { type: 'SEND_FAILURE'; message: string; localMessage?: ChatMessage }
   | { type: 'SET_INTERIM_STATUS'; text: string | null }
   | { type: 'DISMISS_CONSENT' }
@@ -102,7 +105,7 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
       const agentMessage: ChatMessage = {
         id: makeId(),
         role: 'agent',
-        variant: { kind: 'text', text: action.reply },
+        variant: { kind: 'text', text: action.reply, buttons: action.buttons },
       };
       return {
         ...state,
@@ -219,11 +222,20 @@ export function useChatSession() {
   const setMicState = useCallback((micState: ChatState['micState']) => dispatch({ type: 'MIC_STATE_CHANGED', micState }), []);
 
   const send = useCallback(
-    async (input: { message?: string; audio?: Blob; lat?: number; long?: number; intent?: 'request_callback' }) => {
+    async (input: {
+      message?: string;
+      /** What the user bubble shows, if different from `message` (e.g. a
+       * tapped button's label instead of its raw value). */
+      displayText?: string;
+      audio?: Blob;
+      lat?: number;
+      long?: number;
+      intent?: 'request_callback';
+    }) => {
       const sessionId = state.sessionId;
 
       const localMessage: ChatMessage | undefined = input.message
-        ? { id: makeId(), role: 'user', text: input.message }
+        ? { id: makeId(), role: 'user', text: input.displayText ?? input.message }
         : input.audio
           ? { id: makeId(), role: 'user', text: '🎤 Voice message' }
           : undefined;
@@ -236,7 +248,7 @@ export function useChatSession() {
           localMessage,
           message: "I'm having trouble connecting right now — please try again in a moment.",
         });
-        return;
+        return false;
       }
 
       dispatch({ type: 'SEND_START', localMessage, intentIsCallback: input.intent === 'request_callback' });
@@ -250,7 +262,8 @@ export function useChatSession() {
           long: input.long,
           intent: input.intent,
         });
-        dispatch({ type: 'SEND_SUCCESS', reply: reply.reply, callbackConfirmed: reply.callbackConfirmed !== null });
+        dispatch({ type: 'SEND_SUCCESS', reply: reply.reply, buttons: reply.buttons, callbackConfirmed: reply.callbackConfirmed !== null });
+        return true;
       } catch (err) {
         if (err instanceof ApiError && err.status === 404 && err.detail === 'session_not_found') {
           // Stale session on the backend — clear it and reconnect immediately
@@ -263,10 +276,11 @@ export function useChatSession() {
           dispatch({ type: 'SESSION_EXPIRED' });
           runInit();
           dispatch({ type: 'SEND_FAILURE', message: 'Your chat session expired — reconnecting, please send that again in a moment.' });
-          return;
+          return false;
         }
         const message = err instanceof ApiError ? err.message : 'Something went wrong. Please try again.';
         dispatch({ type: 'SEND_FAILURE', message });
+        return false;
       }
     },
     [state.sessionId, runInit],

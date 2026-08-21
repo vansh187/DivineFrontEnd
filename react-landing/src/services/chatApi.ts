@@ -20,8 +20,16 @@ export interface CallbackConfirmed {
   preferredTime: string;
 }
 
+export interface ChatButton {
+  label: string;
+  value: string;
+  action: string;
+  url?: string | null;
+}
+
 export interface ChatReply {
   reply: string;
+  buttons: ChatButton[] | null;
   callbackConfirmed: CallbackConfirmed | null;
   guardrailPassed: boolean | null;
   llmProvider: string | null;
@@ -40,6 +48,7 @@ type RawSessionInitResponse = Partial<{ session_id: string; lead_id: string }>;
 
 type RawChatReply = Partial<{
   reply: string;
+  buttons: ChatButton[] | null;
   callback_confirmed: Partial<{ name: string; phone: string; preferred_time: string }> | null;
   guardrail_passed: boolean | null;
   llm_provider: string | null;
@@ -102,13 +111,17 @@ export async function sendChatMessage(input: SendChatMessageInput): Promise<Chat
   };
   if (input.audio) {
     body.audio_b64 = await blobToBase64(input.audio);
-  } else if (input.text) {
-    body.text = input.text;
+  } else {
+    // Always send `text` explicitly (even as ""), rather than omitting the
+    // field when empty — the backend's greeting/menu flow triggers off an
+    // empty-text message and needs the field present, not absent.
+    body.text = input.text ?? '';
   }
 
   const raw = await postJson<RawChatReply>('/chatbot/message', body);
   return {
     reply: raw.reply ?? '',
+    buttons: raw.buttons ?? null,
     callbackConfirmed: raw.callback_confirmed
       ? {
           name: raw.callback_confirmed.name ?? '',

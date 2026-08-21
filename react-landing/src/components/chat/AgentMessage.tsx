@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { AgentMessageVariant } from '../../hooks/useChatSession';
+import type { AgentMessageVariant, ChatButton } from '../../hooks/useChatSession';
 import { CheckIcon, CopyIcon, PhoneIcon } from './icons/ChatIcons';
 
 function Shell({ children }: { children: React.ReactNode }) {
@@ -50,7 +50,39 @@ function ContactCard({ phone, phoneHref }: { phone: string; phoneHref: string })
   );
 }
 
-export function AgentMessage({ variant }: { variant: AgentMessageVariant }) {
+function ButtonOptions({
+  buttons,
+  interactive,
+  onButtonTap,
+}: {
+  buttons: ChatButton[];
+  interactive: boolean;
+  onButtonTap?: (button: ChatButton) => void;
+}) {
+  return (
+    <div className="mt-3 flex flex-col gap-1.5">
+      {buttons.map((button) => (
+        <button
+          key={button.value}
+          type="button"
+          disabled={!interactive}
+          onClick={() => onButtonTap?.(button)}
+          className="w-full rounded-lg border border-hairline bg-surface px-3.5 py-2.5 text-left text-sm font-medium text-ink transition-colors enabled:hover:border-terracotta enabled:hover:bg-terracotta/8 disabled:cursor-default disabled:opacity-60"
+        >
+          {button.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+interface AgentMessageProps {
+  variant: AgentMessageVariant;
+  interactive?: boolean;
+  onButtonTap?: (button: ChatButton) => void;
+}
+
+export function AgentMessage({ variant, interactive = false, onButtonTap }: AgentMessageProps) {
   if (variant.kind === 'contact_card') {
     return <ContactCard phone={variant.phone} phoneHref={variant.phoneHref} />;
   }
@@ -58,6 +90,9 @@ export function AgentMessage({ variant }: { variant: AgentMessageVariant }) {
   return (
     <Shell>
       <p>{variant.text}</p>
+      {variant.buttons && variant.buttons.length > 0 && (
+        <ButtonOptions buttons={variant.buttons} interactive={interactive} onButtonTap={onButtonTap} />
+      )}
     </Shell>
   );
 }
