@@ -33,7 +33,7 @@ export function HeroSection({ onBookVisit }: HeroSectionProps) {
       </div>
 
       <div ref={copyRef} className="relative z-10 mx-auto flex w-full max-w-4xl flex-col items-center gap-5 sm:gap-6">
-        <span className="eyebrow-label max-w-[min(100%,19rem)] rounded-full border border-white/32 bg-black/22 px-3 py-1.5 text-center text-[10px] leading-relaxed text-white/92 backdrop-blur-sm sm:max-w-full sm:px-4 sm:text-xs">
+        <span className="eyebrow-label max-w-[min(100%,19rem)] rounded-none border border-white/32 bg-black/22 px-3 py-1.5 text-center text-[10px] leading-relaxed text-white/92 backdrop-blur-sm sm:max-w-full sm:px-4 sm:text-xs">
           <span className="sm:hidden">Established {company.foundedYear} | NH-1 corridor</span>
           <span className="hidden sm:inline">Established {company.foundedYear} | NH-1 Delhi-Chandigarh corridor</span>
         </span>
@@ -51,19 +51,19 @@ export function HeroSection({ onBookVisit }: HeroSectionProps) {
           <button
             type="button"
             onClick={onBookVisit}
-            className="rounded-full bg-green px-5 py-3.5 text-sm font-semibold text-white shadow-[0_16px_40px_-14px_rgba(6,31,45,0.68)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-green-soft hover:shadow-[0_20px_44px_-14px_rgba(10,49,69,0.72)] sm:px-7"
+            className="rounded-none border border-terracotta bg-terracotta px-5 py-3.5 text-sm font-semibold tracking-[0.04em] text-white uppercase transition-all duration-200 hover:border-green hover:bg-green sm:px-7"
           >
             Book a site visit
           </button>
           <a
             href="/residences"
-            className="eyebrow-label rounded-full border border-white/55 bg-black/25 px-5 py-3.5 text-center text-white backdrop-blur-sm transition-colors duration-200 hover:border-white hover:bg-black/40 sm:px-7"
+            className="eyebrow-label rounded-none border border-white/55 bg-black/25 px-5 py-3.5 text-center text-white backdrop-blur-sm transition-colors duration-200 hover:border-white hover:bg-black/40 sm:px-7"
           >
             Explore residences
           </a>
         </div>
 
-        <div className="mt-2 hidden flex-wrap items-center justify-center gap-x-8 gap-y-3 rounded-lg border border-white/14 bg-black/32 px-7 py-3.5 text-white/90 backdrop-blur-sm sm:flex">
+        <div className="mt-2 hidden flex-wrap items-center justify-center gap-x-8 gap-y-3 rounded-none border border-white/14 bg-black/32 px-7 py-3.5 text-white/90 backdrop-blur-sm sm:flex">
           <span className="text-sm">
             <strong className="font-display font-bold text-white">20</strong> yrs on the corridor
           </span>

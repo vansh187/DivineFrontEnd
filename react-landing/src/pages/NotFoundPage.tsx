@@ -13,7 +13,7 @@ export function NotFoundPage() {
         </p>
         <a
           href="/"
-          className="mt-2 inline-flex items-center rounded-full bg-green px-6 py-3 text-sm font-semibold text-white shadow-[0_16px_36px_-14px_rgba(6,31,45,0.62)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-green-soft"
+          className="mt-2 inline-flex items-center rounded-none border border-green bg-green px-6 py-3 text-sm font-semibold tracking-[0.04em] text-white uppercase transition-colors duration-200 hover:border-terracotta hover:bg-terracotta"
         >
           Back to home
         </a>

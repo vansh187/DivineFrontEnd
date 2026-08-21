@@ -5,19 +5,19 @@
 @import '@fontsource/lato/latin-700.css';
 
 @theme inline {
-  /* Guardian of Trust deep navy system. */
-  --color-bg: #f2f7fa;
+  /* Guardian of Trust brand system — Trust Navy, Concrete Grey, Safety Orange. */
+  --color-bg: #f7f8f9;
   --color-surface: #ffffff;
-  --color-chrome: #061f2d;
+  --color-chrome: #2c3e50;
   --color-concrete-grey: #95a5a6;
-  --color-ink: #082635;
-  --color-ink-muted: #5c7280;
-  --color-green: #061f2d;
-  --color-green-soft: #0a3145;
-  --color-terracotta: #0e4258;
-  --color-terracotta-light: #9cc9da;
+  --color-ink: #2c3e50;
+  --color-ink-muted: #5c6b74;
+  --color-green: #2c3e50;
+  --color-green-soft: #34495e;
+  --color-terracotta: #e67e22;
+  --color-terracotta-light: #f0a860;
   --color-safety-orange: #e67e22;
-  --color-hairline: #d7e5ec;
+  --color-hairline: #d7dde0;
   --color-hairline-dark: rgba(255, 255, 255, 0.22);
 
   --font-display: 'Oswald', sans-serif;

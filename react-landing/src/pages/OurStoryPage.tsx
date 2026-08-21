@@ -148,7 +148,7 @@ export function OurStoryPage() {
                   The next chapter is more refined, more connected and more deliberate.
                 </h2>
                 <p className="mt-3 text-sm leading-[1.75] text-ink-muted">
-                  Suraksha Enclave Phase 2 and OPS Divine Greens carry the brand forward with a
+                  Suraksha Enclave and OPS Divine Greens carry the brand forward with a
                   premium township experience: reachable locations, clear approvals, landscape-led
                   planning, club amenities and community infrastructure designed around graceful daily life.
                 </p>

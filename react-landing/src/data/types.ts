@@ -9,6 +9,7 @@ export interface JourneyStop {
   heading: string;
   headingEmphasis: string;
   description: string;
+  reraId?: string;
   bigNumber?: {
     value: string;
     unit: string;
