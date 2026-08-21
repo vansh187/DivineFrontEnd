@@ -6,6 +6,7 @@ import { CustomerPage } from './pages/CustomerPage';
 import { BrokerPage } from './pages/BrokerPage';
 import { BrokerCommissionPage } from './pages/BrokerCommissionPage';
 import { ResidencesPage } from './pages/ResidencesPage';
+import { ProjectDetailPage } from './pages/ProjectDetailPage';
 import { OurStoryPage } from './pages/OurStoryPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { AuthModal } from './components/AuthModal';
@@ -71,6 +72,7 @@ function AppRoutes() {
       <Routes>
         <Route path="/" element={<HomeRoute />} />
         <Route path="/residences" element={<ResidencesPage />} />
+        <Route path="/residences/:id" element={<ProjectDetailPage />} />
         <Route path="/our-story" element={<OurStoryPage />} />
         <Route
           path="/customer"

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { townshipLocations } from '../data/locationConnectivity';
 
 const mapSrc = `https://www.google.com/maps?saddr=${encodeURIComponent(
@@ -34,7 +35,9 @@ export function LocationSection() {
           </div>
 
           <div className="flex-1 p-7 sm:p-9">
-            <p className="eyebrow-label text-ink-muted">{active.subtitle}</p>
+            <Link to={`/residences/${active.id}`} className="eyebrow-label block text-ink-muted hover:text-terracotta">
+              {active.subtitle}
+            </Link>
             <div className="mt-5 divide-y divide-hairline border-t border-hairline">
               {active.connectivity.map((item) => (
                 <div key={item.label} className="flex items-center justify-between py-3.5">

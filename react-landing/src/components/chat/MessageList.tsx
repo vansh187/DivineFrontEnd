@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
-import type { ChatMessage } from '../../hooks/useChatSession';
+import type { ChatButton, ChatMessage } from '../../hooks/useChatSession';
 import { UserMessage } from './UserMessage';
 import { AgentMessage } from './AgentMessage';
 import { TypingIndicator } from './TypingIndicator';
@@ -11,15 +11,18 @@ interface MessageListProps {
   isSending: boolean;
   interimStatusLine: string | null;
   scrollRef: RefObject<HTMLDivElement | null>;
+  onButtonTap?: (button: ChatButton) => void;
 }
 
-export function MessageList({ messages, isSending, interimStatusLine, scrollRef }: MessageListProps) {
+export function MessageList({ messages, isSending, interimStatusLine, scrollRef, onButtonTap }: MessageListProps) {
   const endRef = useRef<HTMLDivElement>(null);
   const reducedMotion = usePrefersReducedMotion();
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth' });
   }, [messages, isSending, reducedMotion]);
+
+  const lastMessageId = messages[messages.length - 1]?.id;
 
   return (
     <div
@@ -32,7 +35,12 @@ export function MessageList({ messages, isSending, interimStatusLine, scrollRef 
         message.role === 'user' ? (
           <UserMessage key={message.id} text={message.text} />
         ) : (
-          <AgentMessage key={message.id} variant={message.variant} />
+          <AgentMessage
+            key={message.id}
+            variant={message.variant}
+            interactive={!isSending && message.id === lastMessageId}
+            onButtonTap={onButtonTap}
+          />
         ),
       )}
       {isSending && <TypingIndicator interimStatusLine={interimStatusLine} />}

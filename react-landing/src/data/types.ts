@@ -10,6 +10,8 @@ export interface JourneyStop {
   headingEmphasis: string;
   description: string;
   reraId?: string;
+  /** Optional larger image for the project detail page hero; falls back to image.src. */
+  heroSrc?: string;
   bigNumber?: {
     value: string;
     unit: string;

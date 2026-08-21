@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useChatSession } from '../../hooks/useChatSession';
-import type { AgentMessageVariant } from '../../hooks/useChatSession';
+import type { AgentMessageVariant, ChatButton } from '../../hooks/useChatSession';
 import { useAuth } from '../../hooks/useAuth';
 import { ApiError } from '../../services/authApi';
 import type { Role } from '../../services/authApi';
@@ -89,7 +89,13 @@ export function ChatWidget() {
   const reducedMotion = usePrefersReducedMotion();
   const [entered, setEntered] = useState(false);
   const [teaserVisible, setTeaserVisible] = useState(false);
-  const greetedRef = useRef(false);
+  // Tracks the real backend greeting specifically — separate from
+  // session.messages, because a *failed* greeting attempt still appends a
+  // "something went wrong" message, which must not be mistaken for a
+  // successful greeting (that would permanently block ever retrying it).
+  const greetingSentRef = useRef(false);
+  const greetingInFlightRef = useRef(false);
+  const greetingRetriedSinceOpenRef = useRef(false);
   const geoCoordsRef = useRef<{ lat: number; long: number } | null>(null);
   const geoRequestedRef = useRef(false);
 
@@ -121,17 +127,29 @@ export function ChatWidget() {
     return () => cancelAnimationFrame(raf);
   }, [session.isOpen]);
 
+  // The greeting isn't returned by session/init — it comes back from the
+  // normal message endpoint. Fire one empty-text message right after the
+  // session is ready so the backend's greeting (name prompt, main menu,
+  // whatever the chatbot flow currently opens with) appears before the
+  // visitor types anything, instead of a hardcoded local string.
   useEffect(() => {
-    if (!session.isOpen || greetedRef.current || session.messages.length > 0 || !session.sessionId) return;
-    greetedRef.current = true;
-    session.appendAgentMessage({
-      kind: 'text',
-      text: "Hi! I'm the Divine Vision concierge — ask me anything about our townships, or tap Request Callback / Call Now if you'd rather talk to our team directly.",
+    if (!session.isOpen) {
+      // Let the next open retry a greeting that never actually succeeded.
+      greetingRetriedSinceOpenRef.current = false;
+      return;
+    }
+    if (greetingSentRef.current || greetingInFlightRef.current || greetingRetriedSinceOpenRef.current) return;
+    if (!session.sessionId) return;
+    greetingRetriedSinceOpenRef.current = true;
+    greetingInFlightRef.current = true;
+    void session.send({ message: '' }).then((ok) => {
+      greetingInFlightRef.current = false;
+      if (ok) greetingSentRef.current = true;
     });
     // Only re-evaluate when these specific fields change — `session` itself
     // is a new object on every dispatch (every keystroke, mic-state change,
     // etc.), which would otherwise re-run this effect far more than needed.
-  }, [session.isOpen, session.sessionId, session.messages.length, session.appendAgentMessage]);
+  }, [session.isOpen, session.sessionId, session.send]);
 
   // Ask for location proactively, once, as soon as the visitor opens the
   // chat — rather than waiting for the AI to phrase a reply a specific way
@@ -173,9 +191,13 @@ export function ChatWidget() {
     }
   };
 
-  const handleSendText = (text: string) => {
+  // `displayText` lets a tapped button's label stand in for what the visitor
+  // "said" (the bubble) while `text` — the button's value — is still what
+  // gets pattern-matched below and sent to the backend. Free-typed input
+  // just passes the same string for both.
+  const handleSendText = (text: string, displayText: string = text) => {
     if (LOGOUT_PATTERN.test(text.trim())) {
-      session.appendUserMessage(text);
+      session.appendUserMessage(displayText);
       logout();
       session.appendAgentMessage({ kind: 'text', text: 'You are logged out now.' });
       session.close();
@@ -190,7 +212,7 @@ export function ChatWidget() {
       isLoginConfirmationPrompt(lastMessage.variant) &&
       AFFIRMATIVE_LOGIN_PATTERN.test(text.trim())
     ) {
-      session.appendUserMessage(text);
+      session.appendUserMessage(displayText);
       const credentials = inferChatSignupCredentials(session.messages);
       const role = inferChatRole(session.messages);
       if (!credentials) {
@@ -219,7 +241,7 @@ export function ChatWidget() {
     }
 
     if (lastMessage?.role === 'agent' && isPasswordLoginPrompt(lastMessage.variant)) {
-      session.appendUserMessage(text);
+      session.appendUserMessage(displayText);
       const username = session.messages
         .map((message) => (message.role === 'user' ? message.text.match(EMAIL_PATTERN)?.[0] : null))
         .filter(Boolean)
@@ -244,7 +266,7 @@ export function ChatWidget() {
       return;
     }
 
-    void session.send(withPendingGeo({ message: text }));
+    void session.send(withPendingGeo({ message: text, displayText }));
   };
 
   const handleSendAudio = (audio: Blob) => {
@@ -256,6 +278,20 @@ export function ChatWidget() {
 
   const handleRequestCallback = () => {
     void session.send({ intent: 'request_callback' });
+  };
+
+  // Generic handler for every tapped chat button, regardless of its `action`
+  // (chatbot_menu, chatbot_auth, select_booking_project, or any future one)
+  // — render the label, POST the value as the next message's text. Routed
+  // through handleSendText (not straight to session.send) so a button whose
+  // value happens to match the logout/login-confirmation/password patterns
+  // triggers the same real auth calls a typed equivalent would, instead of
+  // just being echoed into the chat as plain text.
+  const handleButtonTap = (button: ChatButton) => {
+    if (button.url) {
+      window.open(button.url, '_blank', 'noopener,noreferrer');
+    }
+    handleSendText(button.value, button.label);
   };
 
   const handleDesktopContactCard = (variant: AgentMessageVariant) => {
@@ -294,6 +330,7 @@ export function ChatWidget() {
             onDesktopContactCard={handleDesktopContactCard}
             onSendText={handleSendText}
             onSendAudio={handleSendAudio}
+            onButtonTap={handleButtonTap}
             onMicStateChange={session.setMicState}
             onMicPermissionDenied={handleMicPermissionDenied}
           />

@@ -4,7 +4,7 @@ import { QuickActionBar } from './QuickActionBar';
 import { MessageList } from './MessageList';
 import { InputBar } from './InputBar';
 import { CloseIcon } from './icons/ChatIcons';
-import type { AgentMessageVariant, ChatMessage } from '../../hooks/useChatSession';
+import type { AgentMessageVariant, ChatButton, ChatMessage } from '../../hooks/useChatSession';
 
 const chatbotIcon = '/brand/chatbot-arch-icon-small.jpg';
 
@@ -21,6 +21,7 @@ interface ChatWindowProps {
   onDesktopContactCard: (variant: AgentMessageVariant) => void;
   onSendText: (text: string) => void;
   onSendAudio: (audio: Blob) => void;
+  onButtonTap: (button: ChatButton) => void;
   onMicStateChange: (state: 'idle' | 'recording' | 'transcribing') => void;
   onMicPermissionDenied: () => void;
 }
@@ -38,6 +39,7 @@ export function ChatWindow({
   onDesktopContactCard,
   onSendText,
   onSendAudio,
+  onButtonTap,
   onMicStateChange,
   onMicPermissionDenied,
 }: ChatWindowProps) {
@@ -118,7 +120,13 @@ export function ChatWindow({
         onDesktopContactCard={onDesktopContactCard}
       />
 
-      <MessageList messages={messages} isSending={isSending} interimStatusLine={interimStatusLine} scrollRef={scrollRef} />
+      <MessageList
+        messages={messages}
+        isSending={isSending}
+        interimStatusLine={interimStatusLine}
+        scrollRef={scrollRef}
+        onButtonTap={onButtonTap}
+      />
 
       <InputBar
         disabled={isSending}
