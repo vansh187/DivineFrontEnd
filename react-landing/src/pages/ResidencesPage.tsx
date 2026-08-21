@@ -39,7 +39,7 @@ export function ResidencesPage() {
                 <div className="relative aspect-[4/3] overflow-hidden sm:aspect-[16/9]">
                   <img src={township.image.src} alt={township.image.alt} className="h-full w-full object-cover" />
                   <span className="eyebrow-label absolute left-4 top-4 rounded bg-bg/95 px-2.5 py-1.5 text-[10px] text-ink/80 shadow-sm">
-                    {township.image.tag}
+                    {township.reraId ? `RERA: ${township.reraId}` : township.image.tag}
                   </span>
                 </div>
                 <div className="p-5 sm:p-7">
@@ -76,7 +76,7 @@ export function ResidencesPage() {
         <section className="mx-auto mt-8 max-w-6xl rounded-lg bg-chrome px-5 py-6 text-white sm:px-7">
           <p className="font-display text-2xl font-bold">Prefer to speak first?</p>
           <p className="mt-2 text-sm text-white/72">Call the sales team and choose a convenient site visit slot.</p>
-          <a href={contact.phoneHref} className="mt-5 inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-chrome">
+          <a href={contact.phoneHref} className="mt-5 inline-flex rounded-none border border-white bg-white px-5 py-3 text-sm font-semibold tracking-[0.04em] text-chrome uppercase transition-colors hover:bg-terracotta hover:border-terracotta hover:text-white">
             {contact.phone}
           </a>
         </section>

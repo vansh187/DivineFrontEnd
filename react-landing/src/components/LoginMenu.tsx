@@ -33,7 +33,7 @@ const ChevronRightIcon = () => (
   </svg>
 );
 
-export function LoginMenu() {
+export function LoginMenu({ light = false }: { light?: boolean }) {
   const [open, setOpen] = useState(false);
   const [entered, setEntered] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -57,7 +57,7 @@ export function LoginMenu() {
     <div className="relative" ref={rootRef}>
       <button
         type="button"
-        className="eyebrow-label inline-flex items-center gap-1.5 text-xs text-white/85 transition-colors hover:text-terracotta-light"
+        className={`inline-flex items-center gap-1.5 text-xs transition-colors hover:text-terracotta ${light ? 'text-white/85' : 'text-ink/85'}`}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((prev) => !prev)}

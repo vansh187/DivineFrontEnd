@@ -21,14 +21,14 @@ export function Navbar({ onBookVisit, transparentOnTop = false }: NavbarProps) {
     <nav
       className={`fixed inset-x-0 top-0 z-[90] flex min-w-0 items-center justify-between gap-2 border-b px-3 py-3 transition-all duration-300 sm:gap-3 sm:px-10 sm:py-4 ${
         glass
-          ? 'border-white/12 bg-chrome/58 shadow-none backdrop-blur-xl'
-          : 'border-transparent bg-chrome shadow-[0_12px_30px_rgba(6,31,45,0.26)]'
+          ? 'border-transparent bg-transparent text-white shadow-none'
+          : 'border-hairline bg-bg/94 text-ink shadow-none backdrop-blur-xl'
       }`}
     >
       <a
         href="/"
         aria-label="Divine Vision home"
-        className="shrink-0"
+        className="shrink-0 text-current"
       >
         <DivineVisionLogo />
       </a>
@@ -39,19 +39,21 @@ export function Navbar({ onBookVisit, transparentOnTop = false }: NavbarProps) {
             <a
               key={link.href}
               href={link.href}
-              className="eyebrow-label text-xs text-white/85 transition-colors hover:text-terracotta-light"
+              className={`text-xs transition-colors hover:text-terracotta ${glass ? 'text-white/85' : 'text-ink/85'}`}
             >
               {link.label}
             </a>
           ))}
         </div>
 
-        <LoginMenu />
+        <LoginMenu light={glass} />
 
         <button
           type="button"
           onClick={onBookVisit}
-          className="shrink-0 rounded-full bg-white px-3 py-2 text-[11px] font-semibold text-chrome shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-green hover:text-white hover:shadow-[0_10px_24px_-10px_rgba(6,31,45,0.62)] max-[360px]:hidden sm:px-5 sm:py-2.5 sm:text-xs"
+          className={`shrink-0 rounded-none border px-3 py-2 text-[11px] font-semibold tracking-[0.04em] uppercase transition-all duration-200 hover:bg-terracotta hover:border-terracotta hover:text-white max-[360px]:hidden sm:px-5 sm:py-2.5 sm:text-xs ${
+            glass ? 'border-white text-white' : 'border-ink text-ink'
+          }`}
         >
           <span className="sm:hidden">Visit</span>
           <span className="hidden sm:inline">Book a site visit</span>
@@ -62,11 +64,13 @@ export function Navbar({ onBookVisit, transparentOnTop = false }: NavbarProps) {
           onClick={() => setMobileOpen((value) => !value)}
           aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
           aria-expanded={mobileOpen}
-          className="flex h-9 w-9 shrink-0 flex-col items-center justify-center gap-1.5 rounded-full border border-white/15 bg-white/8 text-white transition-colors hover:bg-white/12 sm:hidden"
+          className={`flex h-9 w-9 shrink-0 flex-col items-center justify-center gap-1.5 border transition-colors sm:hidden ${
+            glass ? 'border-white/15 bg-white/8 text-white hover:bg-white/12' : 'border-ink/15 bg-ink/6 text-ink hover:bg-ink/10'
+          }`}
         >
-          <span className="h-0.5 w-4 rounded-full bg-current" />
-          <span className="h-0.5 w-4 rounded-full bg-current" />
-          <span className="h-0.5 w-4 rounded-full bg-current" />
+          <span className="h-0.5 w-4 bg-current" />
+          <span className="h-0.5 w-4 bg-current" />
+          <span className="h-0.5 w-4 bg-current" />
         </button>
       </div>
 

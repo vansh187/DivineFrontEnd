@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { PDFDocument, PDFName, PDFObjectCopier, StandardFonts, rgb } from 'pdf-lib';
 import type { PDFImage, PDFPage, PDFFont } from 'pdf-lib';
 import { getApplicationProject } from '../data/applicationProjects';
 import type { ApplicationProject, ApplicationProjectId } from '../data/applicationProjects';
@@ -289,6 +289,16 @@ async function appendTemplateCoverPage(ctx: PdfContext) {
   const [coverPage] = await ctx.pdfDoc.copyPages(templateDoc, [0]);
   ctx.pdfDoc.addPage(coverPage);
   ctx.pageNumber += 1;
+
+  // pdf-lib's copyPages does not carry over the source document's
+  // /OCProperties catalog entry, so optional-content layers used on the
+  // template's cover page (e.g. its background/branding art) lose their
+  // visibility config and render blank in viewers. Copy it over manually.
+  const ocPropertiesRef = templateDoc.catalog.get(PDFName.of('OCProperties'));
+  if (ocPropertiesRef) {
+    const copier = PDFObjectCopier.for(templateDoc.context, ctx.pdfDoc.context);
+    ctx.pdfDoc.catalog.set(PDFName.of('OCProperties'), copier.copy(ocPropertiesRef));
+  }
 }
 
 function drawFooterSignatures(ctx: PdfContext, page: PDFPage) {
