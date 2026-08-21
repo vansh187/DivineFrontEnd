@@ -67,6 +67,35 @@ svg {
   font-family: var(--font-display);
 }
 
+/* Themed scrollbar for scrollable panels (e.g. the auth modal) that should
+   match the Guardian of Trust palette instead of the browser default — a
+   slim floating pill rather than a solid blocky bar. */
+.themed-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(230, 126, 34, 0.55) transparent;
+}
+
+.themed-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.themed-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.themed-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(230, 126, 34, 0.45);
+  border-radius: 999px;
+}
+
+.themed-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(230, 126, 34, 0.85);
+}
+
+.themed-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--color-chrome);
+}
+
 /* Guardian labels use Lato, uppercase spacing, and solid weight. */
 .eyebrow-label {
   font-family: var(--font-sans);

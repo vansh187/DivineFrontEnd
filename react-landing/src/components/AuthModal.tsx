@@ -3,6 +3,7 @@ import type { FormEvent, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useAuth } from '../hooks/useAuth';
+import { DivineVisionLogo } from './DivineVisionLogo';
 import { ApiError, requestPasswordReset, resetPassword } from '../services/authApi';
 import type { Role } from '../services/authApi';
 
@@ -72,8 +73,8 @@ const CloseIcon = () => (
 );
 
 const ROLES: { value: Role; label: string; Icon: () => ReactNode }[] = [
-  { value: 'customer', label: 'Customer', Icon: HomeIcon },
-  { value: 'broker', label: 'Broker', Icon: BriefcaseIcon },
+  { value: 'customer', label: 'End User', Icon: HomeIcon },
+  { value: 'broker', label: 'Channel Partner', Icon: BriefcaseIcon },
 ];
 
 interface FieldProps {
@@ -343,11 +344,21 @@ export function AuthModal() {
         role="dialog"
         aria-modal="true"
         aria-labelledby="auth-modal-heading"
-        className={`relative grid w-full max-w-4xl overflow-hidden rounded-[28px] border border-hairline bg-surface shadow-[0_50px_140px_-30px_rgba(10,14,10,0.55)] transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] sm:grid-cols-[1.05fr_1fr] ${
+        className={`relative flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-[28px] border border-hairline bg-surface shadow-[0_50px_140px_-30px_rgba(10,14,10,0.55)] transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
           entered ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-3 scale-[0.97] opacity-0'
         }`}
       >
-        {/* Visual panel */}
+        <button
+          type="button"
+          onClick={closeModal}
+          aria-label="Close"
+          className="absolute right-5 top-5 z-20 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface/90 text-ink-muted shadow-sm backdrop-blur-sm transition-colors hover:bg-bg hover:text-ink"
+        >
+          <CloseIcon />
+        </button>
+
+        <div className="grid min-h-0 flex-1 grid-rows-[auto_1fr] sm:grid-cols-[1.05fr_1fr] sm:grid-rows-1">
+        {/* Visual panel — stays put; only the form panel scrolls */}
         <div className="relative h-44 overflow-hidden sm:h-auto">
           <img
             src="/townships/suraksha-entrance.jpg"
@@ -358,9 +369,8 @@ export function AuthModal() {
           <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(9,16,11,0.55)_0%,rgba(9,16,11,0.25)_45%,rgba(9,16,11,0.82)_100%)]" />
 
           <div className="relative z-10 flex h-full flex-col justify-between p-6 sm:p-8">
-            <div className="flex items-center gap-2.5">
-              <img src="/brand/logo-icon.png" alt="" aria-hidden="true" className="h-8 w-8 object-contain drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)]" />
-              <span className="font-display text-lg font-bold text-white">Divine Vision</span>
+            <div className="text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.5)]">
+              <DivineVisionLogo />
             </div>
 
             <div className="hidden sm:block">
@@ -381,24 +391,18 @@ export function AuthModal() {
           </div>
         </div>
 
-        {/* Form panel */}
-        <div className="relative p-6 sm:p-9">
-          <button
-            type="button"
-            onClick={closeModal}
-            aria-label="Close"
-            className="absolute right-5 top-5 flex h-8 w-8 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-bg hover:text-ink"
-          >
-            <CloseIcon />
-          </button>
-
+        {/* Form panel — the only part of the card that scrolls */}
+        <div
+          data-lenis-prevent
+          className="themed-scrollbar relative min-h-0 overflow-y-auto overscroll-contain p-6 sm:p-9"
+        >
           <div className="mb-5 inline-flex rounded-full border border-hairline bg-bg p-1">
             {ROLES.map((role) => (
               <button
                 key={role.value}
                 type="button"
                 onClick={() => switchRole(role.value)}
-                className={`eyebrow-label inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-[11px] transition-colors ${
+                className={`eyebrow-label inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-[11px] transition-colors ${
                   modalRole === role.value ? 'bg-chrome text-white shadow-sm' : 'text-ink-muted hover:text-ink'
                 }`}
               >
@@ -623,6 +627,7 @@ export function AuthModal() {
               </p>
             </>
           )}
+        </div>
         </div>
       </div>
     </div>
