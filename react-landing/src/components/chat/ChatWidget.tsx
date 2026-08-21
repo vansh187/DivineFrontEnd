@@ -175,7 +175,7 @@ export function ChatWidget() {
     );
   }, [session.isOpen]);
 
-  const withPendingGeo = (extra: { message?: string; audio?: Blob }) => {
+  const withPendingGeo = (extra: { message?: string; displayText?: string; audio?: Blob }) => {
     const coords = geoCoordsRef.current;
     geoCoordsRef.current = null;
     return coords ? { ...extra, lat: coords.lat, long: coords.long } : extra;
