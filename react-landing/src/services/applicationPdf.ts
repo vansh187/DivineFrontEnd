@@ -686,13 +686,12 @@ async function renderReadableApplicationPacket(
   hasCoApplicant: boolean,
   paymentInfo?: PaymentStatus | null,
 ) {
-  if (formData.projectId === 'ops-divine-greens') {
-    try {
-      await appendTemplateCoverPage(ctx);
-    } catch {
-      renderProjectPage(ctx, formData);
-    }
-  } else {
+  // Every project has its own branded cover page template (see applicationProjects.ts's
+  // templateUrl) - fall back to the plain generated project page only if that template
+  // can't actually be loaded/copied in, not based on which project this happens to be.
+  try {
+    await appendTemplateCoverPage(ctx);
+  } catch {
     renderProjectPage(ctx, formData);
   }
 
