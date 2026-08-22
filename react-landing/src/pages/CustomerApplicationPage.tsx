@@ -328,8 +328,8 @@ export function CustomerApplicationPage() {
     });
   };
 
-  const handleSignatureUpload = async (kind: 'applicant' | 'coApplicant', file: File) => {
-    const key = kind === 'applicant' ? 'applicantSignature' : 'coApplicantSignature';
+  const handleSignatureUpload = async (kind: 'applicant' | 'coApplicant' | 'cancelledCheque', file: File) => {
+    const key = kind === 'applicant' ? 'applicantSignature' : kind === 'coApplicant' ? 'coApplicantSignature' : 'cancelledCheque';
     try {
       const dataUrl = await blobToDataUrl(file);
       persist({
@@ -486,6 +486,10 @@ export function CustomerApplicationPage() {
       setError('Upload the co-applicant signature before generating the application PDF.');
       return;
     }
+    if (!docs.cancelledCheque.dataUrl) {
+      setError('Upload a cancelled cheque before generating the application PDF.');
+      return;
+    }
     if (!docs.bookingApplication.formData.pricingNotesAccepted) {
       setError('Accept the pricing notes before generating the application PDF.');
       return;
@@ -515,6 +519,7 @@ export function CustomerApplicationPage() {
         coApplicantSignatureDataUrl: docs.coApplicantSignature.dataUrl,
         applicantPhotoSource: docs.applicantPhoto.dataUrl || docs.applicantPhoto.signedUrl,
         coApplicantPhotoSource: docs.coApplicantPhoto.dataUrl || docs.coApplicantPhoto.signedUrl,
+        hasCoApplicant,
         paymentInfo: docs.payment,
         identityAttachments: [
           {
@@ -534,6 +539,11 @@ export function CustomerApplicationPage() {
             fileName: docs.pan.fileName,
             dataUrl: docs.pan.dataUrl,
             signedUrl: docs.pan.signedUrl,
+          },
+          {
+            title: 'Cancelled Cheque',
+            fileName: docs.cancelledCheque.fileName,
+            dataUrl: docs.cancelledCheque.dataUrl,
           },
         ],
       });
@@ -659,6 +669,11 @@ export function CustomerApplicationPage() {
             label="First applicant signature for undertaking"
             status={docs.applicantSignature}
             onUpload={(file) => void handleSignatureUpload('applicant', file)}
+          />
+          <SignatureUpload
+            label="Cancelled cheque (mandatory)"
+            status={docs.cancelledCheque}
+            onUpload={(file) => void handleSignatureUpload('cancelledCheque', file)}
           />
         </Section>
 

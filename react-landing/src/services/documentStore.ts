@@ -306,6 +306,9 @@ export interface CustomerDocState {
   coApplicantPhoto: AadhaarPhotoStatus;
   applicantSignature: SignatureStatus;
   coApplicantSignature: SignatureStatus;
+  /** Mandatory cancelled cheque upload (Page 2 - Fill application form) - client-side
+   * only, same as the signatures, embedded as an identity attachment page in the PDF. */
+  cancelledCheque: SignatureStatus;
   /** Co-applicant details are optional - this is the single source of truth (set via
    * a checkbox on the PAN card & signatures tile) for whether the co-applicant
    * signature/photo are required and whether the photo upload tile is shown at all. */
@@ -397,6 +400,7 @@ export function loadCustomerDocs(email: string): CustomerDocState {
       coApplicantPhoto: { ...emptyAadhaarPhotoStatus(), ...parsed.coApplicantPhoto },
       applicantSignature: { ...emptySignatureStatus(), ...(parsed.applicantSignature ?? parsed.signature) },
       coApplicantSignature: { ...emptySignatureStatus(), ...parsed.coApplicantSignature },
+      cancelledCheque: { ...emptySignatureStatus(), ...parsed.cancelledCheque },
       // State cached before this checkbox existed won't have it - infer from whether a
       // co-applicant signature was already on file rather than defaulting everyone to false.
       hasCoApplicant: parsed.hasCoApplicant ?? Boolean(parsed.coApplicantSignature?.fileName),
@@ -421,6 +425,7 @@ export function loadCustomerDocs(email: string): CustomerDocState {
       coApplicantPhoto: emptyAadhaarPhotoStatus(),
       applicantSignature: emptySignatureStatus(),
       coApplicantSignature: emptySignatureStatus(),
+      cancelledCheque: emptySignatureStatus(),
       hasCoApplicant: false,
       generatedDoc: emptyGeneratedDocStatus(),
       bookingApplication: emptyBookingApplicationStatus(),
