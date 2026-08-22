@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
@@ -7,10 +7,19 @@ import { journeyStops } from '../data/journeyStops';
 import { townshipLocations } from '../data/locationConnectivity';
 import { getProjectDetail } from '../data/projectDetails';
 import { contact } from '../data/contact';
+import { useAuth } from '../hooks/useAuth';
+import { loadSavedTownships, toggleSavedTownship } from '../services/savedTownships';
 
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [siteVisitOpen, setSiteVisitOpen] = useState(false);
+  const { session, openModal } = useAuth();
+  const email = session?.email ?? null;
+
+  const [savedIds, setSavedIds] = useState<string[]>(() => (email ? loadSavedTownships(email) : []));
+  useEffect(() => {
+    setSavedIds(email ? loadSavedTownships(email) : []);
+  }, [email]);
 
   const township = journeyStops.find((stop) => stop.id === id);
   const location = townshipLocations.find((item) => item.id === id);
@@ -19,6 +28,15 @@ export function ProjectDetailPage() {
   if (!township || !detail) {
     return <Navigate to="/residences" replace />;
   }
+
+  const saved = savedIds.includes(detail.id);
+  const handleToggleSave = () => {
+    if (!email) {
+      openModal('signin', 'customer');
+      return;
+    }
+    setSavedIds(toggleSavedTownship(email, detail.id));
+  };
 
   const mapSrc = location
     ? `https://www.google.com/maps?q=${encodeURIComponent(location.mapQuery)}&output=embed`
@@ -32,9 +50,23 @@ export function ProjectDetailPage() {
         <img src={township.image.src} alt={township.image.alt} className="absolute inset-0 h-full w-full object-cover" />
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(44,62,80,0.35)_0%,rgba(44,62,80,0.2)_40%,rgba(44,62,80,0.86)_100%)]" />
         <div className="relative z-10 px-4 pb-10 sm:px-10 sm:pb-14">
-          <Link to="/residences" className="text-xs font-semibold text-white/75 hover:text-white">
-            ← All projects
-          </Link>
+          <div className="flex items-center justify-between gap-4">
+            <Link to="/residences" className="text-xs font-semibold text-white/75 hover:text-white">
+              ← All projects
+            </Link>
+            <button
+              type="button"
+              onClick={handleToggleSave}
+              aria-pressed={saved}
+              className={`rounded-full border px-4 py-2 text-xs font-semibold backdrop-blur-sm transition-colors ${
+                saved
+                  ? 'border-terracotta bg-terracotta text-white'
+                  : 'border-white/40 bg-white/10 text-white hover:border-white hover:bg-white/20'
+              }`}
+            >
+              {saved ? 'Saved' : 'Save township'}
+            </button>
+          </div>
           <h1 className="mt-4 font-display text-balance text-4xl font-bold leading-tight text-white sm:text-6xl">
             {township.heading} <em className="not-italic">{township.headingEmphasis}</em>
           </h1>
