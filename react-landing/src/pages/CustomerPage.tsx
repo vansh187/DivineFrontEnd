@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth, getDisplayName } from '../hooks/useAuth';
-import { DashboardLayout, PlaceholderCard } from '../components/DashboardLayout';
+import { DashboardLayout } from '../components/DashboardLayout';
 import { CustomerDocuments } from '../components/CustomerDocuments';
+import { SiteVisitDrawer } from '../components/SiteVisitDrawer';
 import { BookmarkIcon, BuildingIcon, CalendarIcon, IconBadge } from '../components/DashboardIcons';
 import { townshipPricing } from '../data/townshipPricing';
 import { loadSavedTownships, toggleSavedTownship } from '../services/savedTownships';
@@ -89,6 +90,25 @@ function SavedTownshipsCard({ savedIds, onToggleSave }: SavedTownshipsCardProps)
   );
 }
 
+function SiteVisitsCard({ onAddVisit }: { onAddVisit: () => void }) {
+  return (
+    <div className="group relative rounded-2xl border border-hairline bg-surface p-6 shadow-[0_16px_40px_-26px_rgba(6,31,45,0.24)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_26px_50px_-24px_rgba(6,31,45,0.28)]">
+      <IconBadge icon={<CalendarIcon />} accent="green-soft" interactive />
+      <h3 className="mt-4 font-display text-lg font-bold text-ink">Site visits</h3>
+      <p className="mt-1.5 text-sm leading-[1.6] text-ink-muted">Track upcoming visits and revisit past ones with your broker.</p>
+      <div className="mt-4">
+        <button
+          type="button"
+          onClick={onAddVisit}
+          className="rounded-full bg-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft"
+        >
+          Plan site visit
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function CustomerPage() {
   const { session, openModal } = useAuth();
   const name = session ? getDisplayName(session) : 'there';
@@ -108,21 +128,21 @@ export function CustomerPage() {
     setSavedIds(toggleSavedTownship(email, townshipId));
   };
 
+  const [siteVisitOpen, setSiteVisitOpen] = useState(false);
+
   return (
-    <DashboardLayout
-      eyebrow="Customer workspace"
-      heading={<>Welcome back, {name}.</>}
-      subheading="Your shortlist and site visits will live here as we build out the customer portal — documents are ready below."
-      after={<CustomerDocuments />}
-    >
-      <TownshipCard savedIds={savedIds} onToggleSave={handleToggleSave} />
-      <SavedTownshipsCard savedIds={savedIds} onToggleSave={handleToggleSave} />
-      <PlaceholderCard
-        icon={<CalendarIcon />}
-        accent="green-soft"
-        title="Site visits"
-        description="Track upcoming visits and revisit past ones with your broker."
-      />
-    </DashboardLayout>
+    <>
+      <DashboardLayout
+        eyebrow="Customer workspace"
+        heading={<>Welcome back, {name}.</>}
+        subheading="Your shortlist and site visits will live here as we build out the customer portal — documents are ready below."
+        after={<CustomerDocuments />}
+      >
+        <TownshipCard savedIds={savedIds} onToggleSave={handleToggleSave} />
+        <SavedTownshipsCard savedIds={savedIds} onToggleSave={handleToggleSave} />
+        <SiteVisitsCard onAddVisit={() => setSiteVisitOpen(true)} />
+      </DashboardLayout>
+      <SiteVisitDrawer open={siteVisitOpen} onClose={() => setSiteVisitOpen(false)} />
+    </>
   );
 }
