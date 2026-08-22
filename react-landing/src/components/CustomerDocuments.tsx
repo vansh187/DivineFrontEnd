@@ -234,7 +234,7 @@ export function CustomerDocuments() {
         Aadhaar verification, Aadhaar photo upload, PAN upload, document generation, and signature checks can be completed later if verification is pending.
       </p>
 
-      <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <div className="mt-6 grid grid-cols-1 items-stretch gap-5 sm:grid-cols-2 lg:grid-cols-3">
         <AadhaarVerifyTile
           token={session?.token ?? ''}
           status={docs.aadhar}
