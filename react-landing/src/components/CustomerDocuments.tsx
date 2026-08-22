@@ -291,6 +291,9 @@ export function CustomerDocuments() {
       <p className="mt-2 max-w-[64ch] text-sm leading-[1.6] text-ink-muted">
         Aadhaar verification, Aadhaar photo upload, PAN upload, applicant &amp; co-applicant photos, document generation, and signature checks can be completed later if verification is pending.
       </p>
+      <p className="mt-3 max-w-[64ch] rounded-lg border border-hairline bg-bg px-3 py-2 text-xs font-semibold text-ink-muted">
+        Note: if you are uploading a photocopy of a document, please upload only a self-attested copy.
+      </p>
 
       <div className="mt-6 grid grid-cols-1 items-stretch gap-5 sm:grid-cols-2 lg:grid-cols-3">
         <AadhaarVerifyTile
@@ -310,8 +313,8 @@ export function CustomerDocuments() {
         <UploadDocumentTile
           icon={<CardIcon />}
           accent="terracotta"
-          title="PAN card & signatures"
-          description="Upload a clear PAN card photo plus first applicant and co-applicant signatures for the booking application."
+          title="PAN card & signature"
+          description="Upload a clear PAN card photo plus the first applicant's signature for the booking application."
           status={docs.pan}
           onUpload={handlePanUpload}
           onVerify={handlePanVerify}
@@ -339,38 +342,6 @@ export function CustomerDocuments() {
                   {docs.applicantSignature.error}
                 </p>
               )}
-              <label className="mt-2 flex items-center gap-2 text-xs font-semibold text-ink">
-                <input
-                  type="checkbox"
-                  checked={docs.hasCoApplicant}
-                  onChange={(event) => persist({ ...docs, hasCoApplicant: event.target.checked })}
-                  className="h-3.5 w-3.5 rounded border-hairline accent-green"
-                />
-                There is a co-applicant
-              </label>
-              {docs.hasCoApplicant && (
-                <>
-                  <p className="mt-2 text-xs font-semibold text-ink">Co-applicant signature</p>
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) void handleSignatureUpload('coApplicant', file);
-                      event.target.value = '';
-                    }}
-                    className="text-xs text-ink-muted file:mr-3 file:rounded-full file:border-0 file:bg-green file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white"
-                  />
-                  {docs.coApplicantSignature.fileName && (
-                    <span className="text-[11px] font-semibold text-green">Uploaded - {docs.coApplicantSignature.fileName}</span>
-                  )}
-                  {docs.coApplicantSignature.error && (
-                    <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                      {docs.coApplicantSignature.error}
-                    </p>
-                  )}
-                </>
-              )}
             </div>
           }
         />
@@ -383,17 +354,51 @@ export function CustomerDocuments() {
           status={docs.applicantPhoto}
           onUpload={(file) => void handlePersonPhotoUpload('applicantPhoto', file, uploadApplicantPhoto, setUploadingApplicantPhoto)}
           uploading={uploadingApplicantPhoto}
+          extra={
+            <label className="flex items-center gap-2 text-xs font-semibold text-ink">
+              <input
+                type="checkbox"
+                checked={docs.hasCoApplicant}
+                onChange={(event) => persist({ ...docs, hasCoApplicant: event.target.checked })}
+                className="h-3.5 w-3.5 rounded border-hairline accent-green"
+              />
+              There is a co-applicant
+            </label>
+          }
         />
 
         {docs.hasCoApplicant && (
           <PhotoUploadTile
             icon={<CameraIcon />}
             accent="chrome"
-            title="Co-Applicant photo"
-            description="Upload a clear photo of the co-applicant — it's placed on the Co-Applicant Details page of the generated booking application."
+            title="Co-Applicant photo & signature"
+            description="Upload a clear photo of the co-applicant and their signature — both are placed on the Co-Applicant Details page of the generated booking application."
             status={docs.coApplicantPhoto}
             onUpload={(file) => void handlePersonPhotoUpload('coApplicantPhoto', file, uploadCoApplicantPhoto, setUploadingCoApplicantPhoto)}
             uploading={uploadingCoApplicantPhoto}
+            extra={
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-semibold text-ink">Co-applicant signature</p>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void handleSignatureUpload('coApplicant', file);
+                    event.target.value = '';
+                  }}
+                  className="text-xs text-ink-muted file:mr-3 file:rounded-full file:border-0 file:bg-green file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white"
+                />
+                {docs.coApplicantSignature.fileName && (
+                  <span className="text-[11px] font-semibold text-green">Uploaded - {docs.coApplicantSignature.fileName}</span>
+                )}
+                {docs.coApplicantSignature.error && (
+                  <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                    {docs.coApplicantSignature.error}
+                  </p>
+                )}
+              </div>
+            }
           />
         )}
 

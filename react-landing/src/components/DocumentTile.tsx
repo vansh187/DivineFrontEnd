@@ -142,12 +142,13 @@ interface PhotoUploadTileProps {
   onUpload: (file: File) => void;
   uploading?: boolean;
   accent?: IconAccent;
+  extra?: ReactNode;
 }
 
 /** Plain "upload a photo" tile - no verify step, unlike UploadDocumentTile (used for
  * PAN, which does have one). Used for the mandatory applicant/co-applicant photos on
  * the booking application PDF. */
-export function PhotoUploadTile({ icon, title, description, status, onUpload, uploading = false, accent }: PhotoUploadTileProps) {
+export function PhotoUploadTile({ icon, title, description, status, onUpload, uploading = false, accent, extra }: PhotoUploadTileProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const statusLabel = status.documentId ? 'Uploaded' : status.error ? 'Upload failed' : 'Not uploaded';
@@ -190,6 +191,7 @@ export function PhotoUploadTile({ icon, title, description, status, onUpload, up
       >
         {uploading ? 'Uploading…' : status.fileName ? 'Replace photo' : 'Upload photo'}
       </button>
+      {extra ? <div className="mt-4 border-t border-hairline pt-4">{extra}</div> : null}
     </TileShell>
   );
 }
