@@ -13,6 +13,10 @@ interface GenerateApplicationPdfInput {
   applicantPhotoSource?: string | null;
   /** Same as applicantPhotoSource, for the "Co-applicant details" page. */
   coApplicantPhotoSource?: string | null;
+  /** Whether a co-applicant exists at all (the checkbox on the PAN card tile). When
+   * false, the entire "Co-applicant details" page - and any leftover co-applicant
+   * signature/photo/form data from before it was unchecked - is left out of the PDF. */
+  hasCoApplicant: boolean;
   identityAttachments?: IdentityAttachment[];
   paymentInfo?: PaymentStatus | null;
 }
@@ -676,6 +680,7 @@ async function renderReadableApplicationPacket(
   ctx: PdfContext,
   formData: BookingApplicationFormData,
   identityAttachments: IdentityAttachment[],
+  hasCoApplicant: boolean,
   paymentInfo?: PaymentStatus | null,
 ) {
   if (formData.projectId === 'ops-divine-greens') {
@@ -690,7 +695,7 @@ async function renderReadableApplicationPacket(
 
   renderFillApplicationPage(ctx, formData);
   renderApplicantPage(ctx, formData);
-  renderCoApplicantPage(ctx, formData);
+  if (hasCoApplicant) renderCoApplicantPage(ctx, formData);
   renderPlotPage(ctx, formData);
   renderPricingPage(ctx, formData);
   renderPricingNotesPage(ctx, formData);
@@ -721,6 +726,7 @@ export async function generateApplicationPdf({
   coApplicantSignatureDataUrl,
   applicantPhotoSource,
   coApplicantPhotoSource,
+  hasCoApplicant,
   identityAttachments = [],
   paymentInfo = null,
 }: GenerateApplicationPdfInput): Promise<Blob> {
@@ -732,9 +738,12 @@ export async function generateApplicationPdf({
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   const applicantSignature = await embedSignature(pdfDoc, applicantSignatureDataUrl);
-  const coApplicantSignature = coApplicantSignatureDataUrl ? await embedSignature(pdfDoc, coApplicantSignatureDataUrl) : null;
+  // Gated on hasCoApplicant, not just whether a value happens to be cached - unchecking
+  // "there is a co-applicant" after already uploading their signature/photo must not
+  // leave that leftover data appearing anywhere in the generated PDF.
+  const coApplicantSignature = hasCoApplicant && coApplicantSignatureDataUrl ? await embedSignature(pdfDoc, coApplicantSignatureDataUrl) : null;
   const applicantPhoto = await embedPhotoOrNull(pdfDoc, applicantPhotoSource);
-  const coApplicantPhoto = await embedPhotoOrNull(pdfDoc, coApplicantPhotoSource);
+  const coApplicantPhoto = hasCoApplicant ? await embedPhotoOrNull(pdfDoc, coApplicantPhotoSource) : null;
   const ctx: PdfContext = {
     pdfDoc,
     font,
@@ -747,7 +756,7 @@ export async function generateApplicationPdf({
     project,
   };
 
-  await renderReadableApplicationPacket(ctx, formData, identityAttachments, paymentInfo);
+  await renderReadableApplicationPacket(ctx, formData, identityAttachments, hasCoApplicant, paymentInfo);
 
   const bytes = await pdfDoc.save();
   const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
