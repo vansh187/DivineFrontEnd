@@ -51,7 +51,7 @@ export function LoginMenu({ light = false }: { light?: boolean }) {
   }, [open]);
 
   const label = session ? getDisplayName(session, 14) : 'Login';
-  const initial = (session?.firstName || session?.email || '?').charAt(0).toUpperCase();
+  const initial = session ? getDisplayName(session).charAt(0).toUpperCase() : '?';
 
   return (
     <div className="relative" ref={rootRef}>
@@ -93,7 +93,7 @@ export function LoginMenu({ light = false }: { light?: boolean }) {
                   {initial}
                 </span>
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-ink">{session.email}</p>
+                  <p className="truncate text-sm font-semibold text-ink">{getDisplayName(session)}</p>
                   <p className="eyebrow-label mt-0.5 text-terracotta">{session.role}</p>
                 </div>
               </div>

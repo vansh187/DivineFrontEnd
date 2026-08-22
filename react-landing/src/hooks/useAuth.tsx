@@ -9,15 +9,53 @@ export interface AuthSession {
   userId: string;
   email: string;
   firstName: string | null;
+  lastName: string | null;
 }
 
 export type ModalMode = 'signin' | 'signup';
 
-/** first_name is optional at signup, so the fallback (email local-part) can run
- * long — truncate it so it can never break the nav pill or a heading's layout. */
+/** The email address must never stand in for the person's name in the UI — fall
+ * back to their role instead. Long combined names are truncated so they can
+ * never break the nav pill or a heading's layout. */
 export function getDisplayName(session: AuthSession, maxLength = 22): string {
-  const raw = session.firstName || session.email.split('@')[0];
+  const raw = [session.firstName, session.lastName].filter(Boolean).join(' ').trim()
+    || (session.role === 'broker' ? 'Broker' : 'Customer');
   return raw.length > maxLength ? `${raw.slice(0, maxLength - 1)}…` : raw;
+}
+
+/** Login only returns a bearer token, not the profile — so the first/last name
+ * captured at signup is cached locally per email and re-attached to the
+ * session on login. Falls back to null (→ role-based display name) for
+ * accounts created before this existed, or on a different device/browser. */
+const PROFILE_NAMES_KEY = 'dvi_profile_names';
+
+interface ProfileNameRecord {
+  firstName: string | null;
+  lastName: string | null;
+}
+
+function profileNameKey(email: string) {
+  return email.trim().toLowerCase();
+}
+
+function readProfileNames(): Record<string, ProfileNameRecord> {
+  try {
+    const raw = localStorage.getItem(PROFILE_NAMES_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, ProfileNameRecord>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function rememberProfileName(email: string, firstName: string | null, lastName: string | null) {
+  if (!firstName && !lastName) return;
+  const all = readProfileNames();
+  all[profileNameKey(email)] = { firstName, lastName };
+  localStorage.setItem(PROFILE_NAMES_KEY, JSON.stringify(all));
+}
+
+function lookupProfileName(email: string): ProfileNameRecord {
+  return readProfileNames()[profileNameKey(email)] ?? { firstName: null, lastName: null };
 }
 
 interface AuthContextValue {
@@ -65,12 +103,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (role: Role, input: LoginInput) => {
       const res = await authApi.login(role, input);
       const claims = authApi.decodeJwtClaims(res.access_token);
+      const { firstName, lastName } = lookupProfileName(input.email);
       persist({
         token: res.access_token,
         role,
         userId: claims?.sub ?? '',
         email: input.email,
-        firstName: null,
+        firstName,
+        lastName,
       });
     },
     [persist],
@@ -78,6 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signup = useCallback(async (role: Role, input: SignupInput) => {
     await authApi.signup(role, input);
+    rememberProfileName(input.email, input.first_name || null, input.last_name || null);
   }, []);
 
   const logout = useCallback(() => persist(null), [persist]);
