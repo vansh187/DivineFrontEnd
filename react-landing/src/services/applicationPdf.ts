@@ -534,7 +534,7 @@ function renderPricingPage(ctx: PdfContext, formData: BookingApplicationFormData
     ['B. PLC Applicable - price', formData.plcPrice],
     ['Total Amount A+B', formData.totalAmount],
     ['Amount in figure', formData.amountInFigure],
-    ['Amount in words', formData.bookingAmountWords],
+    ['Amount in words', formData.totalAmountWords],
     ['Plan type', 'Construction Linked Plan'],
     ['Mode of booking', formData.bookingMode],
     ['Employee name', formData.employeeName],

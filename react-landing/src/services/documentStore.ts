@@ -141,6 +141,7 @@ export interface BookingApplicationFormData {
   plcPrice: string;
   totalAmount: string;
   amountInFigure: string;
+  totalAmountWords: string;
   bookingAmount: string;
   bookingAmountWords: string;
   paymentMode: string;
@@ -226,6 +227,7 @@ export function emptyBookingApplicationFormData(): BookingApplicationFormData {
     plcPrice: '',
     totalAmount: '',
     amountInFigure: '',
+    totalAmountWords: '',
     bookingAmount: '',
     bookingAmountWords: '',
     paymentMode: '',
@@ -286,6 +288,10 @@ export interface CustomerDocState {
   coApplicantPhoto: AadhaarPhotoStatus;
   applicantSignature: SignatureStatus;
   coApplicantSignature: SignatureStatus;
+  /** Co-applicant details are optional - this is the single source of truth (set via
+   * a checkbox on the PAN card & signatures tile) for whether the co-applicant
+   * signature/photo are required and whether the photo upload tile is shown at all. */
+  hasCoApplicant: boolean;
   generatedDoc: GeneratedDocStatus;
   bookingApplication: BookingApplicationStatus;
   payment: PaymentStatus;
@@ -373,6 +379,9 @@ export function loadCustomerDocs(email: string): CustomerDocState {
       coApplicantPhoto: { ...emptyAadhaarPhotoStatus(), ...parsed.coApplicantPhoto },
       applicantSignature: { ...emptySignatureStatus(), ...(parsed.applicantSignature ?? parsed.signature) },
       coApplicantSignature: { ...emptySignatureStatus(), ...parsed.coApplicantSignature },
+      // State cached before this checkbox existed won't have it - infer from whether a
+      // co-applicant signature was already on file rather than defaulting everyone to false.
+      hasCoApplicant: parsed.hasCoApplicant ?? Boolean(parsed.coApplicantSignature?.fileName),
       generatedDoc: parsed.generatedDoc ?? emptyGeneratedDocStatus(),
       bookingApplication: {
         ...emptyBookingApplicationStatus(),
@@ -394,6 +403,7 @@ export function loadCustomerDocs(email: string): CustomerDocState {
       coApplicantPhoto: emptyAadhaarPhotoStatus(),
       applicantSignature: emptySignatureStatus(),
       coApplicantSignature: emptySignatureStatus(),
+      hasCoApplicant: false,
       generatedDoc: emptyGeneratedDocStatus(),
       bookingApplication: emptyBookingApplicationStatus(),
       payment: emptyPaymentStatus(),

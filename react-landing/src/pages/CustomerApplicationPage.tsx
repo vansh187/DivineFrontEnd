@@ -11,6 +11,12 @@ import { ApiError } from '../services/authApi';
 import { blobToDataUrl, generateApplicationPdf, openDataUrl, openPdfBlob } from '../services/applicationPdf';
 import { createPaymentOrder, recordCashPayment, verifyPayment } from '../services/paymentsApi';
 import { openRazorpayCheckout } from '../services/razorpayCheckout';
+import { amountToIndianWords } from '../utils/currency';
+
+function parseAmount(value: string): number {
+  const cleaned = Number(value.replace(/,/g, '').trim());
+  return Number.isFinite(cleaned) ? cleaned : 0;
+}
 
 type FieldName = keyof BookingApplicationFormData;
 
@@ -241,6 +247,21 @@ export function CustomerApplicationPage() {
     });
   };
 
+  // Only the two Price cells (Basic Sale Price and PLC) are ever typed in - the total,
+  // amount-in-figure, and amount-in-words all derive from their sum so they can never
+  // drift out of sync with what was actually entered.
+  const updatePrice = (field: 'basicSalePrice' | 'plcPrice', value: string) => {
+    const nextForm = { ...docs.bookingApplication.formData, [field]: value };
+    const total = parseAmount(nextForm.basicSalePrice) + parseAmount(nextForm.plcPrice);
+    nextForm.totalAmount = total ? String(total) : '';
+    nextForm.amountInFigure = total ? String(total) : '';
+    nextForm.totalAmountWords = total ? amountToIndianWords(total) : '';
+    persist({
+      ...docs,
+      bookingApplication: { ...docs.bookingApplication, formData: nextForm, error: null },
+    });
+  };
+
   const handleSignatureUpload = async (kind: 'applicant' | 'coApplicant', file: File) => {
     const key = kind === 'applicant' ? 'applicantSignature' : 'coApplicantSignature';
     try {
@@ -355,7 +376,10 @@ export function CustomerApplicationPage() {
 
   const handleGenerate = async () => {
     const applicantSignature = docs.applicantSignature.dataUrl;
-    const hasCoApplicant = Boolean(docs.bookingApplication.formData.coApplicantName.trim());
+    // Whether a co-applicant exists is set via the checkbox on the PAN card & signatures
+    // tile (Documents page) - the single source of truth for whether their signature/photo
+    // are required, not whatever happens to be typed into the name field below.
+    const hasCoApplicant = docs.hasCoApplicant;
     if (docs.payment.status !== 'paid') {
       setError('Complete the plot booking payment before generating the application PDF.');
       return;
@@ -384,7 +408,7 @@ export function CustomerApplicationPage() {
       setError('Upload the applicant photo before generating the application PDF.');
       return;
     }
-    if (!docs.coApplicantPhoto.documentId || (!docs.coApplicantPhoto.dataUrl && !docs.coApplicantPhoto.signedUrl)) {
+    if (hasCoApplicant && (!docs.coApplicantPhoto.documentId || (!docs.coApplicantPhoto.dataUrl && !docs.coApplicantPhoto.signedUrl))) {
       setError('Upload the co-applicant photo before generating the application PDF.');
       return;
     }
@@ -651,26 +675,26 @@ export function CustomerApplicationPage() {
               <div className="grid grid-cols-[1.3fr_1fr_1fr] bg-surface p-3">
                 <span className="font-semibold text-ink">A. Basic Sale Price (BSP)</span>
                 <input value={form.ratePerSqYd} onChange={(event) => updateForm('ratePerSqYd', event.target.value)} className="mx-2 rounded border border-hairline bg-bg px-2 py-1 outline-none focus:border-green" />
-                <input value={form.basicSalePrice} onChange={(event) => updateForm('basicSalePrice', event.target.value)} className="mx-2 rounded border border-hairline bg-bg px-2 py-1 outline-none focus:border-green" />
+                <input value={form.basicSalePrice} onChange={(event) => updatePrice('basicSalePrice', event.target.value)} className="mx-2 rounded border border-hairline bg-bg px-2 py-1 outline-none focus:border-green" />
               </div>
               <div className="grid grid-cols-[1.3fr_1fr_1fr] bg-surface p-3">
                 <span className="font-semibold text-ink">B. PLC Applicable</span>
                 <input value={form.plcRatePerSqYd} onChange={(event) => updateForm('plcRatePerSqYd', event.target.value)} className="mx-2 rounded border border-hairline bg-bg px-2 py-1 outline-none focus:border-green" />
-                <input value={form.plcPrice} onChange={(event) => updateForm('plcPrice', event.target.value)} className="mx-2 rounded border border-hairline bg-bg px-2 py-1 outline-none focus:border-green" />
+                <input value={form.plcPrice} onChange={(event) => updatePrice('plcPrice', event.target.value)} className="mx-2 rounded border border-hairline bg-bg px-2 py-1 outline-none focus:border-green" />
               </div>
               <div className="grid grid-cols-[1.3fr_1fr_1fr] bg-surface p-3">
                 <span className="font-semibold text-ink">Total Amount (A+B)</span>
                 <span />
-                <input value={form.totalAmount} onChange={(event) => updateForm('totalAmount', event.target.value)} className="mx-2 rounded border border-hairline bg-bg px-2 py-1 outline-none focus:border-green" />
+                <input value={form.totalAmount} readOnly className="mx-2 cursor-not-allowed rounded border border-hairline bg-bg px-2 py-1 text-ink-muted outline-none" />
               </div>
               <div className="grid grid-cols-[1.3fr_1fr_1fr] bg-surface p-3">
                 <span className="font-semibold text-ink">Amount in Figure</span>
                 <span />
-                <input value={form.amountInFigure} onChange={(event) => updateForm('amountInFigure', event.target.value)} className="mx-2 rounded border border-hairline bg-bg px-2 py-1 outline-none focus:border-green" />
+                <input value={form.amountInFigure} readOnly className="mx-2 cursor-not-allowed rounded border border-hairline bg-bg px-2 py-1 text-ink-muted outline-none" />
               </div>
               <div className="grid grid-cols-[1.3fr_2fr] bg-surface p-3">
                 <span className="font-semibold text-ink">Amount in Words</span>
-                <input value={form.bookingAmountWords} onChange={(event) => updateForm('bookingAmountWords', event.target.value)} className="mx-2 rounded border border-hairline bg-bg px-2 py-1 outline-none focus:border-green" />
+                <input value={form.totalAmountWords} readOnly className="mx-2 cursor-not-allowed rounded border border-hairline bg-bg px-2 py-1 text-ink-muted outline-none" />
               </div>
             </div>
           </div>
