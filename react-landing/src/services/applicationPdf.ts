@@ -8,6 +8,15 @@ interface GenerateApplicationPdfInput {
   formData: BookingApplicationFormData;
   applicantSignatureDataUrl: string;
   coApplicantSignatureDataUrl?: string | null;
+  /** Passport-size photo shown on the "Sole / first applicant" page — a data URL
+   * (preferred, already cached locally) or a signed storage URL fallback. */
+  applicantPhotoSource?: string | null;
+  /** Same as applicantPhotoSource, for the "Co-applicant details" page. */
+  coApplicantPhotoSource?: string | null;
+  /** Whether a co-applicant exists at all (the checkbox on the PAN card tile). When
+   * false, the entire "Co-applicant details" page - and any leftover co-applicant
+   * signature/photo/form data from before it was unchecked - is left out of the PDF. */
+  hasCoApplicant: boolean;
   identityAttachments?: IdentityAttachment[];
   paymentInfo?: PaymentStatus | null;
 }
@@ -25,6 +34,8 @@ interface PdfContext {
   bold: PDFFont;
   applicantSignature: PDFImage;
   coApplicantSignature: PDFImage | null;
+  applicantPhoto: PDFImage | null;
+  coApplicantPhoto: PDFImage | null;
   pageNumber: number;
   project: ApplicationProject;
 }
@@ -43,9 +54,12 @@ const signatureTopY = 102;
 const contentWidth = pageSize[0] - marginX * 2;
 const labelColumnWidth = 150;
 const navy = rgb(0.024, 0.122, 0.176);
-const divineGreen = rgb(0.0, 0.36, 0.18);
-const paleGreen = rgb(0.94, 0.98, 0.95);
-const tableTint = rgb(0.985, 0.99, 0.985);
+// Matches the website footer's --color-chrome (#2c3e50) - the PDF's whole accent
+// theme (header/footer bands, bullets, labels, alternating row tints) uses this
+// rather than a separate green, so the document matches the site's chrome.
+const divineGreen = rgb(44 / 255, 62 / 255, 80 / 255);
+const paleGreen = rgb(0.94, 0.96, 0.98);
+const tableTint = rgb(0.985, 0.988, 0.995);
 const ink = rgb(0.05, 0.12, 0.16);
 const muted = rgb(0.35, 0.45, 0.5);
 const hairline = rgb(0.78, 0.84, 0.87);
@@ -452,8 +466,27 @@ function renderFillApplicationPage(ctx: PdfContext, formData: BookingApplication
   ]);
 }
 
+const PHOTO_BOX_WIDTH = 92;
+const PHOTO_BOX_HEIGHT = 112;
+
+/** Draws a passport-photo box in the top-right of the current cursor position and
+ * returns a cursor moved below it, so the rows that follow never overlap it. */
+function drawPhotoBox(cursor: PageCursor, ctx: PdfContext, photo: PDFImage | null, label: string): PageCursor {
+  const x = marginX + contentWidth - PHOTO_BOX_WIDTH;
+  const y = cursor.y - PHOTO_BOX_HEIGHT;
+  cursor.page.drawRectangle({ x, y, width: PHOTO_BOX_WIDTH, height: PHOTO_BOX_HEIGHT, borderColor: hairline, borderWidth: 1, color: tableTint });
+  if (photo) {
+    drawTemplateImage(cursor.page, photo, x + 4, y + 4, PHOTO_BOX_WIDTH - 8, PHOTO_BOX_HEIGHT - 8);
+  } else {
+    cursor.page.drawText('No photo', { x: x + 10, y: y + PHOTO_BOX_HEIGHT / 2, size: 8, font: ctx.font, color: muted });
+  }
+  cursor.page.drawText(label.toUpperCase(), { x, y: y - 11, size: 7, font: ctx.bold, color: divineGreen });
+  return { ...cursor, y: y - 18 };
+}
+
 function renderApplicantPage(ctx: PdfContext, formData: BookingApplicationFormData) {
   let cursor = addPage(ctx, 'Page 3 - Sole / first applicant');
+  cursor = drawPhotoBox(cursor, ctx, ctx.applicantPhoto, 'Applicant photo');
   cursor = drawRows(ctx, cursor, [
     ['Customer name', formData.applicantName],
     ['S/o, W/o, D/o, C/o', formData.guardianName],
@@ -472,6 +505,7 @@ function renderApplicantPage(ctx: PdfContext, formData: BookingApplicationFormDa
 
 function renderCoApplicantPage(ctx: PdfContext, formData: BookingApplicationFormData) {
   let cursor = addPage(ctx, 'Page 4 - Co-applicant details');
+  cursor = drawPhotoBox(cursor, ctx, ctx.coApplicantPhoto, 'Co-applicant photo');
   cursor = drawRows(ctx, cursor, [
     ['Customer name', formData.coApplicantName],
     ['S/o, W/o, D/o, C/o', formData.coApplicantGuardianName],
@@ -507,7 +541,7 @@ function renderPricingPage(ctx: PdfContext, formData: BookingApplicationFormData
     ['B. PLC Applicable - price', formData.plcPrice],
     ['Total Amount A+B', formData.totalAmount],
     ['Amount in figure', formData.amountInFigure],
-    ['Amount in words', formData.bookingAmountWords],
+    ['Amount in words', formData.totalAmountWords],
     ['Plan type', 'Construction Linked Plan'],
     ['Mode of booking', formData.bookingMode],
     ['Employee name', formData.employeeName],
@@ -649,21 +683,21 @@ async function renderReadableApplicationPacket(
   ctx: PdfContext,
   formData: BookingApplicationFormData,
   identityAttachments: IdentityAttachment[],
+  hasCoApplicant: boolean,
   paymentInfo?: PaymentStatus | null,
 ) {
-  if (formData.projectId === 'ops-divine-greens') {
-    try {
-      await appendTemplateCoverPage(ctx);
-    } catch {
-      renderProjectPage(ctx, formData);
-    }
-  } else {
+  // Every project has its own branded cover page template (see applicationProjects.ts's
+  // templateUrl) - fall back to the plain generated project page only if that template
+  // can't actually be loaded/copied in, not based on which project this happens to be.
+  try {
+    await appendTemplateCoverPage(ctx);
+  } catch {
     renderProjectPage(ctx, formData);
   }
 
   renderFillApplicationPage(ctx, formData);
   renderApplicantPage(ctx, formData);
-  renderCoApplicantPage(ctx, formData);
+  if (hasCoApplicant) renderCoApplicantPage(ctx, formData);
   renderPlotPage(ctx, formData);
   renderPricingPage(ctx, formData);
   renderPricingNotesPage(ctx, formData);
@@ -677,10 +711,24 @@ async function renderReadableApplicationPacket(
   await appendIdentityAttachmentPages(ctx, identityAttachments);
 }
 
+async function embedPhotoOrNull(pdfDoc: PDFDocument, source: string | null | undefined): Promise<PDFImage | null> {
+  if (!source) return null;
+  try {
+    return await embedImageFromSource(pdfDoc, source);
+  } catch {
+    // A corrupt/unreadable photo shouldn't fail the whole document - the photo box
+    // just falls back to its "No photo" placeholder.
+    return null;
+  }
+}
+
 export async function generateApplicationPdf({
   formData,
   applicantSignatureDataUrl,
   coApplicantSignatureDataUrl,
+  applicantPhotoSource,
+  coApplicantPhotoSource,
+  hasCoApplicant,
   identityAttachments = [],
   paymentInfo = null,
 }: GenerateApplicationPdfInput): Promise<Blob> {
@@ -692,10 +740,25 @@ export async function generateApplicationPdf({
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   const applicantSignature = await embedSignature(pdfDoc, applicantSignatureDataUrl);
-  const coApplicantSignature = coApplicantSignatureDataUrl ? await embedSignature(pdfDoc, coApplicantSignatureDataUrl) : null;
-  const ctx: PdfContext = { pdfDoc, font, bold, applicantSignature, coApplicantSignature, pageNumber: 0, project };
+  // Gated on hasCoApplicant, not just whether a value happens to be cached - unchecking
+  // "there is a co-applicant" after already uploading their signature/photo must not
+  // leave that leftover data appearing anywhere in the generated PDF.
+  const coApplicantSignature = hasCoApplicant && coApplicantSignatureDataUrl ? await embedSignature(pdfDoc, coApplicantSignatureDataUrl) : null;
+  const applicantPhoto = await embedPhotoOrNull(pdfDoc, applicantPhotoSource);
+  const coApplicantPhoto = hasCoApplicant ? await embedPhotoOrNull(pdfDoc, coApplicantPhotoSource) : null;
+  const ctx: PdfContext = {
+    pdfDoc,
+    font,
+    bold,
+    applicantSignature,
+    coApplicantSignature,
+    applicantPhoto,
+    coApplicantPhoto,
+    pageNumber: 0,
+    project,
+  };
 
-  await renderReadableApplicationPacket(ctx, formData, identityAttachments, paymentInfo);
+  await renderReadableApplicationPacket(ctx, formData, identityAttachments, hasCoApplicant, paymentInfo);
 
   const bytes = await pdfDoc.save();
   const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;

@@ -34,6 +34,7 @@ type ChatAction =
   | { type: 'SESSION_READY'; sessionId: string }
   | { type: 'SESSION_INIT_FAILED' }
   | { type: 'SESSION_EXPIRED' }
+  | { type: 'SESSION_RESET' }
   | { type: 'SEND_START'; localMessage?: ChatMessage; intentIsCallback?: boolean }
   | { type: 'SEND_SUCCESS'; reply: string; buttons: ChatButton[] | null; callbackConfirmed: boolean }
   | { type: 'SEND_FAILURE'; message: string; localMessage?: ChatMessage }
@@ -93,6 +94,12 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, isInitializingSession: false, sessionInitFailed: true };
     case 'SESSION_EXPIRED':
       return { ...state, sessionId: null };
+    case 'SESSION_RESET':
+      // A real website login/logout just happened - any in-progress chat auth flow
+      // (e.g. mid-login, waiting on a password) is now stale and must not resume.
+      // Keep isOpen/consentShown so the widget doesn't visually blink shut or
+      // re-show the consent banner over what's otherwise a clean restart.
+      return { ...initialState, isOpen: state.isOpen, consentShown: state.consentShown };
     case 'SEND_START':
       return {
         ...state,
@@ -216,6 +223,20 @@ export function useChatSession() {
 
   const open = useCallback(() => dispatch({ type: 'OPEN_WIDGET' }), []);
   const close = useCallback(() => dispatch({ type: 'CLOSE_WIDGET' }), []);
+
+  /** Discards the current chat session (and any conversational state it was carrying,
+   * e.g. an in-progress login flow) and starts a fresh one - used when a real website
+   * login/logout happens, since the chat's own auth flow is no longer relevant. */
+  const resetSession = useCallback(() => {
+    try {
+      sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    } catch {
+      /* private-browsing / storage-disabled */
+    }
+    dispatch({ type: 'SESSION_RESET' });
+    initStarted.current = true;
+    runInit();
+  }, [runInit]);
   const dismissConsent = useCallback(() => dispatch({ type: 'DISMISS_CONSENT' }), []);
   const appendAgentMessage = useCallback((variant: AgentMessageVariant) => dispatch({ type: 'APPEND_AGENT_MESSAGE', variant }), []);
   const appendUserMessage = useCallback((text: string) => dispatch({ type: 'APPEND_USER_MESSAGE', text }), []);
@@ -297,5 +318,6 @@ export function useChatSession() {
     appendAgentMessage,
     appendUserMessage,
     setMicState,
+    resetSession,
   };
 }

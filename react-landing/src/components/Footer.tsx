@@ -2,7 +2,7 @@ import { navLinks } from '../data/navigation';
 import { contact } from '../data/contact';
 import { company } from '../data/company';
 import { getGoogleMapsSearchHref, siteMapLocations } from '../data/mapLocations';
-import { useAuth } from '../hooks/useAuth';
+import { useAuth, getDisplayName } from '../hooks/useAuth';
 import { DivineVisionLogo } from './DivineVisionLogo';
 
 const whatsappHref = `https://wa.me/${contact.phone.replace(/\D/g, '')}?text=${encodeURIComponent(
@@ -49,7 +49,7 @@ export function Footer() {
             {session ? (
               <>
                 <li className="text-sm text-white/70">
-                  Signed in as {session.firstName || session.email}
+                  Signed in as {getDisplayName(session)}
                 </li>
                 <li>
                   <button

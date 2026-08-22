@@ -3,13 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth, getDisplayName } from '../hooks/useAuth';
 import * as store from '../services/documentStore';
 import type { CustomerDocState } from '../services/documentStore';
-import { generateDocument, getDocument, uploadPanPhoto } from '../services/documentsApi';
+import { generateDocument, getDocument, uploadApplicantPhoto, uploadCoApplicantPhoto, uploadPanPhoto } from '../services/documentsApi';
 import { ApiError } from '../services/authApi';
 import { blobToDataUrl, openDataUrl } from '../services/applicationPdf';
 import { townshipPricing } from '../data/townshipPricing';
-import { TileShell, UploadDocumentTile } from './DocumentTile';
+import { PhotoUploadTile, TileShell, UploadDocumentTile } from './DocumentTile';
 import { AadhaarVerifyTile } from './AadhaarVerifyTile';
-import { CardIcon, FileIcon } from './DashboardIcons';
+import { CameraIcon, CardIcon, FileIcon } from './DashboardIcons';
 
 export function CustomerDocuments() {
   const navigate = useNavigate();
@@ -19,6 +19,8 @@ export function CustomerDocuments() {
   const [docs, setDocs] = useState<CustomerDocState>(() => store.loadCustomerDocs(email));
   const [verifyingPan, setVerifyingPan] = useState(false);
   const [uploadingPan, setUploadingPan] = useState(false);
+  const [uploadingApplicantPhoto, setUploadingApplicantPhoto] = useState(false);
+  const [uploadingCoApplicantPhoto, setUploadingCoApplicantPhoto] = useState(false);
 
   const persist = (next: CustomerDocState) => {
     setDocs(next);
@@ -86,6 +88,60 @@ export function CustomerDocuments() {
     }, 1100);
   };
 
+  const handlePersonPhotoUpload = async (
+    kind: 'applicantPhoto' | 'coApplicantPhoto',
+    file: File,
+    upload: (token: string, file: File) => ReturnType<typeof uploadApplicantPhoto>,
+    setUploading: (value: boolean) => void,
+  ) => {
+    if (!session) return;
+    setUploading(true);
+    let dataUrl: string | null = null;
+    try {
+      dataUrl = await blobToDataUrl(file);
+    } catch {
+      dataUrl = null;
+    }
+    persist({
+      ...docs,
+      [kind]: { ...docs[kind], fileName: file.name, fileSize: file.size, dataUrl, documentId: null, error: null },
+    });
+    upload(session.token, file)
+      .then((doc) => {
+        setDocs((prev) => {
+          const next: CustomerDocState = {
+            ...prev,
+            [kind]: {
+              ...prev[kind],
+              fileName: file.name,
+              fileSize: file.size,
+              uploadedAt: new Date().toISOString(),
+              dataUrl,
+              documentId: doc.id,
+              signedUrl: doc.signed_url,
+              signedUrlExpiresAt: Date.now() + doc.signed_url_expires_in * 1000,
+              error: null,
+            },
+          };
+          store.saveCustomerDocs(email, next);
+          return next;
+        });
+      })
+      .catch((err) => {
+        if (err instanceof ApiError && err.status === 401) {
+          logout();
+          openModal('signin', 'customer');
+        }
+        const message = err instanceof ApiError ? err.message : 'Something went wrong. Please try again.';
+        setDocs((prev) => {
+          const next: CustomerDocState = { ...prev, [kind]: { ...prev[kind], error: message } };
+          store.saveCustomerDocs(email, next);
+          return next;
+        });
+      })
+      .finally(() => setUploading(false));
+  };
+
   const handleSignatureUpload = async (kind: 'applicant' | 'coApplicant', file: File) => {
     const key = kind === 'applicant' ? 'applicantSignature' : 'coApplicantSignature';
     try {
@@ -123,13 +179,15 @@ export function CustomerDocuments() {
   const [opening, setOpening] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
 
-  // The generated PDF embeds these three photos, so the backend refuses to generate
-  // until all three are actually uploaded to storage - mirror that gate here so the
+  // The generated PDF embeds these five photos, so the backend refuses to generate
+  // until all five are actually uploaded to storage - mirror that gate here so the
   // button reflects it up front instead of only failing after a click.
   const missingDocs: string[] = [];
   if (!docs.aadharFront.documentId) missingDocs.push('Aadhaar front photo');
   if (!docs.aadharBack.documentId) missingDocs.push('Aadhaar back photo');
   if (!docs.pan.documentId) missingDocs.push('PAN card photo');
+  if (!docs.applicantPhoto.documentId) missingDocs.push('Applicant photo');
+  if (docs.hasCoApplicant && !docs.coApplicantPhoto.documentId) missingDocs.push('Co-Applicant photo');
   const documentsReady = missingDocs.length === 0;
 
   const handleAuthError = (err: unknown) => {
@@ -231,10 +289,13 @@ export function CustomerDocuments() {
       <p className="eyebrow-label text-terracotta">Document upload</p>
       <h2 className="mt-2 font-display text-2xl font-bold text-ink sm:text-3xl">Aadhar, PAN &amp; document generation</h2>
       <p className="mt-2 max-w-[64ch] text-sm leading-[1.6] text-ink-muted">
-        Aadhaar verification, Aadhaar photo upload, PAN upload, document generation, and signature checks can be completed later if verification is pending.
+        Aadhaar verification, Aadhaar photo upload, PAN upload, applicant &amp; co-applicant photos, document generation, and signature checks can be completed later if verification is pending.
+      </p>
+      <p className="mt-3 max-w-[64ch] rounded-lg border border-hairline bg-bg px-3 py-2 text-xs font-semibold text-ink-muted">
+        Note: if you are uploading a photocopy of a document, please upload only a self-attested copy.
       </p>
 
-      <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <div className="mt-6 grid grid-cols-1 items-stretch gap-5 sm:grid-cols-2 lg:grid-cols-3">
         <AadhaarVerifyTile
           token={session?.token ?? ''}
           status={docs.aadhar}
@@ -252,8 +313,8 @@ export function CustomerDocuments() {
         <UploadDocumentTile
           icon={<CardIcon />}
           accent="terracotta"
-          title="PAN card & signatures"
-          description="Upload a clear PAN card photo plus first applicant and co-applicant signatures for the booking application."
+          title="PAN card & signature"
+          description="Upload a clear PAN card photo plus the first applicant's signature for the booking application."
           status={docs.pan}
           onUpload={handlePanUpload}
           onVerify={handlePanVerify}
@@ -281,28 +342,65 @@ export function CustomerDocuments() {
                   {docs.applicantSignature.error}
                 </p>
               )}
-              <p className="mt-2 text-xs font-semibold text-ink">Co-applicant signature</p>
-              <input
-                type="file"
-                accept="image/jpeg,image/png"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) void handleSignatureUpload('coApplicant', file);
-                  event.target.value = '';
-                }}
-                className="text-xs text-ink-muted file:mr-3 file:rounded-full file:border-0 file:bg-green file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white"
-              />
-              {docs.coApplicantSignature.fileName && (
-                <span className="text-[11px] font-semibold text-green">Uploaded - {docs.coApplicantSignature.fileName}</span>
-              )}
-              {docs.coApplicantSignature.error && (
-                <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                  {docs.coApplicantSignature.error}
-                </p>
-              )}
             </div>
           }
         />
+
+        <PhotoUploadTile
+          icon={<CameraIcon />}
+          accent="green-soft"
+          title="Applicant photo"
+          description="Upload a clear photo of the applicant — it's placed on the Applicant Details page of the generated booking application."
+          status={docs.applicantPhoto}
+          onUpload={(file) => void handlePersonPhotoUpload('applicantPhoto', file, uploadApplicantPhoto, setUploadingApplicantPhoto)}
+          uploading={uploadingApplicantPhoto}
+          extra={
+            <label className="flex items-center gap-2 text-xs font-semibold text-ink">
+              <input
+                type="checkbox"
+                checked={docs.hasCoApplicant}
+                onChange={(event) => persist({ ...docs, hasCoApplicant: event.target.checked })}
+                className="h-3.5 w-3.5 rounded border-hairline accent-green"
+              />
+              There is a co-applicant
+            </label>
+          }
+        />
+
+        {docs.hasCoApplicant && (
+          <PhotoUploadTile
+            icon={<CameraIcon />}
+            accent="chrome"
+            title="Co-Applicant photo & signature"
+            description="Upload a clear photo of the co-applicant and their signature — both are placed on the Co-Applicant Details page of the generated booking application."
+            status={docs.coApplicantPhoto}
+            onUpload={(file) => void handlePersonPhotoUpload('coApplicantPhoto', file, uploadCoApplicantPhoto, setUploadingCoApplicantPhoto)}
+            uploading={uploadingCoApplicantPhoto}
+            extra={
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-semibold text-ink">Co-applicant signature</p>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void handleSignatureUpload('coApplicant', file);
+                    event.target.value = '';
+                  }}
+                  className="text-xs text-ink-muted file:mr-3 file:rounded-full file:border-0 file:bg-green file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white"
+                />
+                {docs.coApplicantSignature.fileName && (
+                  <span className="text-[11px] font-semibold text-green">Uploaded - {docs.coApplicantSignature.fileName}</span>
+                )}
+                {docs.coApplicantSignature.error && (
+                  <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                    {docs.coApplicantSignature.error}
+                  </p>
+                )}
+              </div>
+            }
+          />
+        )}
 
         <TileShell
           icon={<FileIcon />}

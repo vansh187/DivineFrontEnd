@@ -11,6 +11,13 @@ import { ApiError } from '../services/authApi';
 import { blobToDataUrl, generateApplicationPdf, openDataUrl, openPdfBlob } from '../services/applicationPdf';
 import { createPaymentOrder, recordCashPayment, verifyPayment } from '../services/paymentsApi';
 import { openRazorpayCheckout } from '../services/razorpayCheckout';
+import { amountToIndianWords } from '../utils/currency';
+import { formatAadhaarDob, mapAadhaarGender } from '../utils/aadhaar';
+
+function parseAmount(value: string): number {
+  const cleaned = Number(value.replace(/,/g, '').trim());
+  return Number.isFinite(cleaned) ? cleaned : 0;
+}
 
 type FieldName = keyof BookingApplicationFormData;
 
@@ -49,6 +56,40 @@ function Field({
     </label>
   );
 }
+
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+  placeholder = 'Select',
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+  placeholder?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="text-xs font-semibold text-ink">{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-1 w-full rounded-lg border border-hairline bg-bg px-3 py-2.5 text-sm text-ink outline-none focus:border-green"
+      >
+        <option value="">{placeholder}</option>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+const GENDER_OPTIONS = ['Male', 'Female', 'Prefer not to say'];
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -241,8 +282,54 @@ export function CustomerApplicationPage() {
     });
   };
 
-  const handleSignatureUpload = async (kind: 'applicant' | 'coApplicant', file: File) => {
-    const key = kind === 'applicant' ? 'applicantSignature' : 'coApplicantSignature';
+  const applyFormUpdates = (updates: Partial<BookingApplicationFormData>) => {
+    persist({
+      ...docs,
+      bookingApplication: {
+        ...docs.bookingApplication,
+        formData: { ...docs.bookingApplication.formData, ...updates },
+        error: null,
+      },
+    });
+  };
+
+  // Aadhaar QR verification (Documents page) already extracts name/DOB/gender/guardian/
+  // address - autofill from that cached result instead of asking the customer to retype
+  // it here. Only overwrites a field when the QR actually had a value for it.
+  const handleAutofillFromAadhaar = () => {
+    const a = docs.aadhar;
+    if (!a.name && !a.dob && !a.maskedAadhaar) {
+      setError('Verify the Aadhaar QR on the Documents page first, then come back and autofill.');
+      return;
+    }
+    const updates: Partial<BookingApplicationFormData> = {};
+    if (a.name) updates.applicantName = a.name;
+    if (a.careOf) updates.guardianName = a.careOf;
+    if (a.dob) updates.dob = formatAadhaarDob(a.dob);
+    if (a.gender) updates.gender = mapAadhaarGender(a.gender);
+    if (a.maskedAadhaar) updates.aadhaar = a.maskedAadhaar;
+    if (a.address) updates.permanentAddress = a.address;
+    applyFormUpdates(updates);
+    setError(null);
+  };
+
+  // Only the two Price cells (Basic Sale Price and PLC) are ever typed in - the total,
+  // amount-in-figure, and amount-in-words all derive from their sum so they can never
+  // drift out of sync with what was actually entered.
+  const updatePrice = (field: 'basicSalePrice' | 'plcPrice', value: string) => {
+    const nextForm = { ...docs.bookingApplication.formData, [field]: value };
+    const total = parseAmount(nextForm.basicSalePrice) + parseAmount(nextForm.plcPrice);
+    nextForm.totalAmount = total ? String(total) : '';
+    nextForm.amountInFigure = total ? String(total) : '';
+    nextForm.totalAmountWords = total ? amountToIndianWords(total) : '';
+    persist({
+      ...docs,
+      bookingApplication: { ...docs.bookingApplication, formData: nextForm, error: null },
+    });
+  };
+
+  const handleSignatureUpload = async (kind: 'applicant' | 'coApplicant' | 'cancelledCheque', file: File) => {
+    const key = kind === 'applicant' ? 'applicantSignature' : kind === 'coApplicant' ? 'coApplicantSignature' : 'cancelledCheque';
     try {
       const dataUrl = await blobToDataUrl(file);
       persist({
@@ -355,7 +442,10 @@ export function CustomerApplicationPage() {
 
   const handleGenerate = async () => {
     const applicantSignature = docs.applicantSignature.dataUrl;
-    const hasCoApplicant = Boolean(docs.bookingApplication.formData.coApplicantName.trim());
+    // Whether a co-applicant exists is set via the checkbox on the PAN card & signatures
+    // tile (Documents page) - the single source of truth for whether their signature/photo
+    // are required, not whatever happens to be typed into the name field below.
+    const hasCoApplicant = docs.hasCoApplicant;
     if (docs.payment.status !== 'paid') {
       setError('Complete the plot booking payment before generating the application PDF.');
       return;
@@ -380,12 +470,24 @@ export function CustomerApplicationPage() {
       setError('Upload the PAN card photo before generating the application PDF.');
       return;
     }
+    if (!docs.applicantPhoto.documentId || (!docs.applicantPhoto.dataUrl && !docs.applicantPhoto.signedUrl)) {
+      setError('Upload the applicant photo before generating the application PDF.');
+      return;
+    }
+    if (hasCoApplicant && (!docs.coApplicantPhoto.documentId || (!docs.coApplicantPhoto.dataUrl && !docs.coApplicantPhoto.signedUrl))) {
+      setError('Upload the co-applicant photo before generating the application PDF.');
+      return;
+    }
     if (!applicantSignature) {
       setError('Upload the first applicant signature before generating the application PDF.');
       return;
     }
     if (hasCoApplicant && !docs.coApplicantSignature.dataUrl) {
       setError('Upload the co-applicant signature before generating the application PDF.');
+      return;
+    }
+    if (!docs.cancelledCheque.dataUrl) {
+      setError('Upload a cancelled cheque before generating the application PDF.');
       return;
     }
     if (!docs.bookingApplication.formData.pricingNotesAccepted) {
@@ -415,6 +517,9 @@ export function CustomerApplicationPage() {
         formData: docs.bookingApplication.formData,
         applicantSignatureDataUrl: applicantSignature,
         coApplicantSignatureDataUrl: docs.coApplicantSignature.dataUrl,
+        applicantPhotoSource: docs.applicantPhoto.dataUrl || docs.applicantPhoto.signedUrl,
+        coApplicantPhotoSource: docs.coApplicantPhoto.dataUrl || docs.coApplicantPhoto.signedUrl,
+        hasCoApplicant,
         paymentInfo: docs.payment,
         identityAttachments: [
           {
@@ -434,6 +539,11 @@ export function CustomerApplicationPage() {
             fileName: docs.pan.fileName,
             dataUrl: docs.pan.dataUrl,
             signedUrl: docs.pan.signedUrl,
+          },
+          {
+            title: 'Cancelled Cheque',
+            fileName: docs.cancelledCheque.fileName,
+            dataUrl: docs.cancelledCheque.dataUrl,
           },
         ],
       });
@@ -560,13 +670,30 @@ export function CustomerApplicationPage() {
             status={docs.applicantSignature}
             onUpload={(file) => void handleSignatureUpload('applicant', file)}
           />
+          <SignatureUpload
+            label="Cancelled cheque (mandatory)"
+            status={docs.cancelledCheque}
+            onUpload={(file) => void handleSignatureUpload('cancelledCheque', file)}
+          />
         </Section>
 
         <Section title="Sole / first applicant">
+          <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-hairline bg-bg px-4 py-3">
+            <p className="text-xs text-ink-muted">
+              Already verified Aadhaar via QR on the Documents page? Autofill name, DOB, gender, guardian, and address from it.
+            </p>
+            <button
+              type="button"
+              onClick={handleAutofillFromAadhaar}
+              className="shrink-0 rounded-full border border-hairline px-4 py-2 text-xs font-semibold text-ink transition-colors hover:border-green hover:text-green"
+            >
+              Autofill from Aadhaar
+            </button>
+          </div>
           <Field label="Customer name" value={form.applicantName} onChange={(value) => updateForm('applicantName', value)} />
           <Field label="S/o, W/o, D/o, C/o" value={form.guardianName} onChange={(value) => updateForm('guardianName', value)} />
           <Field label="DOB / DOI" type="date" value={form.dob} onChange={(value) => updateForm('dob', value)} />
-          <Field label="Gender" value={form.gender} onChange={(value) => updateForm('gender', value)} />
+          <SelectField label="Gender" value={form.gender} onChange={(value) => updateForm('gender', value)} options={GENDER_OPTIONS} />
           <Field label="PAN" value={form.pan} onChange={(value) => updateForm('pan', value.toUpperCase())} />
           <Field label="Aadhaar no." value={form.aadhaar} onChange={(value) => updateForm('aadhaar', value)} />
           <Field label="Email ID" type="email" value={form.email} onChange={(value) => updateForm('email', value)} />
@@ -584,7 +711,7 @@ export function CustomerApplicationPage() {
           <Field label="Customer name" value={form.coApplicantName} onChange={(value) => updateForm('coApplicantName', value)} />
           <Field label="S/o, W/o, D/o, C/o" value={form.coApplicantGuardianName} onChange={(value) => updateForm('coApplicantGuardianName', value)} />
           <Field label="DOB / DOI" type="date" value={form.coApplicantDob} onChange={(value) => updateForm('coApplicantDob', value)} />
-          <Field label="Gender" value={form.coApplicantGender} onChange={(value) => updateForm('coApplicantGender', value)} />
+          <SelectField label="Gender" value={form.coApplicantGender} onChange={(value) => updateForm('coApplicantGender', value)} options={GENDER_OPTIONS} />
           <Field label="PAN" value={form.coApplicantPan} onChange={(value) => updateForm('coApplicantPan', value.toUpperCase())} />
           <Field label="Aadhaar no." value={form.coApplicantAadhaar} onChange={(value) => updateForm('coApplicantAadhaar', value)} />
           <Field label="Phone no. (residence)" value={form.coApplicantPhone} onChange={(value) => updateForm('coApplicantPhone', value)} />
@@ -641,26 +768,26 @@ export function CustomerApplicationPage() {
               <div className="grid grid-cols-[1.3fr_1fr_1fr] bg-surface p-3">
                 <span className="font-semibold text-ink">A. Basic Sale Price (BSP)</span>
                 <input value={form.ratePerSqYd} onChange={(event) => updateForm('ratePerSqYd', event.target.value)} className="mx-2 rounded border border-hairline bg-bg px-2 py-1 outline-none focus:border-green" />
-                <input value={form.basicSalePrice} onChange={(event) => updateForm('basicSalePrice', event.target.value)} className="mx-2 rounded border border-hairline bg-bg px-2 py-1 outline-none focus:border-green" />
+                <input value={form.basicSalePrice} onChange={(event) => updatePrice('basicSalePrice', event.target.value)} className="mx-2 rounded border border-hairline bg-bg px-2 py-1 outline-none focus:border-green" />
               </div>
               <div className="grid grid-cols-[1.3fr_1fr_1fr] bg-surface p-3">
                 <span className="font-semibold text-ink">B. PLC Applicable</span>
                 <input value={form.plcRatePerSqYd} onChange={(event) => updateForm('plcRatePerSqYd', event.target.value)} className="mx-2 rounded border border-hairline bg-bg px-2 py-1 outline-none focus:border-green" />
-                <input value={form.plcPrice} onChange={(event) => updateForm('plcPrice', event.target.value)} className="mx-2 rounded border border-hairline bg-bg px-2 py-1 outline-none focus:border-green" />
+                <input value={form.plcPrice} onChange={(event) => updatePrice('plcPrice', event.target.value)} className="mx-2 rounded border border-hairline bg-bg px-2 py-1 outline-none focus:border-green" />
               </div>
               <div className="grid grid-cols-[1.3fr_1fr_1fr] bg-surface p-3">
                 <span className="font-semibold text-ink">Total Amount (A+B)</span>
                 <span />
-                <input value={form.totalAmount} onChange={(event) => updateForm('totalAmount', event.target.value)} className="mx-2 rounded border border-hairline bg-bg px-2 py-1 outline-none focus:border-green" />
+                <input value={form.totalAmount} readOnly className="mx-2 cursor-not-allowed rounded border border-hairline bg-bg px-2 py-1 text-ink-muted outline-none" />
               </div>
               <div className="grid grid-cols-[1.3fr_1fr_1fr] bg-surface p-3">
                 <span className="font-semibold text-ink">Amount in Figure</span>
                 <span />
-                <input value={form.amountInFigure} onChange={(event) => updateForm('amountInFigure', event.target.value)} className="mx-2 rounded border border-hairline bg-bg px-2 py-1 outline-none focus:border-green" />
+                <input value={form.amountInFigure} readOnly className="mx-2 cursor-not-allowed rounded border border-hairline bg-bg px-2 py-1 text-ink-muted outline-none" />
               </div>
               <div className="grid grid-cols-[1.3fr_2fr] bg-surface p-3">
                 <span className="font-semibold text-ink">Amount in Words</span>
-                <input value={form.bookingAmountWords} onChange={(event) => updateForm('bookingAmountWords', event.target.value)} className="mx-2 rounded border border-hairline bg-bg px-2 py-1 outline-none focus:border-green" />
+                <input value={form.totalAmountWords} readOnly className="mx-2 cursor-not-allowed rounded border border-hairline bg-bg px-2 py-1 text-ink-muted outline-none" />
               </div>
             </div>
           </div>

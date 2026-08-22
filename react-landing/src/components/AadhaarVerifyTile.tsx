@@ -5,6 +5,7 @@ import { uploadAadhaarPhoto } from '../services/documentsApi';
 import type { AadhaarPhotoSide } from '../services/documentsApi';
 import { ApiError } from '../services/authApi';
 import type { AadhaarStatus, AadhaarPhotoStatus } from '../services/documentStore';
+import { composeAadhaarAddress } from '../utils/aadhaar';
 import { TileShell } from './DocumentTile';
 import type { StatusTone } from './DocumentTile';
 import { IdCardIcon } from './DashboardIcons';
@@ -143,6 +144,10 @@ export function AadhaarVerifyTile({
       method: result.method,
       maskedAadhaar: result.masked_aadhaar,
       name: result.extracted_data?.name ?? null,
+      dob: result.extracted_data?.dob ?? null,
+      gender: result.extracted_data?.gender ?? null,
+      careOf: result.extracted_data?.careof ?? null,
+      address: composeAadhaarAddress(result.extracted_data),
       lastAttemptError: result.verified ? null : failureMessage(result.failure_reason),
     });
   };
