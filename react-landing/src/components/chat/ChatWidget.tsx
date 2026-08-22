@@ -84,7 +84,7 @@ function toAuthLoginInput(credentials: { username: string; password: string }) {
 
 export function ChatWidget() {
   const session = useChatSession();
-  const { login, logout, signup } = useAuth();
+  const { login, logout, signup, session: authSession } = useAuth();
   const navigate = useNavigate();
   const reducedMotion = usePrefersReducedMotion();
   const [entered, setEntered] = useState(false);
@@ -98,6 +98,42 @@ export function ChatWidget() {
   const greetingRetriedSinceOpenRef = useRef(false);
   const geoCoordsRef = useRef<{ lat: number; long: number } | null>(null);
   const geoRequestedRef = useRef(false);
+
+  // A real login/logout through the website's own auth (the modal, or a direct link
+  // into a role-gated page with an already-stored session) makes any in-progress chat
+  // auth flow stale - e.g. the visitor started logging in via chat, abandoned it, then
+  // signed in through the modal instead, leaving the chat session waiting on a password
+  // it will never get. Reopening the chat on any page after that must show a fresh
+  // greeting, not resume that abandoned flow. Skips the very first render (mount) so a
+  // returning visitor's already-authenticated page load doesn't force an unnecessary
+  // reset before the widget has even initialized once.
+  const authTokenRef = useRef<string | null | undefined>(undefined);
+  // Set right before a login()/logout() call that originated from the chat's own auth
+  // flow (see handleSendText below) - that path already manages its own messages/state
+  // correctly and clears auth_state server-side on success, so the token-change effect
+  // below must skip its reset for exactly that one transition instead of wiping out the
+  // "You are logged in as..." confirmation it's about to append.
+  const chatInitiatedAuthChangeRef = useRef(false);
+  useEffect(() => {
+    const currentToken = authSession?.token ?? null;
+    if (authTokenRef.current === undefined) {
+      authTokenRef.current = currentToken;
+      return;
+    }
+    if (authTokenRef.current === currentToken) return;
+    authTokenRef.current = currentToken;
+    if (chatInitiatedAuthChangeRef.current) {
+      chatInitiatedAuthChangeRef.current = false;
+      return;
+    }
+    greetingSentRef.current = false;
+    greetingInFlightRef.current = false;
+    greetingRetriedSinceOpenRef.current = false;
+    session.resetSession();
+    // Only re-run when the token itself changes - `session` (and its resetSession
+    // function identity) is new on every dispatch, which would otherwise fire this
+    // effect constantly instead of only on an actual login/logout.
+  }, [authSession?.token]);
 
   // Shows once per tab session, after a short delay so it doesn't slap the
   // visitor with a callout the instant the page paints. Dismissed for good
@@ -198,6 +234,7 @@ export function ChatWidget() {
   const handleSendText = (text: string, displayText: string = text) => {
     if (LOGOUT_PATTERN.test(text.trim())) {
       session.appendUserMessage(displayText);
+      chatInitiatedAuthChangeRef.current = true;
       logout();
       session.appendAgentMessage({ kind: 'text', text: 'You are logged out now.' });
       session.close();
@@ -223,6 +260,7 @@ export function ChatWidget() {
         return;
       }
 
+      chatInitiatedAuthChangeRef.current = true;
       void loginAfterChatSignup(role, credentials)
         .then(() => {
           navigate(roleHome[role]);
@@ -232,6 +270,7 @@ export function ChatWidget() {
           });
         })
         .catch((err) => {
+          chatInitiatedAuthChangeRef.current = false;
           session.appendAgentMessage({
             kind: 'text',
             text: err instanceof ApiError ? err.message : 'I could not log you in. Please check your email and password and try again.',
@@ -252,12 +291,14 @@ export function ChatWidget() {
         return;
       }
 
+      chatInitiatedAuthChangeRef.current = true;
       void login(role, toAuthLoginInput({ username, password: text }))
         .then(() => {
           navigate(roleHome[role]);
           session.appendAgentMessage({ kind: 'text', text: `You are logged in as ${role}.` });
         })
         .catch((err) => {
+          chatInitiatedAuthChangeRef.current = false;
           session.appendAgentMessage({
             kind: 'text',
             text: err instanceof ApiError ? err.message : 'I could not log you in. Please check your email and password and try again.',

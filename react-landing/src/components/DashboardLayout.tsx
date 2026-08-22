@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Navbar } from './Navbar';
 import { Footer } from './Footer';
+import { SiteVisitDrawer } from './SiteVisitDrawer';
 import { IconBadge } from './DashboardIcons';
 import type { IconAccent } from './DashboardIcons';
 
@@ -17,10 +19,11 @@ interface DashboardLayoutProps {
 export function DashboardLayout({ eyebrow, heading, subheading, children, before, after, contentLayout = 'grid' }: DashboardLayoutProps) {
   const contentClass =
     contentLayout === 'grid' ? 'mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3' : 'mt-10';
+  const [siteVisitOpen, setSiteVisitOpen] = useState(false);
 
   return (
     <>
-      <Navbar />
+      <Navbar onBookVisit={() => setSiteVisitOpen(true)} />
       <main className="min-h-svh bg-bg px-6 pb-24 pt-28 sm:px-10 sm:pt-32">
         <div className="mx-auto max-w-5xl">
           <p className="eyebrow-label text-terracotta">{eyebrow}</p>
@@ -37,6 +40,7 @@ export function DashboardLayout({ eyebrow, heading, subheading, children, before
         </div>
       </main>
       <Footer />
+      <SiteVisitDrawer open={siteVisitOpen} onClose={() => setSiteVisitOpen(false)} />
     </>
   );
 }
