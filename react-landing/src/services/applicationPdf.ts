@@ -54,9 +54,12 @@ const signatureTopY = 102;
 const contentWidth = pageSize[0] - marginX * 2;
 const labelColumnWidth = 150;
 const navy = rgb(0.024, 0.122, 0.176);
-const divineGreen = rgb(0.0, 0.36, 0.18);
-const paleGreen = rgb(0.94, 0.98, 0.95);
-const tableTint = rgb(0.985, 0.99, 0.985);
+// Matches the website footer's --color-chrome (#2c3e50) - the PDF's whole accent
+// theme (header/footer bands, bullets, labels, alternating row tints) uses this
+// rather than a separate green, so the document matches the site's chrome.
+const divineGreen = rgb(44 / 255, 62 / 255, 80 / 255);
+const paleGreen = rgb(0.94, 0.96, 0.98);
+const tableTint = rgb(0.985, 0.988, 0.995);
 const ink = rgb(0.05, 0.12, 0.16);
 const muted = rgb(0.35, 0.45, 0.5);
 const hairline = rgb(0.78, 0.84, 0.87);
