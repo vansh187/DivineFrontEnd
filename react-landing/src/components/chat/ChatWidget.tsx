@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useChatSession } from '../../hooks/useChatSession';
 import type { AgentMessageVariant, ChatButton } from '../../hooks/useChatSession';
 import { useAuth } from '../../hooks/useAuth';
-import { ApiError } from '../../services/authApi';
+import { ApiError, API_BASE_URL } from '../../services/authApi';
 import type { Role } from '../../services/authApi';
 import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion';
 import { ChatLauncher } from './ChatLauncher';
@@ -289,7 +289,11 @@ export function ChatWidget() {
   // just being echoed into the chat as plain text.
   const handleButtonTap = (button: ChatButton) => {
     if (button.url) {
-      window.open(button.url, '_blank', 'noopener,noreferrer');
+      // Backend buttons (e.g. loan report downloads) may return a path relative
+      // to the API host — resolve it there instead of the frontend's own origin,
+      // otherwise it 404s against the SPA router.
+      const absoluteUrl = /^https?:\/\//i.test(button.url) ? button.url : `${API_BASE_URL}${button.url}`;
+      window.open(absoluteUrl, '_blank', 'noopener,noreferrer');
     }
     handleSendText(button.value, button.label);
   };
