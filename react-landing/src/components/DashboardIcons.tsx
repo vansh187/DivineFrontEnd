@@ -101,6 +101,12 @@ export const RupeeIcon = () => (
     <path d="M5.5 4h9M5.5 7.5h9M5.5 4a3.6 3.6 0 0 1 0 7h-1.3L11 16.5" />
   </IconWrap>
 );
+export const CameraIcon = () => (
+  <IconWrap>
+    <path d="M3 6.5h2.3l.9-1.6a1 1 0 0 1 .9-.5h5.8a1 1 0 0 1 .9.5l.9 1.6H17a1 1 0 0 1 1 1v8.3a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7.5a1 1 0 0 1 1-1Z" />
+    <circle cx="10" cy="11" r="3" />
+  </IconWrap>
+);
 export const BuildingIcon = () => (
   <IconWrap>
     <rect x="4" y="2.5" width="8" height="15" rx="1" />

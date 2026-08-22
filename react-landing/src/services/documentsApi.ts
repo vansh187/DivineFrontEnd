@@ -27,6 +27,16 @@ export interface UploadGeneratedApplicationPdfInput {
 
 export type AadhaarPhotoSide = 'front' | 'back';
 
+/** Backend keys used in "documents_incomplete:<key>,<key>,..." — kept in sync
+ * with _REQUIRED_PHOTO_DOCUMENT_TYPES in the backend's service_document.py. */
+const MISSING_DOCUMENT_LABELS: Record<string, string> = {
+  aadhaar_front: 'Aadhaar front photo',
+  aadhaar_back: 'Aadhaar back photo',
+  pan_card: 'PAN card photo',
+  applicant_photo: 'Applicant photo',
+  co_applicant_photo: 'Co-Applicant photo',
+};
+
 function messageForDocumentsError(status: number, detail: unknown): string {
   if (status === 401) {
     if (detail === 'missing_token') return 'Please sign in before uploading documents.';
@@ -51,7 +61,9 @@ function messageForDocumentsError(status: number, detail: unknown): string {
     if (detail === 'payment_not_completed') return 'Payment is not completed yet. Please wait for confirmation before generating the PDF.';
     if (detail === 'payment_mismatch') return 'Payment verification details do not match. Please contact support before generating the PDF.';
     if (typeof detail === 'string' && detail.startsWith('documents_incomplete:')) {
-      return 'Upload your Aadhaar front, Aadhaar back, and PAN card photos before generating this document.';
+      const missingKeys = detail.slice('documents_incomplete:'.length).split(',').filter(Boolean);
+      const labels = missingKeys.map((key) => MISSING_DOCUMENT_LABELS[key] ?? key);
+      return `Upload ${labels.join(', ')} before generating this document.`;
     }
   }
   if (typeof detail === 'string' && detail.startsWith('storage_')) {
@@ -106,6 +118,42 @@ export function uploadPanPhoto(token: string, file: File): Promise<GeneratedDocu
   const formData = new FormData();
   formData.append('file', file);
   return authedRequest<GeneratedDocument>('/documents/pan-photo', token, {
+    method: 'POST',
+    body: formData,
+  });
+}
+
+const MAX_APPLICANT_PHOTO_BYTES = 8 * 1024 * 1024; // matches the backend's MAX_PHOTO_UPLOAD_BYTES
+
+function validatePhotoFile(file: File) {
+  if (!file.size) throw new ApiError(400, 'empty_file', messageForDocumentsError(400, 'empty_file'));
+  if (file.size > MAX_APPLICANT_PHOTO_BYTES) throw new ApiError(400, 'file_too_large', messageForDocumentsError(400, 'file_too_large'));
+  if (!['image/jpeg', 'image/png'].includes(file.type)) {
+    throw new ApiError(400, 'unsupported_file_type', messageForDocumentsError(400, 'unsupported_file_type'));
+  }
+}
+
+/** Uploads the applicant's own photo - placed on the right-hand side of the "Applicant
+ * Details" page of the generated booking application PDF. Required (along with the
+ * co-applicant photo, Aadhaar front/back, and PAN) before /documents/generate will
+ * render a booking_application document. */
+export function uploadApplicantPhoto(token: string, file: File): Promise<GeneratedDocument> {
+  validatePhotoFile(file);
+  const formData = new FormData();
+  formData.append('file', file);
+  return authedRequest<GeneratedDocument>('/documents/applicant-photo', token, {
+    method: 'POST',
+    body: formData,
+  });
+}
+
+/** Same as uploadApplicantPhoto, for the co-applicant's photo (placed on the
+ * "Co-Applicant Details" page). */
+export function uploadCoApplicantPhoto(token: string, file: File): Promise<GeneratedDocument> {
+  validatePhotoFile(file);
+  const formData = new FormData();
+  formData.append('file', file);
+  return authedRequest<GeneratedDocument>('/documents/co-applicant-photo', token, {
     method: 'POST',
     body: formData,
   });

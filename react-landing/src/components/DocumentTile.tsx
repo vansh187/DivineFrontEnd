@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import type { ReactNode } from 'react';
-import type { DocStatus } from '../services/documentStore';
+import type { AadhaarPhotoStatus, DocStatus } from '../services/documentStore';
 import { CheckIcon, FileIcon, IconBadge } from './DashboardIcons';
 import type { IconAccent } from './DashboardIcons';
 
@@ -130,6 +130,66 @@ export function UploadDocumentTile({
         )}
       </div>
       {extra ? <div className="mt-4 border-t border-hairline pt-4">{extra}</div> : null}
+    </TileShell>
+  );
+}
+
+interface PhotoUploadTileProps {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  status: AadhaarPhotoStatus;
+  onUpload: (file: File) => void;
+  uploading?: boolean;
+  accent?: IconAccent;
+}
+
+/** Plain "upload a photo" tile - no verify step, unlike UploadDocumentTile (used for
+ * PAN, which does have one). Used for the mandatory applicant/co-applicant photos on
+ * the booking application PDF. */
+export function PhotoUploadTile({ icon, title, description, status, onUpload, uploading = false, accent }: PhotoUploadTileProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const statusLabel = status.documentId ? 'Uploaded' : status.error ? 'Upload failed' : 'Not uploaded';
+  const statusTone: StatusTone = status.documentId ? 'done' : status.error ? 'failed' : 'neutral';
+
+  return (
+    <TileShell icon={icon} title={title} description={description} statusLabel={statusLabel} statusTone={statusTone} accent={accent}>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) onUpload(file);
+          event.target.value = '';
+        }}
+      />
+
+      {status.fileName && (
+        <div className="mb-3 flex items-center gap-2 rounded-lg bg-bg px-3 py-2 text-xs text-ink-muted">
+          <span className="shrink-0">
+            <FileIcon className="h-3.5 w-3.5" />
+          </span>
+          <span className="truncate">{status.fileName}</span>
+        </div>
+      )}
+
+      {status.error && (
+        <p role="alert" className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {status.error}
+        </p>
+      )}
+
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        disabled={uploading}
+        className="rounded-full border border-hairline px-4 py-2 text-xs font-semibold text-ink transition-colors hover:border-green hover:text-green disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {uploading ? 'Uploading…' : status.fileName ? 'Replace photo' : 'Upload photo'}
+      </button>
     </TileShell>
   );
 }

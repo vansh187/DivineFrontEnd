@@ -380,6 +380,14 @@ export function CustomerApplicationPage() {
       setError('Upload the PAN card photo before generating the application PDF.');
       return;
     }
+    if (!docs.applicantPhoto.documentId || (!docs.applicantPhoto.dataUrl && !docs.applicantPhoto.signedUrl)) {
+      setError('Upload the applicant photo before generating the application PDF.');
+      return;
+    }
+    if (!docs.coApplicantPhoto.documentId || (!docs.coApplicantPhoto.dataUrl && !docs.coApplicantPhoto.signedUrl)) {
+      setError('Upload the co-applicant photo before generating the application PDF.');
+      return;
+    }
     if (!applicantSignature) {
       setError('Upload the first applicant signature before generating the application PDF.');
       return;
@@ -415,6 +423,8 @@ export function CustomerApplicationPage() {
         formData: docs.bookingApplication.formData,
         applicantSignatureDataUrl: applicantSignature,
         coApplicantSignatureDataUrl: docs.coApplicantSignature.dataUrl,
+        applicantPhotoSource: docs.applicantPhoto.dataUrl || docs.applicantPhoto.signedUrl,
+        coApplicantPhotoSource: docs.coApplicantPhoto.dataUrl || docs.coApplicantPhoto.signedUrl,
         paymentInfo: docs.payment,
         identityAttachments: [
           {

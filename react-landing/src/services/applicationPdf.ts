@@ -8,6 +8,11 @@ interface GenerateApplicationPdfInput {
   formData: BookingApplicationFormData;
   applicantSignatureDataUrl: string;
   coApplicantSignatureDataUrl?: string | null;
+  /** Passport-size photo shown on the "Sole / first applicant" page — a data URL
+   * (preferred, already cached locally) or a signed storage URL fallback. */
+  applicantPhotoSource?: string | null;
+  /** Same as applicantPhotoSource, for the "Co-applicant details" page. */
+  coApplicantPhotoSource?: string | null;
   identityAttachments?: IdentityAttachment[];
   paymentInfo?: PaymentStatus | null;
 }
@@ -25,6 +30,8 @@ interface PdfContext {
   bold: PDFFont;
   applicantSignature: PDFImage;
   coApplicantSignature: PDFImage | null;
+  applicantPhoto: PDFImage | null;
+  coApplicantPhoto: PDFImage | null;
   pageNumber: number;
   project: ApplicationProject;
 }
@@ -452,8 +459,27 @@ function renderFillApplicationPage(ctx: PdfContext, formData: BookingApplication
   ]);
 }
 
+const PHOTO_BOX_WIDTH = 92;
+const PHOTO_BOX_HEIGHT = 112;
+
+/** Draws a passport-photo box in the top-right of the current cursor position and
+ * returns a cursor moved below it, so the rows that follow never overlap it. */
+function drawPhotoBox(cursor: PageCursor, ctx: PdfContext, photo: PDFImage | null, label: string): PageCursor {
+  const x = marginX + contentWidth - PHOTO_BOX_WIDTH;
+  const y = cursor.y - PHOTO_BOX_HEIGHT;
+  cursor.page.drawRectangle({ x, y, width: PHOTO_BOX_WIDTH, height: PHOTO_BOX_HEIGHT, borderColor: hairline, borderWidth: 1, color: tableTint });
+  if (photo) {
+    drawTemplateImage(cursor.page, photo, x + 4, y + 4, PHOTO_BOX_WIDTH - 8, PHOTO_BOX_HEIGHT - 8);
+  } else {
+    cursor.page.drawText('No photo', { x: x + 10, y: y + PHOTO_BOX_HEIGHT / 2, size: 8, font: ctx.font, color: muted });
+  }
+  cursor.page.drawText(label.toUpperCase(), { x, y: y - 11, size: 7, font: ctx.bold, color: divineGreen });
+  return { ...cursor, y: y - 18 };
+}
+
 function renderApplicantPage(ctx: PdfContext, formData: BookingApplicationFormData) {
   let cursor = addPage(ctx, 'Page 3 - Sole / first applicant');
+  cursor = drawPhotoBox(cursor, ctx, ctx.applicantPhoto, 'Applicant photo');
   cursor = drawRows(ctx, cursor, [
     ['Customer name', formData.applicantName],
     ['S/o, W/o, D/o, C/o', formData.guardianName],
@@ -472,6 +498,7 @@ function renderApplicantPage(ctx: PdfContext, formData: BookingApplicationFormDa
 
 function renderCoApplicantPage(ctx: PdfContext, formData: BookingApplicationFormData) {
   let cursor = addPage(ctx, 'Page 4 - Co-applicant details');
+  cursor = drawPhotoBox(cursor, ctx, ctx.coApplicantPhoto, 'Co-applicant photo');
   cursor = drawRows(ctx, cursor, [
     ['Customer name', formData.coApplicantName],
     ['S/o, W/o, D/o, C/o', formData.coApplicantGuardianName],
@@ -677,10 +704,23 @@ async function renderReadableApplicationPacket(
   await appendIdentityAttachmentPages(ctx, identityAttachments);
 }
 
+async function embedPhotoOrNull(pdfDoc: PDFDocument, source: string | null | undefined): Promise<PDFImage | null> {
+  if (!source) return null;
+  try {
+    return await embedImageFromSource(pdfDoc, source);
+  } catch {
+    // A corrupt/unreadable photo shouldn't fail the whole document - the photo box
+    // just falls back to its "No photo" placeholder.
+    return null;
+  }
+}
+
 export async function generateApplicationPdf({
   formData,
   applicantSignatureDataUrl,
   coApplicantSignatureDataUrl,
+  applicantPhotoSource,
+  coApplicantPhotoSource,
   identityAttachments = [],
   paymentInfo = null,
 }: GenerateApplicationPdfInput): Promise<Blob> {
@@ -693,7 +733,19 @@ export async function generateApplicationPdf({
   const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   const applicantSignature = await embedSignature(pdfDoc, applicantSignatureDataUrl);
   const coApplicantSignature = coApplicantSignatureDataUrl ? await embedSignature(pdfDoc, coApplicantSignatureDataUrl) : null;
-  const ctx: PdfContext = { pdfDoc, font, bold, applicantSignature, coApplicantSignature, pageNumber: 0, project };
+  const applicantPhoto = await embedPhotoOrNull(pdfDoc, applicantPhotoSource);
+  const coApplicantPhoto = await embedPhotoOrNull(pdfDoc, coApplicantPhotoSource);
+  const ctx: PdfContext = {
+    pdfDoc,
+    font,
+    bold,
+    applicantSignature,
+    coApplicantSignature,
+    applicantPhoto,
+    coApplicantPhoto,
+    pageNumber: 0,
+    project,
+  };
 
   await renderReadableApplicationPacket(ctx, formData, identityAttachments, paymentInfo);
 

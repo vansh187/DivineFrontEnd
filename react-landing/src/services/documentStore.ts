@@ -282,6 +282,8 @@ export interface CustomerDocState {
   aadharFront: AadhaarPhotoStatus;
   aadharBack: AadhaarPhotoStatus;
   pan: DocStatus;
+  applicantPhoto: AadhaarPhotoStatus;
+  coApplicantPhoto: AadhaarPhotoStatus;
   applicantSignature: SignatureStatus;
   coApplicantSignature: SignatureStatus;
   generatedDoc: GeneratedDocStatus;
@@ -367,6 +369,8 @@ export function loadCustomerDocs(email: string): CustomerDocState {
       // Spread over the defaults (not just `??`) so state cached before documentId/
       // signedUrl/error existed on DocStatus still back-fills those specific fields.
       pan: { ...emptyDocStatus(), ...parsed.pan },
+      applicantPhoto: { ...emptyAadhaarPhotoStatus(), ...parsed.applicantPhoto },
+      coApplicantPhoto: { ...emptyAadhaarPhotoStatus(), ...parsed.coApplicantPhoto },
       applicantSignature: { ...emptySignatureStatus(), ...(parsed.applicantSignature ?? parsed.signature) },
       coApplicantSignature: { ...emptySignatureStatus(), ...parsed.coApplicantSignature },
       generatedDoc: parsed.generatedDoc ?? emptyGeneratedDocStatus(),
@@ -386,6 +390,8 @@ export function loadCustomerDocs(email: string): CustomerDocState {
       aadharFront: emptyAadhaarPhotoStatus(),
       aadharBack: emptyAadhaarPhotoStatus(),
       pan: emptyDocStatus(),
+      applicantPhoto: emptyAadhaarPhotoStatus(),
+      coApplicantPhoto: emptyAadhaarPhotoStatus(),
       applicantSignature: emptySignatureStatus(),
       coApplicantSignature: emptySignatureStatus(),
       generatedDoc: emptyGeneratedDocStatus(),
