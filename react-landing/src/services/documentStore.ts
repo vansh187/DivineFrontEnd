@@ -31,11 +31,29 @@ export interface AadhaarStatus {
   method: 'qr' | 'offline_xml' | null;
   maskedAadhaar: string | null;
   name: string | null;
+  /** Raw fields from the QR/XML decode, kept around so the booking application form
+   * can autofill from them - not shown anywhere as "verified" facts on their own,
+   * since only name/maskedAadhaar/verified are covered by the signature check. */
+  dob: string | null;
+  gender: string | null;
+  careOf: string | null;
+  address: string | null;
   lastAttemptError: string | null;
 }
 
 export function emptyAadhaarStatus(): AadhaarStatus {
-  return { verified: false, verifiedAt: null, method: null, maskedAadhaar: null, name: null, lastAttemptError: null };
+  return {
+    verified: false,
+    verifiedAt: null,
+    method: null,
+    maskedAadhaar: null,
+    name: null,
+    dob: null,
+    gender: null,
+    careOf: null,
+    address: null,
+    lastAttemptError: null,
+  };
 }
 
 /** A raw Aadhaar front/back photo uploaded straight to storage (POST
@@ -369,7 +387,7 @@ export function loadCustomerDocs(email: string): CustomerDocState {
     // split out - fold it into applicantSignature for anyone with an old cached blob.
     const parsed = JSON.parse(raw) as Partial<CustomerDocState> & { signature?: SignatureStatus };
     return {
-      aadhar: parsed.aadhar ?? emptyAadhaarStatus(),
+      aadhar: { ...emptyAadhaarStatus(), ...parsed.aadhar },
       aadharFront: { ...emptyAadhaarPhotoStatus(), ...parsed.aadharFront },
       aadharBack: { ...emptyAadhaarPhotoStatus(), ...parsed.aadharBack },
       // Spread over the defaults (not just `??`) so state cached before documentId/
@@ -421,7 +439,7 @@ export function loadBrokerDocs(email: string): BrokerDocState {
     if (!raw) throw new Error('none');
     const parsed = JSON.parse(raw) as Partial<BrokerDocState>;
     return {
-      aadhar: parsed.aadhar ?? emptyAadhaarStatus(),
+      aadhar: { ...emptyAadhaarStatus(), ...parsed.aadhar },
       aadharFront: { ...emptyAadhaarPhotoStatus(), ...parsed.aadharFront },
       aadharBack: { ...emptyAadhaarPhotoStatus(), ...parsed.aadharBack },
       visits: normalizeVisits(parsed.visits),

@@ -12,6 +12,7 @@ import { blobToDataUrl, generateApplicationPdf, openDataUrl, openPdfBlob } from 
 import { createPaymentOrder, recordCashPayment, verifyPayment } from '../services/paymentsApi';
 import { openRazorpayCheckout } from '../services/razorpayCheckout';
 import { amountToIndianWords } from '../utils/currency';
+import { formatAadhaarDob, mapAadhaarGender } from '../utils/aadhaar';
 
 function parseAmount(value: string): number {
   const cleaned = Number(value.replace(/,/g, '').trim());
@@ -55,6 +56,40 @@ function Field({
     </label>
   );
 }
+
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+  placeholder = 'Select',
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+  placeholder?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="text-xs font-semibold text-ink">{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-1 w-full rounded-lg border border-hairline bg-bg px-3 py-2.5 text-sm text-ink outline-none focus:border-green"
+      >
+        <option value="">{placeholder}</option>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+const GENDER_OPTIONS = ['Male', 'Female', 'Prefer not to say'];
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -245,6 +280,37 @@ export function CustomerApplicationPage() {
         error: null,
       },
     });
+  };
+
+  const applyFormUpdates = (updates: Partial<BookingApplicationFormData>) => {
+    persist({
+      ...docs,
+      bookingApplication: {
+        ...docs.bookingApplication,
+        formData: { ...docs.bookingApplication.formData, ...updates },
+        error: null,
+      },
+    });
+  };
+
+  // Aadhaar QR verification (Documents page) already extracts name/DOB/gender/guardian/
+  // address - autofill from that cached result instead of asking the customer to retype
+  // it here. Only overwrites a field when the QR actually had a value for it.
+  const handleAutofillFromAadhaar = () => {
+    const a = docs.aadhar;
+    if (!a.name && !a.dob && !a.maskedAadhaar) {
+      setError('Verify the Aadhaar QR on the Documents page first, then come back and autofill.');
+      return;
+    }
+    const updates: Partial<BookingApplicationFormData> = {};
+    if (a.name) updates.applicantName = a.name;
+    if (a.careOf) updates.guardianName = a.careOf;
+    if (a.dob) updates.dob = formatAadhaarDob(a.dob);
+    if (a.gender) updates.gender = mapAadhaarGender(a.gender);
+    if (a.maskedAadhaar) updates.aadhaar = a.maskedAadhaar;
+    if (a.address) updates.permanentAddress = a.address;
+    applyFormUpdates(updates);
+    setError(null);
   };
 
   // Only the two Price cells (Basic Sale Price and PLC) are ever typed in - the total,
@@ -597,10 +663,22 @@ export function CustomerApplicationPage() {
         </Section>
 
         <Section title="Sole / first applicant">
+          <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-hairline bg-bg px-4 py-3">
+            <p className="text-xs text-ink-muted">
+              Already verified Aadhaar via QR on the Documents page? Autofill name, DOB, gender, guardian, and address from it.
+            </p>
+            <button
+              type="button"
+              onClick={handleAutofillFromAadhaar}
+              className="shrink-0 rounded-full border border-hairline px-4 py-2 text-xs font-semibold text-ink transition-colors hover:border-green hover:text-green"
+            >
+              Autofill from Aadhaar
+            </button>
+          </div>
           <Field label="Customer name" value={form.applicantName} onChange={(value) => updateForm('applicantName', value)} />
           <Field label="S/o, W/o, D/o, C/o" value={form.guardianName} onChange={(value) => updateForm('guardianName', value)} />
           <Field label="DOB / DOI" type="date" value={form.dob} onChange={(value) => updateForm('dob', value)} />
-          <Field label="Gender" value={form.gender} onChange={(value) => updateForm('gender', value)} />
+          <SelectField label="Gender" value={form.gender} onChange={(value) => updateForm('gender', value)} options={GENDER_OPTIONS} />
           <Field label="PAN" value={form.pan} onChange={(value) => updateForm('pan', value.toUpperCase())} />
           <Field label="Aadhaar no." value={form.aadhaar} onChange={(value) => updateForm('aadhaar', value)} />
           <Field label="Email ID" type="email" value={form.email} onChange={(value) => updateForm('email', value)} />
@@ -618,7 +696,7 @@ export function CustomerApplicationPage() {
           <Field label="Customer name" value={form.coApplicantName} onChange={(value) => updateForm('coApplicantName', value)} />
           <Field label="S/o, W/o, D/o, C/o" value={form.coApplicantGuardianName} onChange={(value) => updateForm('coApplicantGuardianName', value)} />
           <Field label="DOB / DOI" type="date" value={form.coApplicantDob} onChange={(value) => updateForm('coApplicantDob', value)} />
-          <Field label="Gender" value={form.coApplicantGender} onChange={(value) => updateForm('coApplicantGender', value)} />
+          <SelectField label="Gender" value={form.coApplicantGender} onChange={(value) => updateForm('coApplicantGender', value)} options={GENDER_OPTIONS} />
           <Field label="PAN" value={form.coApplicantPan} onChange={(value) => updateForm('coApplicantPan', value.toUpperCase())} />
           <Field label="Aadhaar no." value={form.coApplicantAadhaar} onChange={(value) => updateForm('coApplicantAadhaar', value)} />
           <Field label="Phone no. (residence)" value={form.coApplicantPhone} onChange={(value) => updateForm('coApplicantPhone', value)} />
