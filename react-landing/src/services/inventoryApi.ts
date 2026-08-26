@@ -1,4 +1,4 @@
-import { ApiError, API_BASE_URL } from './authApi';
+import { ApiError, API_BASE_URL, authedRequest as authedRequestBase } from './authApi';
 
 export interface InventoryUnit {
   id: string;
@@ -14,6 +14,10 @@ export interface InventoryUnit {
   area_sqyd: number | null;
   status: string | null;
   estimated_price: number | null;
+  /** Only present while status === 'reserved' - the 3-day exclusive-hold window a
+   * channel partner gets after reserving this unit (see /inventory/:id/reserve). */
+  reserved_at?: string | null;
+  reserved_until?: string | null;
 }
 
 export interface InventorySearchFilters {
@@ -117,4 +121,48 @@ export function getInventoryRecommendations(input: {
       limit: input.limit ?? 10,
     }),
   );
+}
+
+export interface ReservedUnitsResponse {
+  count: number;
+  reservations: InventoryUnit[];
+}
+
+function messageForReservationError(status: number, detail: unknown): string {
+  if (status === 401) {
+    if (detail === 'token_expired') return 'Your session has expired. Please sign in again.';
+    return 'Please sign in again to continue.';
+  }
+  if (status === 403) return 'Only channel partners can reserve inventory.';
+  if (status === 409) {
+    if (detail === 'unit_not_available') return 'This plot was just reserved by another channel partner.';
+    if (detail === 'not_reserved_by_you') return 'This plot is not reserved by you.';
+  }
+  return 'Something went wrong with this reservation. Please try again.';
+}
+
+function authedInventoryRequest<T>(path: string, token: string, init?: RequestInit): Promise<T> {
+  return authedRequestBase<T>(path, token, messageForReservationError, init);
+}
+
+/** Locks a plot exclusively for the calling channel partner for 3 days - it drops out
+ * of everyone else's /inventory/search results until released, sold, or expired. */
+export function reserveInventoryUnit(token: string, unitId: string): Promise<InventoryUnit> {
+  return authedInventoryRequest<InventoryUnit>(`/inventory/${encodeURIComponent(unitId)}/reserve`, token, { method: 'POST' });
+}
+
+/** Releases a unit this broker reserved early, putting it back in the available pool. */
+export function releaseInventoryUnit(token: string, unitId: string): Promise<InventoryUnit> {
+  return authedInventoryRequest<InventoryUnit>(`/inventory/${encodeURIComponent(unitId)}/release`, token, { method: 'POST' });
+}
+
+/** Marks a reserved unit as sold, closing out the reservation permanently. */
+export function markInventoryUnitSold(token: string, unitId: string): Promise<InventoryUnit> {
+  return authedInventoryRequest<InventoryUnit>(`/inventory/${encodeURIComponent(unitId)}/mark-sold`, token, { method: 'POST' });
+}
+
+/** This broker's own active reservations ("My leads") - never includes another
+ * channel partner's locked units. */
+export function listMyReservedUnits(token: string): Promise<ReservedUnitsResponse> {
+  return authedInventoryRequest<ReservedUnitsResponse>('/inventory/reserved/mine', token);
 }
