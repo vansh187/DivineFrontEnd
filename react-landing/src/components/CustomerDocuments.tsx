@@ -10,8 +10,15 @@ import { townshipPricing } from '../data/townshipPricing';
 import { PhotoUploadTile, TileShell, UploadDocumentTile } from './DocumentTile';
 import { AadhaarVerifyTile } from './AadhaarVerifyTile';
 import { CameraIcon, CardIcon, FileIcon } from './DashboardIcons';
+import type { InventoryUnit } from '../services/inventoryApi';
 
-export function CustomerDocuments() {
+interface CustomerDocumentsProps {
+  /** A plot picked from "Available plots" that's mid-booking - carried through
+   * to the application form once documents here are ready. */
+  pendingUnit?: InventoryUnit | null;
+}
+
+export function CustomerDocuments({ pendingUnit = null }: CustomerDocumentsProps) {
   const navigate = useNavigate();
   const { session, logout, openModal } = useAuth();
   const email = session?.email ?? 'anonymous';
@@ -288,10 +295,10 @@ export function CustomerDocuments() {
     <section className="mt-14">
       <p className="eyebrow-label text-terracotta">Document upload</p>
       <h2 className="mt-2 font-display text-2xl font-bold text-ink sm:text-3xl">Aadhar, PAN &amp; document generation</h2>
-      <p className="mt-2 max-w-[64ch] text-sm leading-[1.6] text-ink-muted">
+      <p className="mt-2 text-sm leading-[1.6] text-ink-muted">
         Aadhaar verification, Aadhaar photo upload, PAN upload, applicant &amp; co-applicant photos, document generation, and signature checks can be completed later if verification is pending.
       </p>
-      <p className="mt-3 max-w-[64ch] rounded-lg border border-hairline bg-bg px-3 py-2 text-xs font-semibold text-ink-muted">
+      <p className="mt-3 rounded-lg border border-hairline bg-bg px-3 py-2 text-xs font-semibold text-ink-muted">
         Note: if you are uploading a photocopy of a document, please upload only a self-attested copy.
       </p>
 
@@ -419,7 +426,7 @@ export function CustomerDocuments() {
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => navigate('/customer/application')}
+                onClick={() => navigate('/customer/application', pendingUnit ? { state: { unit: pendingUnit } } : undefined)}
                 className="rounded-full bg-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft"
               >
                 Fill application

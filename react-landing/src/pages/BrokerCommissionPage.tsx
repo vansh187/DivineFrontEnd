@@ -11,7 +11,7 @@ export function BrokerCommissionPage() {
     <DashboardLayout
       eyebrow="Broker workspace"
       heading={<>Commission</>}
-      subheading="Add paid cash commission records and review all broker commissions by status."
+      subheading="Review your commission summary and history by status and month."
       contentLayout="full"
     >
       <BrokerCommission token={session?.token ?? ''} brokerId={session?.userId ?? ''} onBack={() => navigate('/broker')} />

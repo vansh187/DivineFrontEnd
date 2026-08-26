@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import * as store from '../services/documentStore';
 import type { BrokerDocState, ScheduledVisit } from '../services/documentStore';
@@ -48,7 +49,10 @@ function todayInputValue() {
 
 export function BrokerDocuments() {
   const { session, logout, openModal } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const email = session?.email ?? 'anonymous';
+  const scheduleSectionRef = useRef<HTMLDivElement | null>(null);
 
   const [docs, setDocs] = useState<BrokerDocState>(() => store.loadBrokerDocs(email));
 
@@ -77,6 +81,18 @@ export function BrokerDocuments() {
   const [cancellingVisitId, setCancellingVisitId] = useState<string | null>(null);
   const [visitError, setVisitError] = useState<string | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
+
+  // "Schedule Visit" on the Available Plots listing hands off the chosen plot
+  // via navigation state, so the form here opens pre-filled with a note about
+  // that plot instead of asking the broker to retype it. Runs once on arrival.
+  useEffect(() => {
+    const note = (location.state as { scheduleVisitNote?: string } | null)?.scheduleVisitNote;
+    if (!note) return;
+    setNotes(note);
+    scheduleSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    navigate(location.pathname, { replace: true, state: {} });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const aadhaarVerified = docs.aadhar.verified;
   const upcomingVisits = docs.visits.filter((visit) => visit.status === 'scheduled' && isFutureVisit(visit));
@@ -276,6 +292,7 @@ export function BrokerDocuments() {
           }}
         />
 
+        <div ref={scheduleSectionRef}>
         <TileShell
           icon={<CalendarIcon />}
           accent="green"
@@ -350,6 +367,7 @@ export function BrokerDocuments() {
             </button>
           </div>
         </TileShell>
+        </div>
       </div>
 
       <div className="mt-5">
