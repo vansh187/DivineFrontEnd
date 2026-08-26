@@ -19,26 +19,10 @@ export interface CommissionRecord {
   rejectedAt: string | null;
 }
 
-export interface CreateCashCommissionInput {
-  brokerId: string;
-  serialNumber: string;
-  unitAddress: string;
-  customerName?: string;
-  township?: string;
-  saleValue?: number;
-  commissionAmount: number;
-  transactionMode: 'cash';
-}
-
 export interface CommissionSummary {
   pending: number;
   paid: number;
   rejected: number;
-}
-
-export interface CreateCommissionResponse {
-  success: boolean;
-  commission: CommissionRecord;
 }
 
 export interface ListCommissionsResponse {
@@ -96,19 +80,7 @@ function messageForCommissionError(status: number, detail: unknown): string {
       ? 'Your session has expired. Please sign in again.'
       : 'Please sign in again to continue.';
   }
-  if (status === 403) {
-    if (detail === 'broker_only') return 'Only brokers can add commission records.';
-    return 'You can only manage your own commission records.';
-  }
-  if (status === 409) return 'This commission record already exists.';
-  if (status === 400) {
-    if (detail === 'transactionMode_must_be_cash') return 'Broker commission records must be cash transactions.';
-    if (typeof detail === 'string') {
-      if (detail.endsWith('_required')) return 'Please fill all required commission details.';
-      if (detail.startsWith('invalid_')) return 'Please check the commission details and try again.';
-    }
-  }
-  if (status === 422) return 'Please check the commission details and try again.';
+  if (status === 403) return 'You can only view your own commission records.';
   if (status === 500) return 'Something went wrong on our end. Please try again shortly.';
   return 'Something went wrong with commissions. Please try again.';
 }
@@ -126,20 +98,5 @@ export async function listBrokerCommissions(token: string, brokerId: string): Pr
     success: res.success,
     commissions: (res.commissions ?? []).map(normalizeCommission),
     summary: normalizeSummary(res.summary),
-  };
-}
-
-export async function createBrokerCashCommission(
-  token: string,
-  input: CreateCashCommissionInput,
-): Promise<CreateCommissionResponse> {
-  const res = await authedRequest<{ success: boolean; commission: RawCommissionRecord }>('/api/broker/commissions', token, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
-  });
-  return {
-    success: res.success,
-    commission: normalizeCommission(res.commission),
   };
 }

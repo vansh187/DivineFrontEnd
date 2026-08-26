@@ -3,7 +3,9 @@ import type { ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { LandingPage } from './pages/LandingPage';
 import { CustomerPage } from './pages/CustomerPage';
+import { CustomerPlotsPage } from './pages/CustomerPlotsPage';
 import { BrokerPage } from './pages/BrokerPage';
+import { BrokerPlotsPage } from './pages/BrokerPlotsPage';
 import { BrokerCommissionPage } from './pages/BrokerCommissionPage';
 import { ResidencesPage } from './pages/ResidencesPage';
 import { ProjectDetailPage } from './pages/ProjectDetailPage';
@@ -83,6 +85,14 @@ function AppRoutes() {
           }
         />
         <Route
+          path="/customer/plots"
+          element={
+            <RoleRoute role="customer">
+              <CustomerPlotsPage />
+            </RoleRoute>
+          }
+        />
+        <Route
           path="/customer/application"
           element={
             <RoleRoute role="customer">
@@ -99,6 +109,14 @@ function AppRoutes() {
           element={
             <RoleRoute role="broker">
               <BrokerPage />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="/broker/plots"
+          element={
+            <RoleRoute role="broker">
+              <BrokerPlotsPage />
             </RoleRoute>
           }
         />

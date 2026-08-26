@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '../components/DashboardLayout';
 import { useAuth } from '../hooks/useAuth';
 import * as store from '../services/documentStore';
 import type { BookingApplicationFormData, CustomerDocState, SignatureStatus } from '../services/documentStore';
 import { applicationProjects } from '../data/applicationProjects';
+import type { InventoryUnit } from '../services/inventoryApi';
 import { uploadGeneratedApplicationPdf } from '../services/documentsApi';
 import { ApiError } from '../services/authApi';
 import { blobToDataUrl, generateApplicationPdf, openDataUrl, openPdfBlob } from '../services/applicationPdf';
@@ -252,6 +253,8 @@ const termsAndConditions = [
 
 export function CustomerApplicationPage() {
   const { session, logout, openModal } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const email = session?.email ?? '';
   const [docs, setDocs] = useState<CustomerDocState>(() => store.loadCustomerDocs(email));
   const [generating, setGenerating] = useState(false);
@@ -263,8 +266,6 @@ export function CustomerApplicationPage() {
   const [paying, setPaying] = useState(false);
   const [payingCash, setPayingCash] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
-
-  if (!session) return <Navigate to="/" replace />;
 
   const persist = (next: CustomerDocState) => {
     setDocs(next);
@@ -292,6 +293,32 @@ export function CustomerApplicationPage() {
       },
     });
   };
+
+  // "Book Plot" on the Available Plots listing hands off the chosen unit via
+  // navigation state so the form opens pre-filled instead of asking the
+  // customer to retype what they already picked. Runs once on arrival only —
+  // it must not keep re-applying and clobber edits if the customer navigates
+  // back to this page later.
+  useEffect(() => {
+    const unit = (location.state as { unit?: InventoryUnit } | null)?.unit;
+    if (!unit) return;
+    if (!docs.bookingApplication.formData.projectId) {
+      const matchedProject = applicationProjects.find(
+        (project) => unit.project_name && project.label.toLowerCase().includes(unit.project_name.toLowerCase()),
+      );
+      applyFormUpdates({
+        ...(matchedProject ? { projectId: matchedProject.id } : {}),
+        unitNo: unit.unit_number ?? docs.bookingApplication.formData.unitNo,
+        plotAreaSqYd: unit.area_sqyd != null ? String(unit.area_sqyd) : docs.bookingApplication.formData.plotAreaSqYd,
+        plotAreaSqMtr: unit.area_sqmt != null ? String(unit.area_sqmt) : docs.bookingApplication.formData.plotAreaSqMtr,
+        unitType: unit.unit_type ?? docs.bookingApplication.formData.unitType,
+      });
+    }
+    navigate(location.pathname, { replace: true, state: {} });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!session) return <Navigate to="/" replace />;
 
   // Aadhaar QR verification (Documents page) already extracts name/DOB/gender/guardian/
   // address - autofill from that cached result instead of asking the customer to retype

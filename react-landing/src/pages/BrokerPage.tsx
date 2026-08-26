@@ -25,14 +25,16 @@ export function BrokerPage() {
       <PlaceholderCard
         icon={<TagIcon />}
         accent="terracotta"
-        title="Listings"
-        description="Plots you're actively representing across Suraksha Enclave and OPS Divine Greens."
+        title="Available plots"
+        description="Browse plots currently available to sell and schedule a site visit."
+        actionLabel="View plots"
+        onAction={() => navigate('/broker/plots')}
       />
       <PlaceholderCard
         icon={<ChartIcon />}
         accent="green-soft"
         title="Commission"
-        description="Add paid cash commission records and review payout status."
+        description="Review your commission summary, history, and monthly trend."
         actionLabel="Open details"
         onAction={() => navigate('/broker/commission')}
       />
