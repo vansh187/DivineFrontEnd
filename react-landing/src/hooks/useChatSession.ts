@@ -17,6 +17,7 @@ export type ChatMessage =
 interface ChatState {
   isOpen: boolean;
   sessionId: string | null;
+  leadId: string | null;
   isInitializingSession: boolean;
   sessionInitFailed: boolean;
   messages: ChatMessage[];
@@ -31,7 +32,7 @@ type ChatAction =
   | { type: 'OPEN_WIDGET' }
   | { type: 'CLOSE_WIDGET' }
   | { type: 'SESSION_INIT_START' }
-  | { type: 'SESSION_READY'; sessionId: string }
+  | { type: 'SESSION_READY'; sessionId: string; leadId?: string | null }
   | { type: 'SESSION_INIT_FAILED' }
   | { type: 'SESSION_EXPIRED' }
   | { type: 'SESSION_RESET' }
@@ -45,6 +46,7 @@ type ChatAction =
   | { type: 'MIC_STATE_CHANGED'; micState: ChatState['micState'] };
 
 const SESSION_STORAGE_KEY = 'dvi_chat_session_id';
+const LEAD_STORAGE_KEY = 'dvi_chat_lead_id';
 const CONSENT_STORAGE_KEY = 'dvi_chat_consent_shown';
 
 function readSessionStorage(key: string): string | null {
@@ -70,6 +72,7 @@ function makeId() {
 const initialState: ChatState = {
   isOpen: false,
   sessionId: null,
+  leadId: readSessionStorage(LEAD_STORAGE_KEY),
   isInitializingSession: false,
   sessionInitFailed: false,
   messages: [],
@@ -89,11 +92,17 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
     case 'SESSION_INIT_START':
       return { ...state, isInitializingSession: true, sessionInitFailed: false };
     case 'SESSION_READY':
-      return { ...state, sessionId: action.sessionId, isInitializingSession: false, sessionInitFailed: false };
+      return {
+        ...state,
+        sessionId: action.sessionId,
+        leadId: action.leadId ?? state.leadId,
+        isInitializingSession: false,
+        sessionInitFailed: false,
+      };
     case 'SESSION_INIT_FAILED':
       return { ...state, isInitializingSession: false, sessionInitFailed: true };
     case 'SESSION_EXPIRED':
-      return { ...state, sessionId: null };
+      return { ...state, sessionId: null, leadId: null };
     case 'SESSION_RESET':
       // A real website login/logout just happened - any in-progress chat auth flow
       // (e.g. mid-login, waiting on a password) is now stale and must not resume.
@@ -175,7 +184,7 @@ export function useChatSession() {
 
     const existing = readSessionStorage(SESSION_STORAGE_KEY);
     if (existing) {
-      dispatch({ type: 'SESSION_READY', sessionId: existing });
+      dispatch({ type: 'SESSION_READY', sessionId: existing, leadId: readSessionStorage(LEAD_STORAGE_KEY) });
       return;
     }
 
@@ -190,7 +199,8 @@ export function useChatSession() {
       })
       .then((res) => {
         writeSessionStorage(SESSION_STORAGE_KEY, res.sessionId);
-        dispatch({ type: 'SESSION_READY', sessionId: res.sessionId });
+        if (res.leadId) writeSessionStorage(LEAD_STORAGE_KEY, res.leadId);
+        dispatch({ type: 'SESSION_READY', sessionId: res.sessionId, leadId: res.leadId });
       })
       .catch(() => dispatch({ type: 'SESSION_INIT_FAILED' }))
       .finally(() => {
@@ -230,6 +240,7 @@ export function useChatSession() {
   const resetSession = useCallback(() => {
     try {
       sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      sessionStorage.removeItem(LEAD_STORAGE_KEY);
     } catch {
       /* private-browsing / storage-disabled */
     }
@@ -291,6 +302,7 @@ export function useChatSession() {
           // so the visitor's next message (or a retry of this one) works.
           try {
             sessionStorage.removeItem(SESSION_STORAGE_KEY);
+            sessionStorage.removeItem(LEAD_STORAGE_KEY);
           } catch {
             /* private-browsing / storage-disabled */
           }

@@ -2,6 +2,12 @@ import { useState } from 'react';
 import type { AgentMessageVariant, ChatButton } from '../../hooks/useChatSession';
 import { CheckIcon, CopyIcon, PhoneIcon } from './icons/ChatIcons';
 
+const plotIntelligenceButton: ChatButton = {
+  label: 'Find My Perfect Plot',
+  value: 'plot_intelligence_start',
+  action: 'plot_intelligence',
+};
+
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex justify-start">
@@ -59,9 +65,15 @@ function ButtonOptions({
   interactive: boolean;
   onButtonTap?: (button: ChatButton) => void;
 }) {
+  const shouldAddPlotSearch =
+    !buttons.some((button) => button.action === 'plot_intelligence') &&
+    buttons.some((button) => button.action === 'chatbot_menu') &&
+    (buttons.length >= 3 || buttons.some((button) => /brows/i.test(`${button.label} ${button.value}`)));
+  const visibleButtons = shouldAddPlotSearch ? [...buttons, plotIntelligenceButton] : buttons;
+
   return (
     <div className="mt-3 flex flex-col gap-1.5">
-      {buttons.map((button) => (
+      {visibleButtons.map((button) => (
         <button
           key={button.value}
           type="button"
