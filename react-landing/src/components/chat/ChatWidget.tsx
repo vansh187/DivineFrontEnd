@@ -89,6 +89,7 @@ export function ChatWidget() {
   const reducedMotion = usePrefersReducedMotion();
   const [entered, setEntered] = useState(false);
   const [teaserVisible, setTeaserVisible] = useState(false);
+  const [plotIntelligenceOpen, setPlotIntelligenceOpen] = useState(false);
   // Tracks the real backend greeting specifically — separate from
   // session.messages, because a *failed* greeting attempt still appends a
   // "something went wrong" message, which must not be mistaken for a
@@ -329,6 +330,12 @@ export function ChatWidget() {
   // triggers the same real auth calls a typed equivalent would, instead of
   // just being echoed into the chat as plain text.
   const handleButtonTap = (button: ChatButton) => {
+    if (button.action === 'plot_intelligence') {
+      session.appendUserMessage(button.label);
+      setPlotIntelligenceOpen(true);
+      return;
+    }
+
     if (button.url) {
       // Backend buttons (e.g. loan report downloads) may return a path relative
       // to the API host — resolve it there instead of the frontend's own origin,
@@ -369,7 +376,11 @@ export function ChatWidget() {
             consentShown={session.consentShown}
             callbackFlowActive={session.callbackFlowActive}
             micState={session.micState}
+            plotIntelligenceOpen={plotIntelligenceOpen}
+            sessionId={session.sessionId}
+            leadId={session.leadId}
             onClose={session.close}
+            onClosePlotIntelligence={() => setPlotIntelligenceOpen(false)}
             onDismissConsent={session.dismissConsent}
             onRequestCallback={handleRequestCallback}
             onDesktopContactCard={handleDesktopContactCard}

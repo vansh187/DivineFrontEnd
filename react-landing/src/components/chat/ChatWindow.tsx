@@ -5,8 +5,26 @@ import { MessageList } from './MessageList';
 import { InputBar } from './InputBar';
 import { CloseIcon } from './icons/ChatIcons';
 import type { AgentMessageVariant, ChatButton, ChatMessage } from '../../hooks/useChatSession';
+import { PlotIntelligencePanel } from './PlotIntelligencePanel';
+import { ErrorBoundary } from '../ErrorBoundary';
 
 const chatbotIcon = '/brand/chatbot-arch-icon-small.jpg';
+
+function PlotIntelligenceFallback({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-3 bg-bg px-6 text-center">
+      <p className="text-sm font-bold text-ink">Plot search hit a snag.</p>
+      <p className="max-w-[28ch] text-xs leading-relaxed text-ink-muted">Please return to chat and try the search again.</p>
+      <button
+        type="button"
+        onClick={onBack}
+        className="rounded-lg bg-green px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-green-soft"
+      >
+        Back to chat
+      </button>
+    </div>
+  );
+}
 
 interface ChatWindowProps {
   messages: ChatMessage[];
@@ -15,7 +33,11 @@ interface ChatWindowProps {
   consentShown: boolean;
   callbackFlowActive: boolean;
   micState: 'idle' | 'recording' | 'transcribing';
+  plotIntelligenceOpen: boolean;
+  sessionId: string | null;
+  leadId: string | null;
   onClose: () => void;
+  onClosePlotIntelligence: () => void;
   onDismissConsent: () => void;
   onRequestCallback: () => void;
   onDesktopContactCard: (variant: AgentMessageVariant) => void;
@@ -33,7 +55,11 @@ export function ChatWindow({
   consentShown,
   callbackFlowActive,
   micState,
+  plotIntelligenceOpen,
+  sessionId,
+  leadId,
   onClose,
+  onClosePlotIntelligence,
   onDismissConsent,
   onRequestCallback,
   onDesktopContactCard,
@@ -114,28 +140,39 @@ export function ChatWindow({
 
       {!consentShown && <ConsentBanner onDismiss={onDismissConsent} />}
 
-      <QuickActionBar
-        callbackFlowActive={callbackFlowActive}
-        onRequestCallback={onRequestCallback}
-        onDesktopContactCard={onDesktopContactCard}
-      />
+      {plotIntelligenceOpen ? (
+        <ErrorBoundary
+          resetKeys={[plotIntelligenceOpen, sessionId, leadId]}
+          fallback={<PlotIntelligenceFallback onBack={onClosePlotIntelligence} />}
+        >
+          <PlotIntelligencePanel sessionId={sessionId} leadId={leadId} scrollRef={scrollRef} onBack={onClosePlotIntelligence} />
+        </ErrorBoundary>
+      ) : (
+        <>
+          <QuickActionBar
+            callbackFlowActive={callbackFlowActive}
+            onRequestCallback={onRequestCallback}
+            onDesktopContactCard={onDesktopContactCard}
+          />
 
-      <MessageList
-        messages={messages}
-        isSending={isSending}
-        interimStatusLine={interimStatusLine}
-        scrollRef={scrollRef}
-        onButtonTap={onButtonTap}
-      />
+          <MessageList
+            messages={messages}
+            isSending={isSending}
+            interimStatusLine={interimStatusLine}
+            scrollRef={scrollRef}
+            onButtonTap={onButtonTap}
+          />
 
-      <InputBar
-        disabled={isSending}
-        micState={micState}
-        onSendText={onSendText}
-        onSendAudio={onSendAudio}
-        onMicStateChange={onMicStateChange}
-        onMicPermissionDenied={onMicPermissionDenied}
-      />
+          <InputBar
+            disabled={isSending}
+            micState={micState}
+            onSendText={onSendText}
+            onSendAudio={onSendAudio}
+            onMicStateChange={onMicStateChange}
+            onMicPermissionDenied={onMicPermissionDenied}
+          />
+        </>
+      )}
     </div>
   );
 }
