@@ -20,7 +20,9 @@ export function BrokerPage() {
         icon={<UsersIcon />}
         accent="chrome"
         title="My leads"
-        description="Customers you're working with, and where each one is in the corridor."
+        description="Plots you've reserved and locked for 3 days, and who you're visiting them with."
+        actionLabel="View leads"
+        onAction={() => navigate('/broker/leads')}
       />
       <PlaceholderCard
         icon={<TagIcon />}

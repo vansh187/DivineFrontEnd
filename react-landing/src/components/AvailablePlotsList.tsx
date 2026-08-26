@@ -24,6 +24,10 @@ function WhatsAppIcon() {
 interface AvailablePlotsListProps {
   actionLabel: string;
   onAction: (unit: InventoryUnit) => void;
+  /** Bump this (e.g. after a reservation) to force a refetch - a just-reserved
+   * unit's status flips away from 'available' server-side, so refetching is what
+   * makes it disappear from this list. */
+  refreshSignal?: number;
 }
 
 type SizeFilter = 'all' | '<100' | '100-150' | '150-200' | '200+';
@@ -67,7 +71,7 @@ function whatsappHref(unit: InventoryUnit) {
   return `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
 }
 
-export function AvailablePlotsList({ actionLabel, onAction }: AvailablePlotsListProps) {
+export function AvailablePlotsList({ actionLabel, onAction, refreshSignal = 0 }: AvailablePlotsListProps) {
   const [units, setUnits] = useState<InventoryUnit[]>([]);
   const [isLoading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -93,7 +97,7 @@ export function AvailablePlotsList({ actionLabel, onAction }: AvailablePlotsList
     return () => {
       active = false;
     };
-  }, []);
+  }, [refreshSignal]);
 
   const activeSizeFilter = sizeFilters.find((filter) => filter.value === sizeFilter);
 
