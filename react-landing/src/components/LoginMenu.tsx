@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { useAuth, getDisplayName } from '../hooks/useAuth';
-import { loadCustomerDocs, saveCustomerDocs } from '../services/documentStore';
+import { loadBrokerDocs, loadCustomerDocs, saveBrokerDocs, saveCustomerDocs } from '../services/documentStore';
 import { getLatestDocumentByType } from '../services/documentsApi';
 
 function IconWrap({ children }: { children: ReactNode }) {
@@ -48,6 +48,46 @@ function freshSignedUrl(url: string | null, expiresAt: number | null): string | 
   return url;
 }
 
+function cachedProfilePhoto(session: NonNullable<ReturnType<typeof useAuth>['session']>) {
+  const photo = session.role === 'broker'
+    ? loadBrokerDocs(session.email).profilePhoto
+    : loadCustomerDocs(session.email).applicantPhoto;
+  return photo.dataUrl || freshSignedUrl(photo.signedUrl, photo.signedUrlExpiresAt);
+}
+
+function cacheProfilePhoto(session: NonNullable<ReturnType<typeof useAuth>['session']>, doc: Awaited<ReturnType<typeof getLatestDocumentByType>>) {
+  if (session.role === 'broker') {
+    const docs = loadBrokerDocs(session.email);
+    saveBrokerDocs(session.email, {
+      ...docs,
+      profilePhoto: {
+        ...docs.profilePhoto,
+        dataUrl: docs.profilePhoto.documentId === doc.id ? docs.profilePhoto.dataUrl : null,
+        uploadedAt: doc.created_date,
+        documentId: doc.id,
+        signedUrl: doc.signed_url,
+        signedUrlExpiresAt: Date.now() + doc.signed_url_expires_in * 1000,
+        error: null,
+      },
+    });
+    return;
+  }
+
+  const docs = loadCustomerDocs(session.email);
+  saveCustomerDocs(session.email, {
+    ...docs,
+    applicantPhoto: {
+      ...docs.applicantPhoto,
+      dataUrl: docs.applicantPhoto.documentId === doc.id ? docs.applicantPhoto.dataUrl : null,
+      uploadedAt: doc.created_date,
+      documentId: doc.id,
+      signedUrl: doc.signed_url,
+      signedUrlExpiresAt: Date.now() + doc.signed_url_expires_in * 1000,
+      error: null,
+    },
+  });
+}
+
 export function LoginMenu({ light = false }: { light?: boolean }) {
   const [open, setOpen] = useState(false);
   const [entered, setEntered] = useState(false);
@@ -71,31 +111,18 @@ export function LoginMenu({ light = false }: { light?: boolean }) {
   const initial = session ? getDisplayName(session).charAt(0).toUpperCase() : '?';
 
   useEffect(() => {
-    if (!session || session.role !== 'customer') {
+    if (!session) {
       setProfilePhoto(null);
       return;
     }
 
     const refreshPhoto = () => {
-      const photo = loadCustomerDocs(session.email).applicantPhoto;
-      setProfilePhoto(photo.dataUrl || freshSignedUrl(photo.signedUrl, photo.signedUrlExpiresAt));
+      setProfilePhoto(cachedProfilePhoto(session));
     };
     refreshPhoto();
     getLatestDocumentByType(session.token, 'applicant_photo')
       .then((doc) => {
-        const docs = loadCustomerDocs(session.email);
-        saveCustomerDocs(session.email, {
-          ...docs,
-          applicantPhoto: {
-            ...docs.applicantPhoto,
-            dataUrl: docs.applicantPhoto.documentId === doc.id ? docs.applicantPhoto.dataUrl : null,
-            uploadedAt: doc.created_date,
-            documentId: doc.id,
-            signedUrl: doc.signed_url,
-            signedUrlExpiresAt: Date.now() + doc.signed_url_expires_in * 1000,
-            error: null,
-          },
-        });
+        cacheProfilePhoto(session, doc);
         window.dispatchEvent(new Event('dvi-profile-photo-changed'));
       })
       .catch(() => {
@@ -163,12 +190,12 @@ export function LoginMenu({ light = false }: { light?: boolean }) {
               </div>
 
               <div className="p-2">
-                {session.role === 'customer' && (
+                {(session.role === 'customer' || session.role === 'broker') && (
                   <button
                     type="button"
                     role="menuitem"
                     onClick={() => {
-                      navigate('/customer/profile');
+                      navigate(session.role === 'broker' ? '/broker/profile' : '/customer/profile');
                       setOpen(false);
                     }}
                     className="group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-ink transition-colors hover:bg-bg"

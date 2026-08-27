@@ -6,6 +6,7 @@ import { CustomerPage } from './pages/CustomerPage';
 import { CustomerPlotsPage } from './pages/CustomerPlotsPage';
 import { CustomerProfilePage } from './pages/CustomerProfilePage';
 import { BrokerPage } from './pages/BrokerPage';
+import { BrokerProfilePage } from './pages/BrokerProfilePage';
 import { BrokerPlotsPage } from './pages/BrokerPlotsPage';
 import { BrokerLeadsPage } from './pages/BrokerLeadsPage';
 import { BrokerCommissionPage } from './pages/BrokerCommissionPage';
@@ -119,6 +120,14 @@ function AppRoutes() {
           element={
             <RoleRoute role="broker">
               <BrokerPage />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="/broker/profile"
+          element={
+            <RoleRoute role="broker">
+              <BrokerProfilePage />
             </RoleRoute>
           }
         />

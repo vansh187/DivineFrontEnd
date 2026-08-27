@@ -333,6 +333,7 @@ export interface BrokerDocState {
   aadhar: AadhaarStatus;
   aadharFront: AadhaarPhotoStatus;
   aadharBack: AadhaarPhotoStatus;
+  profilePhoto: AadhaarPhotoStatus;
   visits: ScheduledVisit[];
 }
 
@@ -447,10 +448,17 @@ export function loadBrokerDocs(email: string): BrokerDocState {
       aadhar: { ...emptyAadhaarStatus(), ...parsed.aadhar },
       aadharFront: { ...emptyAadhaarPhotoStatus(), ...parsed.aadharFront },
       aadharBack: { ...emptyAadhaarPhotoStatus(), ...parsed.aadharBack },
+      profilePhoto: { ...emptyAadhaarPhotoStatus(), ...parsed.profilePhoto },
       visits: normalizeVisits(parsed.visits),
     };
   } catch {
-    return { aadhar: emptyAadhaarStatus(), aadharFront: emptyAadhaarPhotoStatus(), aadharBack: emptyAadhaarPhotoStatus(), visits: [] };
+    return {
+      aadhar: emptyAadhaarStatus(),
+      aadharFront: emptyAadhaarPhotoStatus(),
+      aadharBack: emptyAadhaarPhotoStatus(),
+      profilePhoto: emptyAadhaarPhotoStatus(),
+      visits: [],
+    };
   }
 }
 
