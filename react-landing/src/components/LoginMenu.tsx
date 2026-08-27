@@ -3,7 +3,8 @@ import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { useAuth, getDisplayName } from '../hooks/useAuth';
-import { loadCustomerDocs } from '../services/documentStore';
+import { loadCustomerDocs, saveCustomerDocs } from '../services/documentStore';
+import { getLatestDocumentByType } from '../services/documentsApi';
 
 function IconWrap({ children }: { children: ReactNode }) {
   return (
@@ -41,6 +42,12 @@ const ChevronRightIcon = () => (
   </svg>
 );
 
+function freshSignedUrl(url: string | null, expiresAt: number | null): string | null {
+  if (!url) return null;
+  if (expiresAt && expiresAt <= Date.now() + 60_000) return null;
+  return url;
+}
+
 export function LoginMenu({ light = false }: { light?: boolean }) {
   const [open, setOpen] = useState(false);
   const [entered, setEntered] = useState(false);
@@ -70,9 +77,30 @@ export function LoginMenu({ light = false }: { light?: boolean }) {
     }
 
     const refreshPhoto = () => {
-      setProfilePhoto(loadCustomerDocs(session.email).applicantPhoto.dataUrl);
+      const photo = loadCustomerDocs(session.email).applicantPhoto;
+      setProfilePhoto(photo.dataUrl || freshSignedUrl(photo.signedUrl, photo.signedUrlExpiresAt));
     };
     refreshPhoto();
+    getLatestDocumentByType(session.token, 'applicant_photo')
+      .then((doc) => {
+        const docs = loadCustomerDocs(session.email);
+        saveCustomerDocs(session.email, {
+          ...docs,
+          applicantPhoto: {
+            ...docs.applicantPhoto,
+            dataUrl: docs.applicantPhoto.documentId === doc.id ? docs.applicantPhoto.dataUrl : null,
+            uploadedAt: doc.created_date,
+            documentId: doc.id,
+            signedUrl: doc.signed_url,
+            signedUrlExpiresAt: Date.now() + doc.signed_url_expires_in * 1000,
+            error: null,
+          },
+        });
+        window.dispatchEvent(new Event('dvi-profile-photo-changed'));
+      })
+      .catch(() => {
+        /* No stored profile photo yet, or storage temporarily unavailable. */
+      });
     window.addEventListener('storage', refreshPhoto);
     window.addEventListener('dvi-profile-photo-changed', refreshPhoto);
     return () => {
