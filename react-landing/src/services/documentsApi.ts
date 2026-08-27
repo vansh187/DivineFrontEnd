@@ -94,6 +94,10 @@ export function getDocument(token: string, documentId: string): Promise<Generate
   return authedRequest<GeneratedDocument>(`/documents/${documentId}`, token);
 }
 
+export function getLatestDocumentByType(token: string, documentType: string): Promise<GeneratedDocument> {
+  return authedRequest<GeneratedDocument>(`/documents/latest/${encodeURIComponent(documentType)}`, token);
+}
+
 /** Uploads a raw Aadhaar front/back photo straight to storage for later use in document
  * generation - no parsing or KYC verification, unlike kycApi's verifyAadhaarQr. */
 export function uploadAadhaarPhoto(token: string, file: File, side: AadhaarPhotoSide): Promise<GeneratedDocument> {

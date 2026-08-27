@@ -22,7 +22,7 @@ import {
   type ProfilePdfInput,
 } from '../services/customerProfilePdf';
 import { blobToDataUrl } from '../services/applicationPdf';
-import { uploadApplicantPhoto } from '../services/documentsApi';
+import { getLatestDocumentByType, uploadApplicantPhoto } from '../services/documentsApi';
 
 function formatINR(amount: number): string {
   return `₹ ${Math.round(amount).toLocaleString('en-IN')}`;
@@ -113,6 +113,12 @@ function serverScheduleRows(rows: CustomerScheduleRow[]) {
   }));
 }
 
+function freshSignedUrl(url: string | null, expiresAt: number | null): string | null {
+  if (!url) return null;
+  if (expiresAt && expiresAt <= Date.now() + 60_000) return null;
+  return url;
+}
+
 export function CustomerProfilePage() {
   const { session, logout, openModal } = useAuth();
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -162,6 +168,36 @@ export function CustomerProfilePage() {
       cancelled = true;
     };
   }, [session, logout, openModal]);
+
+  useEffect(() => {
+    if (!session) return;
+    let cancelled = false;
+    getLatestDocumentByType(session.token, 'applicant_photo')
+      .then((doc) => {
+        if (cancelled) return;
+        const docs = loadCustomerDocs(session.email);
+        saveCustomerDocs(session.email, {
+          ...docs,
+          applicantPhoto: {
+            ...docs.applicantPhoto,
+            dataUrl: docs.applicantPhoto.documentId === doc.id ? docs.applicantPhoto.dataUrl : null,
+            uploadedAt: doc.created_date,
+            documentId: doc.id,
+            signedUrl: doc.signed_url,
+            signedUrlExpiresAt: Date.now() + doc.signed_url_expires_in * 1000,
+            error: null,
+          },
+        });
+        window.dispatchEvent(new Event('dvi-profile-photo-changed'));
+        setPhotoVersion((version) => version + 1);
+      })
+      .catch(() => {
+        /* No uploaded profile photo yet, or storage temporarily unavailable. */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
 
   const profile = useMemo(() => {
     if (!session) return null;
@@ -219,7 +255,7 @@ export function CustomerProfilePage() {
     const serverSchedule = Array.isArray(rb.payment_schedule) ? rb.payment_schedule : null;
     const paymentSchedule = serverSchedule?.length ? serverScheduleRows(serverSchedule) : localScheduleRows(totalAmount);
 
-    const photo = docs.applicantPhoto.dataUrl;
+    const photo = docs.applicantPhoto.dataUrl || freshSignedUrl(docs.applicantPhoto.signedUrl, docs.applicantPhoto.signedUrlExpiresAt);
     const hasBooking =
       typeof rb.has_booking === 'boolean'
         ? rb.has_booking
@@ -340,27 +376,6 @@ export function CustomerProfilePage() {
     }
   };
 
-  const handleRemovePhoto = () => {
-    if (!session) return;
-    const docs = loadCustomerDocs(session.email);
-    saveCustomerDocs(session.email, {
-      ...docs,
-      applicantPhoto: {
-        fileName: null,
-        fileSize: null,
-        uploadedAt: null,
-        dataUrl: null,
-        documentId: null,
-        signedUrl: null,
-        signedUrlExpiresAt: null,
-        error: null,
-      },
-    });
-    window.dispatchEvent(new Event('dvi-profile-photo-changed'));
-    setPhotoError('');
-    setPhotoVersion((version) => version + 1);
-  };
-
   const handleDownload = async (kind: 'allotment' | 'demand') => {
     setDownloading(kind);
     setError('');
@@ -428,16 +443,6 @@ export function CustomerProfilePage() {
               >
                 {photoUploading ? 'Uploading...' : profile.photo ? 'Change photo' : 'Upload photo'}
               </button>
-              {profile.photo && (
-                <button
-                  type="button"
-                  onClick={handleRemovePhoto}
-                  disabled={photoUploading}
-                  className="rounded-full border border-hairline px-3 py-1.5 text-xs font-semibold text-ink-muted transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Remove
-                </button>
-              )}
             </div>
             {photoError && <p role="alert" className="max-w-40 text-center text-xs text-red-700">{photoError}</p>}
           </div>
