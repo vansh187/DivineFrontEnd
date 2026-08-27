@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { useAuth, getDisplayName } from '../hooks/useAuth';
 
@@ -27,6 +28,12 @@ const LogoutIcon = () => (
     <path d="M12 3.5h3.5A1.5 1.5 0 0 1 17 5v10a1.5 1.5 0 0 1-1.5 1.5H12M7.5 13.5 4 10l3.5-3.5M4.2 10H12" />
   </IconWrap>
 );
+const ProfileIcon = () => (
+  <IconWrap>
+    <circle cx="10" cy="6.6" r="3.1" />
+    <path d="M4.2 16.4c1-2.8 3.2-4.2 5.8-4.2s4.8 1.4 5.8 4.2" />
+  </IconWrap>
+);
 const ChevronRightIcon = () => (
   <svg viewBox="0 0 20 20" aria-hidden="true" className="h-3.5 w-3.5 text-ink-muted transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-chrome">
     <path d="M7.5 4.5 13 10l-5.5 5.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -37,6 +44,7 @@ export function LoginMenu({ light = false }: { light?: boolean }) {
   const [open, setOpen] = useState(false);
   const [entered, setEntered] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
   const { session, logout, openModal } = useAuth();
 
   useClickOutside(rootRef, () => setOpen(false), open);
@@ -99,6 +107,22 @@ export function LoginMenu({ light = false }: { light?: boolean }) {
               </div>
 
               <div className="p-2">
+                {session.role === 'customer' && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      navigate('/customer/profile');
+                      setOpen(false);
+                    }}
+                    className="group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-ink transition-colors hover:bg-bg"
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-bg text-ink-muted transition-colors group-hover:bg-white group-hover:text-chrome">
+                      <ProfileIcon />
+                    </span>
+                    My profile
+                  </button>
+                )}
                 <button
                   type="button"
                   role="menuitem"

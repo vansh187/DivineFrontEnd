@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { LandingPage } from './pages/LandingPage';
 import { CustomerPage } from './pages/CustomerPage';
 import { CustomerPlotsPage } from './pages/CustomerPlotsPage';
+import { CustomerProfilePage } from './pages/CustomerProfilePage';
 import { BrokerPage } from './pages/BrokerPage';
 import { BrokerPlotsPage } from './pages/BrokerPlotsPage';
 import { BrokerLeadsPage } from './pages/BrokerLeadsPage';
@@ -90,6 +91,14 @@ function AppRoutes() {
           element={
             <RoleRoute role="customer">
               <CustomerPlotsPage />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="/customer/profile"
+          element={
+            <RoleRoute role="customer">
+              <CustomerProfilePage />
             </RoleRoute>
           }
         />
