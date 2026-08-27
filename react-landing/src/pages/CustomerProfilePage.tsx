@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth, getDisplayName } from '../hooks/useAuth';
 import { DashboardLayout } from '../components/DashboardLayout';
 import { IconBadge, FileIcon, RupeeIcon } from '../components/DashboardIcons';
-import { loadCustomerDocs } from '../services/documentStore';
+import { loadCustomerDocs, saveCustomerDocs } from '../services/documentStore';
 import { loadPendingUnit } from '../services/pendingUnit';
 import { townshipPricing } from '../data/townshipPricing';
 import {
@@ -21,6 +21,8 @@ import {
   PAYMENT_SCHEDULE,
   type ProfilePdfInput,
 } from '../services/customerProfilePdf';
+import { blobToDataUrl } from '../services/applicationPdf';
+import { uploadApplicantPhoto } from '../services/documentsApi';
 
 function formatINR(amount: number): string {
   return `₹ ${Math.round(amount).toLocaleString('en-IN')}`;
@@ -113,8 +115,12 @@ function serverScheduleRows(rows: CustomerScheduleRow[]) {
 
 export function CustomerProfilePage() {
   const { session, logout, openModal } = useAuth();
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const [downloading, setDownloading] = useState<'allotment' | 'demand' | null>(null);
   const [error, setError] = useState('');
+  const [photoError, setPhotoError] = useState('');
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoVersion, setPhotoVersion] = useState(0);
 
   // Real profile data from the backend. Loosely coupled: the page renders from
   // locally-cached booking-form data immediately, then overlays whatever the API
@@ -213,7 +219,7 @@ export function CustomerProfilePage() {
     const serverSchedule = Array.isArray(rb.payment_schedule) ? rb.payment_schedule : null;
     const paymentSchedule = serverSchedule?.length ? serverScheduleRows(serverSchedule) : localScheduleRows(totalAmount);
 
-    const photo = hasRemote ? null : docs.applicantPhoto.dataUrl;
+    const photo = docs.applicantPhoto.dataUrl;
     const hasBooking =
       typeof rb.has_booking === 'boolean'
         ? rb.has_booking
@@ -254,11 +260,106 @@ export function CustomerProfilePage() {
       usesServerSchedule: Boolean(serverSchedule?.length),
       pdfInput,
     };
-  }, [session, remote]);
+  }, [session, remote, photoVersion]);
 
   if (!session || !profile) return null;
 
   const initial = profile.name.charAt(0).toUpperCase();
+
+  const handlePhotoUpload = async (file: File | null) => {
+    if (!session || !file) return;
+    setPhotoError('');
+    if (!['image/jpeg', 'image/png'].includes(file.type)) {
+      setPhotoError('Please upload a JPG or PNG photo.');
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setPhotoError('Please upload a photo under 8 MB.');
+      return;
+    }
+
+    setPhotoUploading(true);
+    try {
+      const dataUrl = await blobToDataUrl(file);
+      const docs = loadCustomerDocs(session.email);
+      const optimistic = {
+        ...docs,
+        applicantPhoto: {
+          ...docs.applicantPhoto,
+          fileName: file.name,
+          fileSize: file.size,
+          uploadedAt: new Date().toISOString(),
+          dataUrl,
+          documentId: null,
+          signedUrl: null,
+          signedUrlExpiresAt: null,
+          error: null,
+        },
+      };
+      saveCustomerDocs(session.email, optimistic);
+      window.dispatchEvent(new Event('dvi-profile-photo-changed'));
+      setPhotoVersion((version) => version + 1);
+
+      try {
+        const uploaded = await uploadApplicantPhoto(session.token, file);
+        const fresh = loadCustomerDocs(session.email);
+        saveCustomerDocs(session.email, {
+          ...fresh,
+          applicantPhoto: {
+            ...fresh.applicantPhoto,
+            fileName: file.name,
+            fileSize: file.size,
+            uploadedAt: uploaded.created_date,
+            dataUrl,
+            documentId: uploaded.id,
+            signedUrl: uploaded.signed_url,
+            signedUrlExpiresAt: Date.now() + uploaded.signed_url_expires_in * 1000,
+            error: null,
+          },
+        });
+        window.dispatchEvent(new Event('dvi-profile-photo-changed'));
+        setPhotoVersion((version) => version + 1);
+      } catch (err) {
+        const message = err instanceof ApiError ? err.message : 'Photo saved locally, but upload failed. Please try again.';
+        const fresh = loadCustomerDocs(session.email);
+        saveCustomerDocs(session.email, {
+          ...fresh,
+          applicantPhoto: { ...fresh.applicantPhoto, error: message },
+        });
+        setPhotoError(message);
+        if (err instanceof ApiError && err.status === 401) {
+          logout();
+          openModal('signin', 'customer');
+        }
+      }
+    } catch {
+      setPhotoError('Could not read that photo. Please choose another file.');
+    } finally {
+      setPhotoUploading(false);
+      if (photoInputRef.current) photoInputRef.current.value = '';
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    if (!session) return;
+    const docs = loadCustomerDocs(session.email);
+    saveCustomerDocs(session.email, {
+      ...docs,
+      applicantPhoto: {
+        fileName: null,
+        fileSize: null,
+        uploadedAt: null,
+        dataUrl: null,
+        documentId: null,
+        signedUrl: null,
+        signedUrlExpiresAt: null,
+        error: null,
+      },
+    });
+    window.dispatchEvent(new Event('dvi-profile-photo-changed'));
+    setPhotoError('');
+    setPhotoVersion((version) => version + 1);
+  };
 
   const handleDownload = async (kind: 'allotment' | 'demand') => {
     setDownloading(kind);
@@ -299,17 +400,47 @@ export function CustomerProfilePage() {
     >
       <section className="rounded-2xl border border-hairline bg-surface p-6 shadow-[0_16px_40px_-26px_rgba(6,31,45,0.24)] sm:p-8">
         <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center">
-          {profile.photo ? (
-            <img
-              src={profile.photo}
-              alt={profile.name}
-              className="h-24 w-24 shrink-0 rounded-full border border-hairline object-cover"
+          <div className="flex shrink-0 flex-col items-center gap-2">
+            {profile.photo ? (
+              <img
+                src={profile.photo}
+                alt={profile.name}
+                className="h-24 w-24 rounded-full border border-hairline object-cover"
+              />
+            ) : (
+              <span className="flex h-24 w-24 items-center justify-center rounded-full bg-chrome font-display text-3xl font-bold text-white">
+                {initial}
+              </span>
+            )}
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/jpeg,image/png"
+              className="sr-only"
+              onChange={(event) => void handlePhotoUpload(event.target.files?.[0] ?? null)}
             />
-          ) : (
-            <span className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-chrome font-display text-3xl font-bold text-white">
-              {initial}
-            </span>
-          )}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => photoInputRef.current?.click()}
+                disabled={photoUploading}
+                className="rounded-full border border-hairline bg-white px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:border-green hover:text-green disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {photoUploading ? 'Uploading...' : profile.photo ? 'Change photo' : 'Upload photo'}
+              </button>
+              {profile.photo && (
+                <button
+                  type="button"
+                  onClick={handleRemovePhoto}
+                  disabled={photoUploading}
+                  className="rounded-full border border-hairline px-3 py-1.5 text-xs font-semibold text-ink-muted transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+            {photoError && <p role="alert" className="max-w-40 text-center text-xs text-red-700">{photoError}</p>}
+          </div>
           <div className="min-w-0 text-center sm:text-left">
             <p className="font-display text-2xl font-bold text-ink">{profile.name}</p>
             <p className="eyebrow-label mt-1 text-terracotta">{session.role}</p>

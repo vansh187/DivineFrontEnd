@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { useAuth, getDisplayName } from '../hooks/useAuth';
+import { loadCustomerDocs } from '../services/documentStore';
 
 function IconWrap({ children }: { children: ReactNode }) {
   return (
@@ -43,6 +44,7 @@ const ChevronRightIcon = () => (
 export function LoginMenu({ light = false }: { light?: boolean }) {
   const [open, setOpen] = useState(false);
   const [entered, setEntered] = useState(false);
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { session, logout, openModal } = useAuth();
@@ -60,6 +62,24 @@ export function LoginMenu({ light = false }: { light?: boolean }) {
 
   const label = session ? getDisplayName(session, 14) : 'Login';
   const initial = session ? getDisplayName(session).charAt(0).toUpperCase() : '?';
+
+  useEffect(() => {
+    if (!session || session.role !== 'customer') {
+      setProfilePhoto(null);
+      return;
+    }
+
+    const refreshPhoto = () => {
+      setProfilePhoto(loadCustomerDocs(session.email).applicantPhoto.dataUrl);
+    };
+    refreshPhoto();
+    window.addEventListener('storage', refreshPhoto);
+    window.addEventListener('dvi-profile-photo-changed', refreshPhoto);
+    return () => {
+      window.removeEventListener('storage', refreshPhoto);
+      window.removeEventListener('dvi-profile-photo-changed', refreshPhoto);
+    };
+  }, [session]);
 
   return (
     <div className="relative" ref={rootRef}>
@@ -97,9 +117,17 @@ export function LoginMenu({ light = false }: { light?: boolean }) {
           {session ? (
             <>
               <div className="flex items-center gap-3 border-b border-hairline bg-bg px-4 py-4">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-chrome font-display text-base font-bold text-white">
-                  {initial}
-                </span>
+                {profilePhoto ? (
+                  <img
+                    src={profilePhoto}
+                    alt={getDisplayName(session)}
+                    className="h-10 w-10 shrink-0 rounded-full border border-hairline object-cover"
+                  />
+                ) : (
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-chrome font-display text-base font-bold text-white">
+                    {initial}
+                  </span>
+                )}
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-ink">{getDisplayName(session)}</p>
                   <p className="eyebrow-label mt-0.5 text-terracotta">{session.role}</p>
