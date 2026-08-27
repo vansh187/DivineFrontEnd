@@ -8,7 +8,7 @@ import { getLatestDocumentByType, uploadApplicantPhoto } from '../services/docum
 import { listVisitHistory, listVisits, type VisitRecord } from '../services/visitsApi';
 import { ApiError } from '../services/authApi';
 
-type VisitGroup = 'Future' | 'Happening now' | 'Past visits';
+type VisitGroup = 'Upcoming' | 'Due now' | 'Visited';
 
 interface ProfileVisit {
   id: string;
@@ -121,16 +121,16 @@ export function BrokerProfilePage() {
         const now = Date.now();
         const activeFuture = active
           .filter((visit) => visit.status === 'scheduled' && visitStart(visit).getTime() > now && !isHappeningNow(visit))
-          .map((visit) => visitFromApi(visit, 'Future'))
+          .map((visit) => visitFromApi(visit, 'Upcoming'))
           .sort((a, b) => visitStart(a).getTime() - visitStart(b).getTime());
         const activeCurrent = active
           .filter((visit) => visit.status === 'scheduled' && isHappeningNow(visit))
-          .map((visit) => visitFromApi(visit, 'Happening now'))
+          .map((visit) => visitFromApi(visit, 'Due now'))
           .sort((a, b) => visitStart(a).getTime() - visitStart(b).getTime());
         const activeIds = new Set([...activeFuture, ...activeCurrent].map((visit) => visit.id));
         const closed = history
           .filter((visit) => !activeIds.has(visit.id))
-          .map((visit) => visitFromApi(visit, 'Past visits'))
+          .map((visit) => visitFromApi(visit, 'Visited'))
           .sort((a, b) => visitStart(b).getTime() - visitStart(a).getTime());
 
         setFutureVisits(activeFuture);
@@ -255,9 +255,9 @@ export function BrokerProfilePage() {
     ['Broker ID', profile.brokerId],
     ['Role', 'Broker'],
     ['Aadhaar', profile.aadhaarStatus],
-    ['Future visits', String(futureVisits.length)],
-    ['Current visits', String(currentVisits.length)],
-    ['Past visits', String(pastVisits.length)],
+    ['Upcoming', String(futureVisits.length)],
+    ['Due now', String(currentVisits.length)],
+    ['Visited', String(pastVisits.length)],
   ];
 
   return (
@@ -316,12 +316,11 @@ export function BrokerProfilePage() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="eyebrow-label text-terracotta">Site visits</p>
-            <h2 className="mt-2 font-display text-2xl font-bold text-ink">Future, current, and past visits</h2>
           </div>
           <div className="flex flex-wrap gap-2 text-xs font-semibold text-ink-muted">
-            <span className="rounded-full border border-hairline bg-surface px-3 py-1.5">{futureVisits.length} future</span>
-            <span className="rounded-full border border-hairline bg-surface px-3 py-1.5">{currentVisits.length} current</span>
-            <span className="rounded-full border border-hairline bg-surface px-3 py-1.5">{pastVisits.length} past</span>
+            <span className="rounded-full border border-hairline bg-surface px-3 py-1.5">{futureVisits.length} upcoming</span>
+            <span className="rounded-full border border-hairline bg-surface px-3 py-1.5">{currentVisits.length} due now</span>
+            <span className="rounded-full border border-hairline bg-surface px-3 py-1.5">{pastVisits.length} visited</span>
           </div>
         </div>
 
@@ -352,24 +351,33 @@ export function BrokerProfilePage() {
 }
 
 function VisitCard({ visit }: { visit: ProfileVisit }) {
+  const statusLabel =
+    visit.status === 'cancelled'
+      ? 'Cancelled'
+      : visit.group === 'Visited'
+        ? 'Visited'
+        : visit.group;
   const tone =
-    visit.group === 'Future'
+    statusLabel === 'Upcoming'
       ? 'border-green/25 bg-green/5 text-green'
-      : visit.group === 'Happening now'
+      : statusLabel === 'Due now'
         ? 'border-terracotta/25 bg-terracotta/5 text-terracotta'
-        : 'border-hairline bg-bg text-ink-muted';
+        : statusLabel === 'Cancelled'
+          ? 'border-terracotta/20 bg-terracotta/5 text-terracotta'
+          : 'border-hairline bg-bg text-ink-muted';
+  const accent = statusLabel === 'Upcoming' ? 'green' : statusLabel === 'Due now' || statusLabel === 'Cancelled' ? 'terracotta' : 'chrome';
   return (
     <article className="min-w-[280px] max-w-[320px] rounded-2xl border border-hairline bg-surface p-5 shadow-[0_16px_40px_-26px_rgba(6,31,45,0.24)]">
       <div className="flex items-start justify-between gap-3">
-        <IconBadge icon={<CalendarIcon />} accent={visit.group === 'Future' ? 'green' : visit.group === 'Happening now' ? 'terracotta' : 'chrome'} />
-        <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${tone}`}>{visit.group}</span>
+        <IconBadge icon={<CalendarIcon />} accent={accent} />
+        <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${tone}`}>{statusLabel}</span>
       </div>
       <h3 className="mt-4 truncate font-display text-lg font-bold text-ink">{visit.customerName || 'Customer'}</h3>
       <p className="mt-1 text-sm font-semibold text-ink">{formatVisitDate(visit)}</p>
       <p className="mt-1 truncate text-xs text-ink-muted">{visit.customerContact || 'No contact provided'}</p>
       {visit.notes && <p className="mt-3 line-clamp-3 text-xs leading-[1.55] text-ink-muted">{visit.notes}</p>}
       <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.04em] text-ink-muted">
-        {visit.status === 'completed' ? 'Completed' : visit.status === 'cancelled' ? 'Cancelled' : 'Scheduled'}
+        {statusLabel}
       </p>
     </article>
   );
