@@ -237,7 +237,10 @@ export function ChatWidget() {
       session.appendUserMessage(displayText);
       chatInitiatedAuthChangeRef.current = true;
       logout();
-      session.appendAgentMessage({ kind: 'text', text: 'You are logged out now.' });
+      greetingSentRef.current = false;
+      greetingInFlightRef.current = false;
+      greetingRetriedSinceOpenRef.current = false;
+      session.resetSession();
       session.close();
       navigate('/', { replace: true });
       window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: 'auto' }));
