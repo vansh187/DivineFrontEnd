@@ -1,6 +1,6 @@
 export const contact = {
-  phone: '+91 74282 91303',
-  phoneHref: 'tel:+917428291303',
-  email: 'enquiry@divinevisioninfra.com',
-  emailHref: 'mailto:enquiry@divinevisioninfra.com',
+  phone: '+91 93105 43796',
+  phoneHref: 'tel:+919310543796',
+  email: 'crm2@divinevisioninfra.com',
+  emailHref: 'mailto:crm2@divinevisioninfra.com',
 };
