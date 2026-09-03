@@ -22,9 +22,17 @@ function parseAmount(value: string): number {
 
 type FieldName = keyof BookingApplicationFormData;
 
-function serializeFormData(formData: BookingApplicationFormData): Record<string, string | number> {
+function serializeFormData(
+  formData: BookingApplicationFormData,
+  includeCoApplicant: boolean,
+): Record<string, string | number> {
   return Object.fromEntries(
-    Object.entries(formData).map(([key, value]) => [key, typeof value === 'boolean' ? (value ? 'Yes' : 'No') : value]),
+    Object.entries(formData)
+      // Don't ship co-applicant PII (name/PAN/Aadhaar/addresses) to the backend
+      // when the booking has no co-applicant - those fields share the form but
+      // aren't part of this application.
+      .filter(([key]) => includeCoApplicant || !key.startsWith('coApplicant'))
+      .map(([key, value]) => [key, typeof value === 'boolean' ? (value ? 'Yes' : 'No') : value]),
   );
 }
 
@@ -608,7 +616,7 @@ export function CustomerApplicationPage() {
           paymentId: docs.payment.paymentId,
           razorpayOrderId: docs.payment.razorpayOrderId,
           razorpayPaymentId: docs.payment.razorpayPaymentId,
-          formData: serializeFormData(docs.bookingApplication.formData),
+          formData: serializeFormData(docs.bookingApplication.formData, hasCoApplicant),
         });
         persist({
           ...docs,
@@ -642,7 +650,13 @@ export function CustomerApplicationPage() {
   };
 
   const form = docs.bookingApplication.formData;
-  const paymentComplete = docs.payment.status === 'paid';
+  // A payment is only "complete" for this flow once it carries a paymentId — the
+  // backend needs that reference to attach the generated PDF. A record marked
+  // paid but without an id (e.g. paid under an older build before the field
+  // existed) is treated as still pending so the payment controls stay available
+  // and the customer has a way to record it again rather than hitting a dead end.
+  const paymentComplete = docs.payment.status === 'paid' && !!docs.payment.paymentId;
+  const paymentNeedsReference = docs.payment.status === 'paid' && !docs.payment.paymentId;
   const selectedProject = applicationProjects.find((project) => project.id === form.projectId);
   const pageLabels = [
     'Project',
@@ -1144,8 +1158,15 @@ export function CustomerApplicationPage() {
                 {docs.payment.paidAt ? ` on ${new Date(docs.payment.paidAt).toLocaleDateString('en-IN')}` : ''}.
               </p>
             ) : (
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <div className="rounded-lg border border-hairline bg-surface p-4">
+              <div className="mt-4">
+                {paymentNeedsReference && (
+                  <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                    A booking payment is already recorded, but without a payment reference it can't be attached to the
+                    application PDF. Please make or record the payment again below to get a valid reference.
+                  </p>
+                )}
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="rounded-lg border border-hairline bg-surface p-4">
                   <p className="text-xs font-semibold text-ink">Online payment</p>
                   <input
                     type="number"
@@ -1184,6 +1205,7 @@ export function CustomerApplicationPage() {
                   >
                     {payingCash ? 'Recording...' : 'Record Cash Payment'}
                   </button>
+                </div>
                 </div>
               </div>
             )}

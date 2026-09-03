@@ -26,7 +26,11 @@ function loadAll(email: string): Record<string, ReservationVisitor> {
 }
 
 function saveAll(email: string, visitors: Record<string, ReservationVisitor>) {
-  localStorage.setItem(storageKey(email), JSON.stringify(visitors));
+  try {
+    localStorage.setItem(storageKey(email), JSON.stringify(visitors));
+  } catch {
+    /* private-browsing / storage-disabled / quota exceeded - visitor details just won't persist */
+  }
 }
 
 export function saveReservationVisitor(email: string, unitId: string, visitor: ReservationVisitor) {

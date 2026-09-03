@@ -38,6 +38,7 @@ const MISSING_DOCUMENT_LABELS: Record<string, string> = {
 };
 
 function messageForDocumentsError(status: number, detail: unknown): string {
+  if (status === 0) return 'Could not reach the server. Check your connection and try again.';
   if (status === 401) {
     if (detail === 'missing_token') return 'Please sign in before uploading documents.';
     if (detail === 'invalid_token') return 'Your session is invalid. Please sign in again.';
@@ -141,7 +142,10 @@ function validatePhotoFile(file: File) {
  * Details" page of the generated booking application PDF. Required (along with the
  * co-applicant photo, Aadhaar front/back, and PAN) before /documents/generate will
  * render a booking_application document. */
-export function uploadApplicantPhoto(token: string, file: File): Promise<GeneratedDocument> {
+// async so a validatePhotoFile() rejection is delivered through the returned
+// promise's .catch (callers attach .then/.catch/.finally) rather than thrown
+// synchronously before the chain is built.
+export async function uploadApplicantPhoto(token: string, file: File): Promise<GeneratedDocument> {
   validatePhotoFile(file);
   const formData = new FormData();
   formData.append('file', file);
@@ -153,7 +157,7 @@ export function uploadApplicantPhoto(token: string, file: File): Promise<Generat
 
 /** Same as uploadApplicantPhoto, for the co-applicant's photo (placed on the
  * "Co-Applicant Details" page). */
-export function uploadCoApplicantPhoto(token: string, file: File): Promise<GeneratedDocument> {
+export async function uploadCoApplicantPhoto(token: string, file: File): Promise<GeneratedDocument> {
   validatePhotoFile(file);
   const formData = new FormData();
   formData.append('file', file);

@@ -18,7 +18,11 @@ export function loadSavedTownships(email: string): string[] {
 }
 
 function saveTownships(email: string, ids: string[]) {
-  localStorage.setItem(storageKey(email), JSON.stringify(ids));
+  try {
+    localStorage.setItem(storageKey(email), JSON.stringify(ids));
+  } catch {
+    /* private-browsing / storage-disabled / quota exceeded - bookmark just won't persist */
+  }
 }
 
 export function isTownshipSaved(email: string, townshipId: string): boolean {

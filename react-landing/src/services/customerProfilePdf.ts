@@ -391,6 +391,10 @@ export async function generateDemandLetterPdf(input: ProfilePdfInput): Promise<B
   const total = input.totalAmount ?? 0;
   const received = Math.max(0, input.receivedAmount ?? 0);
   const outstanding = Math.max(0, total - received);
+  // When the total consideration isn't on record yet, `outstanding` collapses to
+  // 0 - which would print a self-contradictory "Rs. 0 / Rupees Zero Only" demand
+  // next to a real "received" figure. Show a dash and a generic remit line instead.
+  const hasTotal = total > 0;
   const base = input.bookingDate ? new Date(input.bookingDate) : new Date();
   const dueDates = PAYMENT_SCHEDULE.map((row) => addDays(base, row.days));
   const amounts = PAYMENT_SCHEDULE.map((row) => Math.round(total * row.share));
@@ -446,7 +450,7 @@ export async function generateDemandLetterPdf(input: ProfilePdfInput): Promise<B
   const summary: Array<[string, string, boolean]> = [
     ['Total Receivable Amount', total ? total.toLocaleString('en-IN') : '—', false],
     ['Total Received Amount', formatRs(received), false],
-    ['Total Outstanding Amount', formatRs(outstanding), true],
+    ['Total Outstanding Amount', hasTotal ? formatRs(outstanding) : '—', true],
   ];
   summary.forEach(([label, value, strong], i) => {
     if (i === 0) {
@@ -469,7 +473,7 @@ export async function generateDemandLetterPdf(input: ProfilePdfInput): Promise<B
   cell(page, cX0, ty, cHead, ty - wordsRowH);
   cellText(page, 'Total Outstanding Amount (In Words)', cX0, ty, ty - wordsRowH, bold, 7.2);
   cell(page, cHead, ty, cX1, ty - wordsRowH);
-  const wordsValue = `${rupeesInWords(outstanding)}.`;
+  const wordsValue = hasTotal ? `${rupeesInWords(outstanding)}.` : '—';
   let wordsSize = 8;
   while (wordsSize > 5 && font.widthOfTextAtSize(wordsValue, wordsSize) > cX1 - cHead - 8) wordsSize -= 0.25;
   cellText(page, wordsValue, cHead, ty, ty - wordsRowH, font, wordsSize);
@@ -479,9 +483,12 @@ export async function generateDemandLetterPdf(input: ProfilePdfInput): Promise<B
 
   // --- Remit instruction -------------------------------------------
   const lastDue = formatDate(dueDates[dueDates.length - 1]);
+  const remitSentence = hasTotal
+    ? `You are requested to remit the total dues of ${formatRs(outstanding)}/- (${rupeesInWords(outstanding)}) in favour of "${COMPANY.name}" payable on or before ${lastDue}.`
+    : `You are requested to remit the dues as per the payment plan opted by you in favour of "${COMPANY.name}" as and when they fall due.`;
   for (const line of wrap(
     font,
-    `You are requested to remit the total dues of ${formatRs(outstanding)}/- (${rupeesInWords(outstanding)}) in favour of "${COMPANY.name}" payable on or before ${lastDue}.`,
+    remitSentence,
     9,
     right - left,
   )) {
