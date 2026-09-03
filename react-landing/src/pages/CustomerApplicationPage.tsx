@@ -9,7 +9,7 @@ import { applicationProjects } from '../data/applicationProjects';
 import type { InventoryUnit } from '../services/inventoryApi';
 import { uploadGeneratedApplicationPdf } from '../services/documentsApi';
 import { ApiError } from '../services/authApi';
-import { blobToDataUrl, generateApplicationPdf, openDataUrl, openPdfBlob } from '../services/applicationPdf';
+import { blobToDataUrl, downloadPdfBlob, generateApplicationPdf, generatePaymentReceiptPdf, openDataUrl, openPdfBlob } from '../services/applicationPdf';
 import { createPaymentOrder, recordCashPayment, verifyPayment } from '../services/paymentsApi';
 import { openRazorpayCheckout } from '../services/razorpayCheckout';
 import { amountToIndianWords } from '../utils/currency';
@@ -266,6 +266,7 @@ export function CustomerApplicationPage() {
   const [cashAmountInput, setCashAmountInput] = useState('');
   const [paying, setPaying] = useState(false);
   const [payingCash, setPayingCash] = useState(false);
+  const [downloadingReceipt, setDownloadingReceipt] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
 
   const persist = (next: CustomerDocState) => {
@@ -465,6 +466,28 @@ export function CustomerApplicationPage() {
       setPaymentError(describePaymentError(err));
     } finally {
       setPayingCash(false);
+    }
+  };
+
+  const handleDownloadPaymentReceipt = async () => {
+    if (docs.payment.status !== 'paid') {
+      setPaymentError('Complete payment before downloading the receipt.');
+      return;
+    }
+    setDownloadingReceipt(true);
+    setPaymentError(null);
+    try {
+      const blob = await generatePaymentReceiptPdf({
+        formData: docs.bookingApplication.formData,
+        paymentInfo: docs.payment,
+      });
+      const projectId = docs.bookingApplication.formData.projectId || 'project';
+      const paymentId = docs.payment.paymentId || Date.now();
+      downloadPdfBlob(blob, `${projectId}-payment-receipt-${paymentId}.pdf`);
+    } catch (err) {
+      setPaymentError(err instanceof Error ? err.message : 'Could not download the payment receipt.');
+    } finally {
+      setDownloadingReceipt(false);
     }
   };
 
@@ -1184,6 +1207,16 @@ export function CustomerApplicationPage() {
             >
               {generating ? 'Generating...' : 'Generate application PDF'}
             </button>
+            {paymentComplete && (
+              <button
+                type="button"
+                onClick={handleDownloadPaymentReceipt}
+                disabled={downloadingReceipt}
+                className="ml-3 rounded-full border border-hairline px-5 py-3 text-sm font-semibold text-ink transition-colors hover:border-green hover:text-green disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {downloadingReceipt ? 'Downloading...' : 'Download payment receipt'}
+              </button>
+            )}
             {docs.bookingApplication.pdfDataUrl && (
               <button
                 type="button"
