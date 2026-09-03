@@ -163,6 +163,80 @@ const paymentPlanRows: Array<[string, string]> = [
   ['On offer of Possession', '5% of BSP'],
 ];
 
+/* -------------------------------------------------------------------------- */
+/*  Premium payment receipt — branded letterhead, seal, framed amount panel   */
+/* -------------------------------------------------------------------------- */
+
+// Muted print-safe versions of the Guardian-of-Trust accent + the OPS "Greens"
+// sub-brand foliage, used only on the receipt for the engraved / official look.
+const receiptAccent = rgb(0.78, 0.45, 0.16);
+const receiptFoliage = rgb(0.29, 0.44, 0.17);
+const receiptPanel = rgb(0.949, 0.965, 0.976);
+
+interface ReceiptCompanyProfile {
+  entity: string;
+  tagline: string;
+  addressInline: string;
+  email: string;
+  phones: string;
+  gstin?: string;
+  cin?: string;
+  state?: string;
+  stateCode?: string;
+}
+
+const RECEIPT_COMPANY: Record<ApplicationProjectId, ReceiptCompanyProfile> = {
+  'ops-divine-greens': {
+    entity: 'KCG Resorts Pvt. Ltd.',
+    tagline: 'A Licensed Residential Plotted Township',
+    addressInline: 'Sec-16, Taraori, Karnal, Haryana 132116',
+    email: 'crm2@divinevisioninfra.com',
+    phones: '+91 92549 72701  |  +91 74282 91303',
+    gstin: '06AAECK2303D1Z8',
+    cin: '55101HR2009PTC039831',
+    state: 'Haryana',
+    stateCode: '06',
+  },
+  'suraksha-enclave': {
+    entity: 'Divine Vision Infratech Pvt. Ltd.',
+    tagline: 'A Residential Plotted Development',
+    addressInline: 'Ganaur, Sonipat, Haryana',
+    email: 'crm2@divinevisioninfra.com',
+    phones: '+91 92549 72701  |  +91 74282 91303',
+    state: 'Haryana',
+    stateCode: '06',
+  },
+};
+
+function drawCenteredText(
+  page: PDFPage,
+  text: string,
+  centerX: number,
+  y: number,
+  size: number,
+  font: PDFFont,
+  color = ink,
+  opacity = 1,
+) {
+  page.drawText(text, { x: centerX - font.widthOfTextAtSize(text, size) / 2, y, size, font, color, opacity });
+}
+
+function receiptNumber(project: ApplicationProject, paymentInfo: PaymentStatus | null | undefined): string {
+  const code = project.id === 'ops-divine-greens' ? 'OPS' : 'SE';
+  const raw = paymentInfo?.paymentId || paymentInfo?.razorpayPaymentId || paymentInfo?.razorpayOrderId || '';
+  const tail = raw.replace(/[^A-Za-z0-9]/g, '').slice(-8).toUpperCase();
+  return `RCPT/${code}/${tail || String(Date.now()).slice(-8)}`;
+}
+
+/** Blocky signage-style monogram tile — filled square + inset keyline + "OPS"
+ * reversed out, matching the brand's grid-based, solid icon direction. */
+function drawOpsEmblem(page: PDFPage, x: number, y: number, size: number, ctx: PdfContext) {
+  page.drawRectangle({ x, y, width: size, height: size, color: divineGreen });
+  page.drawRectangle({ x: x + 5, y: y + 5, width: size - 10, height: size - 10, borderColor: receiptAccent, borderWidth: 0.9 });
+  drawCenteredText(page, 'OPS', x + size / 2, y + size / 2 - size * 0.12, size * 0.32, ctx.bold, rgb(1, 1, 1));
+  page.drawRectangle({ x: x + size / 2 - 9, y: y + size * 0.26, width: 18, height: 2.2, color: receiptAccent });
+}
+
 function dataUrlToBytes(dataUrl: string): Uint8Array {
   const [, payload] = dataUrl.split(',');
   const binary = window.atob(payload ?? '');
@@ -679,42 +753,161 @@ function renderChecklistPage(ctx: PdfContext, formData: BookingApplicationFormDa
 }
 
 function renderPaymentReceiptPage(ctx: PdfContext, formData: BookingApplicationFormData, paymentInfo: PaymentStatus | null | undefined) {
-  let cursor = addPage(ctx, 'Payment receipt', 'System generated receipt for booking payment.', { signatures: false });
-  cursor.page.drawRectangle({
-    x: marginX,
-    y: cursor.y - 64,
-    width: contentWidth,
-    height: 52,
-    color: paleGreen,
-    borderColor: hairline,
-    borderWidth: 0.8,
+  const page = ctx.pdfDoc.addPage(pageSize);
+  ctx.pageNumber += 1;
+  const { width, height } = page.getSize();
+  const co = RECEIPT_COMPANY[ctx.project.id] ?? RECEIPT_COMPANY['ops-divine-greens'];
+  const cx = marginX;
+  const cRight = width - marginX;
+  const innerW = cRight - cx;
+  const midX = cx + innerW / 2 + 12;
+
+  // ---- Decorative double frame + corner blocks ----------------------------
+  page.drawRectangle({ x: 22, y: 22, width: width - 44, height: height - 44, borderColor: divineGreen, borderWidth: 1.4 });
+  page.drawRectangle({ x: 27, y: 27, width: width - 54, height: height - 54, borderColor: receiptAccent, borderWidth: 0.5 });
+  ([[27, 27], [width - 33, 27], [27, height - 33], [width - 33, height - 33]] as Array<[number, number]>).forEach(([bx, by]) => {
+    page.drawRectangle({ x: bx, y: by, width: 6, height: 6, color: divineGreen });
   });
-  cursor.page.drawText('SYSTEM GENERATED RECEIPT', { x: marginX + 16, y: cursor.y - 24, size: 14, font: ctx.bold, color: divineGreen });
-  cursor.page.drawText('This receipt is generated electronically from the customer portal.', {
-    x: marginX + 16,
-    y: cursor.y - 42,
-    size: 8.8,
-    font: ctx.font,
-    color: muted,
+
+  // ---- Watermark emblem --------------------------------------------------
+  drawCenteredText(page, 'OPS', width / 2, height / 2 - 30, 150, ctx.bold, divineGreen, 0.045);
+
+  // ---- Letterhead ------------------------------------------------------
+  let y = height - 74;
+  drawOpsEmblem(page, cx, y - 44, 52, ctx);
+  const wmX = cx + 66;
+  page.drawText('OPS DIVINE ', { x: wmX, y: y - 6, size: 19, font: ctx.bold, color: divineGreen });
+  page.drawText('GREENS', {
+    x: wmX + ctx.bold.widthOfTextAtSize('OPS DIVINE ', 19),
+    y: y - 6,
+    size: 19,
+    font: ctx.bold,
+    color: receiptFoliage,
   });
-  cursor.y -= 82;
-  cursor = drawRows(ctx, cursor, [
-    ['Receipt in favor of', applicantsLabel(formData)],
-    ['Project', `${ctx.project.label} - ${ctx.project.location}`],
-    ['Unit / plot no.', valueOrDash(formData.unitNo)],
-    ['Payment status', paymentInfo?.status === 'paid' ? 'Paid' : valueOrDash(paymentInfo?.status)],
-    ['Amount paid', formatCurrencyINR(paymentInfo?.amount)],
-    ['Amount in words', amountInWords(paymentInfo?.amount, formData.bookingAmountWords)],
-    ['Payment method', formatPaymentMethod(paymentInfo?.method ?? null)],
-    ['Paid on', formatDateTimeIN(paymentInfo?.paidAt)],
-    ['Payment reference ID', valueOrDash(paymentInfo?.paymentId)],
-    ['Razorpay order ID', valueOrDash(paymentInfo?.razorpayOrderId)],
-    ['Razorpay payment ID', valueOrDash(paymentInfo?.razorpayPaymentId)],
-  ]);
-  cursor = drawParagraph(
-    ctx,
-    cursor,
-    'Note: System generated receipt. This receipt is issued in favor of the applicant(s) named above for the booking payment recorded in the portal.',
+  page.drawText(co.tagline.toUpperCase(), { x: wmX, y: y - 20, size: 6.8, font: ctx.font, color: muted });
+  page.drawText(`Developed by ${co.entity}`, { x: wmX, y: y - 33, size: 8, font: ctx.bold, color: ink });
+  [co.addressInline, co.email, co.phones].forEach((line, i) => {
+    drawTextRight(page, line, cRight, y - 4 - i * 11, 7.6, ctx.font, muted);
+  });
+
+  y -= 54;
+  page.drawLine({ start: { x: cx, y }, end: { x: cRight, y }, thickness: 1.3, color: divineGreen });
+  page.drawLine({ start: { x: cx, y: y - 3 }, end: { x: cRight, y: y - 3 }, thickness: 0.5, color: receiptAccent });
+  y -= 34;
+
+  // ---- Title + receipt meta -----------------------------------------
+  page.drawText('PAYMENT RECEIPT', { x: cx, y, size: 16, font: ctx.bold, color: ink });
+  drawTextRight(page, `Receipt No.  ${receiptNumber(ctx.project, paymentInfo)}`, cRight, y + 5, 8.5, ctx.bold, ink);
+  drawTextRight(page, `Date  ${formatDateTimeIN(paymentInfo?.paidAt)}`, cRight, y - 7, 8.5, ctx.font, muted);
+  page.drawText('OFFICIAL ACKNOWLEDGEMENT OF BOOKING PAYMENT', { x: cx, y: y - 14, size: 7, font: ctx.font, color: muted });
+  y -= 52;
+
+  // ---- "PAID" seal -------------------------------------------------
+  const sealCX = cRight - 42;
+  const sealCY = y - 18;
+  page.drawEllipse({ x: sealCX, y: sealCY, xScale: 34, yScale: 34, borderColor: receiptFoliage, borderWidth: 1.6 });
+  page.drawEllipse({ x: sealCX, y: sealCY, xScale: 28, yScale: 28, borderColor: receiptFoliage, borderWidth: 0.5 });
+  drawCenteredText(page, 'PAID', sealCX, sealCY + 1, 13, ctx.bold, receiptFoliage);
+  drawCenteredText(page, 'RECEIVED', sealCX, sealCY - 12, 5.4, ctx.font, receiptFoliage);
+
+  // ---- Received with thanks from ---------------------------------
+  page.drawText('RECEIVED WITH THANKS FROM', { x: cx, y, size: 8, font: ctx.bold, color: muted });
+  y -= 16;
+  page.drawText(applicantsLabel(formData), { x: cx, y, size: 12.5, font: ctx.bold, color: ink });
+  y -= 15;
+  wrapTextToWidth(ctx.font, valueOrDash(formData.correspondenceAddress || formData.permanentAddress), 8.5, innerW - 96)
+    .slice(0, 3)
+    .forEach((line) => {
+      page.drawText(line, { x: cx, y, size: 8.5, font: ctx.font, color: muted });
+      y -= 11;
+    });
+  y -= 22;
+
+  // ---- Amount panel (hero) --------------------------------------
+  const panelH = 74;
+  page.drawRectangle({ x: cx, y: y - panelH, width: innerW, height: panelH, color: receiptPanel, borderColor: divineGreen, borderWidth: 1 });
+  page.drawRectangle({ x: cx, y: y - panelH, width: 3.5, height: panelH, color: receiptAccent });
+  page.drawText('AMOUNT RECEIVED', { x: cx + 18, y: y - 22, size: 8, font: ctx.bold, color: muted });
+  page.drawText(formatCurrencyINR(paymentInfo?.amount), { x: cx + 18, y: y - 52, size: 24, font: ctx.bold, color: divineGreen });
+  drawTextRight(page, 'TOWARDS', cRight - 18, y - 22, 8, ctx.bold, muted);
+  drawTextRight(page, 'Plot Booking Amount', cRight - 18, y - 38, 9.5, ctx.font, ink);
+  y -= panelH + 22;
+  const rawWords = amountInWords(paymentInfo?.amount, formData.bookingAmountWords);
+  const wordsLine = rawWords === '-' ? '-' : `Rupees ${rawWords.replace(/\s*Rupees Only\s*$/i, '')} Only`;
+  page.drawText(wordsLine, { x: cx, y, size: 9.5, font: ctx.bold, color: ink });
+  y -= 32;
+
+  // ---- Payment details (two engraved columns) ------------------
+  page.drawText('PAYMENT DETAILS', { x: cx, y, size: 8, font: ctx.bold, color: muted });
+  y -= 10;
+  const detailRows: Array<[string, string]> = [
+    ['Project', ctx.project.label],
+    ['Payment Mode', formatPaymentMethod(paymentInfo?.method ?? null)],
+    ['Location', ctx.project.location],
+    ['Payment Status', paymentInfo?.status === 'paid' ? 'PAID' : valueOrDash(paymentInfo?.status)],
+    ['Unit / Plot No.', valueOrDash(formData.unitNo)],
+    ['Received On', formatDateTimeIN(paymentInfo?.paidAt)],
+    ['Transaction Ref.', valueOrDash(paymentInfo?.razorpayPaymentId)],
+    ['Order Ref.', valueOrDash(paymentInfo?.razorpayOrderId)],
+    ['Internal Ref.', valueOrDash(paymentInfo?.paymentId)],
+  ];
+  const rowH = 25;
+  detailRows.forEach(([label, value], i) => {
+    const col = i % 2;
+    const rowTopY = y - Math.floor(i / 2) * rowH;
+    const lx = col === 0 ? cx : midX;
+    const halfRight = col === 0 ? midX - 12 : cRight;
+    page.drawText(label.toUpperCase(), { x: lx, y: rowTopY - 9, size: 6.6, font: ctx.bold, color: divineGreen });
+    const [valLine] = wrapTextToWidth(ctx.font, value, 9, halfRight - lx);
+    page.drawText(valLine ?? '-', { x: lx, y: rowTopY - 20, size: 9, font: ctx.font, color: ink });
+    page.drawLine({ start: { x: lx, y: rowTopY - 25 }, end: { x: halfRight, y: rowTopY - 25 }, thickness: 0.4, color: hairline });
+  });
+  y -= Math.ceil(detailRows.length / 2) * rowH + 22;
+
+  // ---- Scope note -------------------------------------------------
+  page.drawRectangle({ x: cx, y: y - 40, width: innerW, height: 40, color: receiptPanel });
+  wrapTextToWidth(
+    ctx.font,
+    'This receipt acknowledges the amount recorded above against the plot booking. It is subject to realisation of the instrument / payment-gateway confirmation. Allotment remains governed by the Application Form, the Agreement for Sale and applicable RERA rules.',
+    7.6,
+    innerW - 28,
+  )
+    .slice(0, 3)
+    .forEach((line, i) => {
+      page.drawText(line, { x: cx + 14, y: y - 15 - i * 10, size: 7.6, font: ctx.font, color: muted });
+    });
+  y -= 66;
+
+  // ---- Signature + issuer -------------------------------------
+  page.drawLine({ start: { x: cRight - 170, y }, end: { x: cRight, y }, thickness: 0.8, color: ink });
+  drawTextRight(page, `For ${co.entity}`, cRight, y - 13, 9, ctx.bold, ink);
+  drawTextRight(page, 'Authorised Signatory', cRight, y - 25, 7.5, ctx.font, muted);
+  page.drawText('Issued by Divine Vision Infratech — Customer Portal', { x: cx, y: y - 13, size: 8, font: ctx.font, color: muted });
+  page.drawText('Computer-generated receipt; valid without physical signature.', { x: cx, y: y - 24, size: 7, font: ctx.font, color: muted });
+  y -= 60;
+
+  // ---- Closing flourish -------------------------------------
+  const flourishHalf = 90;
+  page.drawLine({ start: { x: width / 2 - flourishHalf, y }, end: { x: width / 2 - 12, y }, thickness: 0.6, color: hairline });
+  page.drawLine({ start: { x: width / 2 + 12, y }, end: { x: width / 2 + flourishHalf, y }, thickness: 0.6, color: hairline });
+  page.drawEllipse({ x: width / 2, y: y + 1, xScale: 2.4, yScale: 2.4, color: receiptAccent });
+  drawCenteredText(page, 'THANK YOU FOR YOUR BOOKING', width / 2, y - 22, 8.5, ctx.bold, divineGreen);
+  drawCenteredText(page, 'We look forward to welcoming you to OPS Divine Greens.', width / 2, y - 34, 7.5, ctx.font, muted);
+
+  // ---- Statutory line + footer band --------------------------
+  const statutory = [co.gstin ? `GSTIN ${co.gstin}` : null, co.state ? `State ${co.state} (${co.stateCode})` : null, co.cin ? `CIN ${co.cin}` : null]
+    .filter(Boolean)
+    .join('     |     ');
+  if (statutory) drawCenteredText(page, statutory, width / 2, 68, 7, ctx.font, muted);
+  page.drawRectangle({ x: 27, y: 30, width: width - 54, height: 22, color: divineGreen });
+  drawCenteredText(
+    page,
+    `${ctx.project.label.toUpperCase()}     •     ${co.addressInline}     •     ${co.email}`,
+    width / 2,
+    38,
+    7,
+    ctx.font,
+    rgb(1, 1, 1),
   );
 }
 
