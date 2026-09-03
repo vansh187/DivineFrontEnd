@@ -91,6 +91,7 @@ function SelectField({
 }
 
 const GENDER_OPTIONS = ['Male', 'Female', 'Prefer not to say'];
+const RESIDENTIAL_STATUS_OPTIONS = ['Resident', 'Non Resident', 'Person of Indian Origin', 'Foreign National'];
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -726,9 +727,44 @@ export function CustomerApplicationPage() {
           <Field label="Email ID" type="email" value={form.email} onChange={(value) => updateForm('email', value)} />
           <Field label="Mobile no." value={form.mobile} onChange={(value) => updateForm('mobile', value)} />
           <Field label="Residence phone" value={form.phone} onChange={(value) => updateForm('phone', value)} />
-          <Field label="Residential status" value={form.residentialStatus} onChange={(value) => updateForm('residentialStatus', value)} />
-          <Field label="Permanent address" value={form.permanentAddress} onChange={(value) => updateForm('permanentAddress', value)} multiline />
-          <Field label="Correspondence address" value={form.correspondenceAddress} onChange={(value) => updateForm('correspondenceAddress', value)} multiline />
+          <SelectField
+            label="Residential status"
+            value={form.residentialStatus}
+            onChange={(value) => updateForm('residentialStatus', value)}
+            options={RESIDENTIAL_STATUS_OPTIONS}
+            placeholder="Select residential status"
+          />
+          <Field
+            label="Permanent address"
+            value={form.permanentAddress}
+            onChange={(value) =>
+              applyFormUpdates(
+                form.correspondenceSameAsPermanent
+                  ? { permanentAddress: value, correspondenceAddress: value }
+                  : { permanentAddress: value },
+              )
+            }
+            multiline
+          />
+          <CheckboxField
+            label="Correspondence address is the same as permanent address"
+            checked={form.correspondenceSameAsPermanent}
+            onChange={(checked) =>
+              applyFormUpdates(
+                checked
+                  ? { correspondenceSameAsPermanent: true, correspondenceAddress: form.permanentAddress }
+                  : { correspondenceSameAsPermanent: false },
+              )
+            }
+          />
+          {!form.correspondenceSameAsPermanent && (
+            <Field
+              label="Correspondence address"
+              value={form.correspondenceAddress}
+              onChange={(value) => updateForm('correspondenceAddress', value)}
+              multiline
+            />
+          )}
         </Section>
 
         <Section title="Co-applicant details">
@@ -744,32 +780,47 @@ export function CustomerApplicationPage() {
           <Field label="Phone no. (residence)" value={form.coApplicantPhone} onChange={(value) => updateForm('coApplicantPhone', value)} />
           <Field label="Mobile no." value={form.coApplicantMobile} onChange={(value) => updateForm('coApplicantMobile', value)} />
           <Field label="Email ID" type="email" value={form.coApplicantEmail} onChange={(value) => updateForm('coApplicantEmail', value)} />
-          <label className="block">
-            <span className="text-xs font-semibold text-ink">Residential status</span>
-            <select
-              value={form.coApplicantResidentialStatus}
-              onChange={(event) => updateForm('coApplicantResidentialStatus', event.target.value)}
-              className="mt-1 w-full rounded-lg border border-hairline bg-bg px-3 py-2.5 text-sm text-ink outline-none focus:border-green"
-            >
-              <option value="">Select residential status</option>
-              <option value="Resident">Resident</option>
-              <option value="Non Resident">Non Resident</option>
-              <option value="Person of Indian Origin">Person of Indian Origin</option>
-              <option value="Foreign National">Foreign National</option>
-            </select>
-          </label>
+          <SelectField
+            label="Residential status"
+            value={form.coApplicantResidentialStatus}
+            onChange={(value) => updateForm('coApplicantResidentialStatus', value)}
+            options={RESIDENTIAL_STATUS_OPTIONS}
+            placeholder="Select residential status"
+          />
           <Field
             label="Permanent address"
             value={form.coApplicantPermanentAddress}
-            onChange={(value) => updateForm('coApplicantPermanentAddress', value)}
+            onChange={(value) =>
+              applyFormUpdates(
+                form.coApplicantCorrespondenceSameAsPermanent
+                  ? { coApplicantPermanentAddress: value, coApplicantCorrespondenceAddress: value }
+                  : { coApplicantPermanentAddress: value },
+              )
+            }
             multiline
           />
-          <Field
-            label="Correspondence address"
-            value={form.coApplicantCorrespondenceAddress}
-            onChange={(value) => updateForm('coApplicantCorrespondenceAddress', value)}
-            multiline
+          <CheckboxField
+            label="Correspondence address is the same as permanent address"
+            checked={form.coApplicantCorrespondenceSameAsPermanent}
+            onChange={(checked) =>
+              applyFormUpdates(
+                checked
+                  ? {
+                      coApplicantCorrespondenceSameAsPermanent: true,
+                      coApplicantCorrespondenceAddress: form.coApplicantPermanentAddress,
+                    }
+                  : { coApplicantCorrespondenceSameAsPermanent: false },
+              )
+            }
           />
+          {!form.coApplicantCorrespondenceSameAsPermanent && (
+            <Field
+              label="Correspondence address"
+              value={form.coApplicantCorrespondenceAddress}
+              onChange={(value) => updateForm('coApplicantCorrespondenceAddress', value)}
+              multiline
+            />
+          )}
           <SignatureUpload
             label="Co-applicant signature image"
             status={docs.coApplicantSignature}
@@ -923,7 +974,8 @@ export function CustomerApplicationPage() {
         <Section title="Terms and conditions">
           <LegalNote>
             <p className="font-semibold text-ink">TERMS & CONDITIONS:</p>
-            <ol className="mt-3 list-decimal space-y-2 pl-5">
+            <p className="mt-1 text-xs text-ink-muted">Scroll within the box below to review all {termsAndConditions.length} terms.</p>
+            <ol className="mt-3 max-h-72 space-y-2 overflow-y-auto rounded-lg border border-hairline bg-surface p-4 pl-8 list-decimal">
               {termsAndConditions.map((term) => (
                 <li key={term}>{term}</li>
               ))}

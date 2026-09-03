@@ -137,6 +137,7 @@ export interface BookingApplicationFormData {
   residentialStatus: string;
   permanentAddress: string;
   correspondenceAddress: string;
+  correspondenceSameAsPermanent: boolean;
   coApplicantName: string;
   coApplicantGuardianName: string;
   coApplicantDob: string;
@@ -149,6 +150,7 @@ export interface BookingApplicationFormData {
   coApplicantResidentialStatus: string;
   coApplicantPermanentAddress: string;
   coApplicantCorrespondenceAddress: string;
+  coApplicantCorrespondenceSameAsPermanent: boolean;
   unitNo: string;
   plotAreaSqYd: string;
   plotAreaSqMtr: string;
@@ -223,6 +225,7 @@ export function emptyBookingApplicationFormData(): BookingApplicationFormData {
     residentialStatus: '',
     permanentAddress: '',
     correspondenceAddress: '',
+    correspondenceSameAsPermanent: false,
     coApplicantName: '',
     coApplicantGuardianName: '',
     coApplicantDob: '',
@@ -235,6 +238,7 @@ export function emptyBookingApplicationFormData(): BookingApplicationFormData {
     coApplicantResidentialStatus: '',
     coApplicantPermanentAddress: '',
     coApplicantCorrespondenceAddress: '',
+    coApplicantCorrespondenceSameAsPermanent: false,
     unitNo: '',
     plotAreaSqYd: '',
     plotAreaSqMtr: '',
