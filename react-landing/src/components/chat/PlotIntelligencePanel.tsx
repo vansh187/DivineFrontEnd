@@ -56,7 +56,12 @@ function titleCase(value: string | null | undefined) {
 }
 
 function compactNumber(value: number | null | undefined, digits = 2) {
-  return typeof value === 'number' ? value.toFixed(digits).replace(/\.?0+$/, '') : null;
+  if (typeof value !== 'number') return null;
+  const fixed = value.toFixed(digits);
+  // Trim only trailing fractional zeros ("131.00" -> "131"); with digits === 0
+  // there is no decimal point, so the string is already compact and the regex
+  // would otherwise eat real integer digits ("250" -> "25").
+  return digits > 0 ? fixed.replace(/\.?0+$/, '') : fixed;
 }
 
 function unitTitle(unit: InventoryUnit) {

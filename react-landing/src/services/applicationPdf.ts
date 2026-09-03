@@ -3,6 +3,7 @@ import type { PDFImage, PDFPage, PDFFont } from 'pdf-lib';
 import { getApplicationProject } from '../data/applicationProjects';
 import type { ApplicationProject, ApplicationProjectId } from '../data/applicationProjects';
 import type { BookingApplicationFormData, PaymentStatus } from './documentStore';
+import { amountToIndianWords } from '../utils/currency';
 
 interface GenerateApplicationPdfInput {
   formData: BookingApplicationFormData;
@@ -21,6 +22,11 @@ interface GenerateApplicationPdfInput {
   paymentInfo?: PaymentStatus | null;
 }
 
+interface GeneratePaymentReceiptPdfInput {
+  formData: BookingApplicationFormData;
+  paymentInfo: PaymentStatus;
+}
+
 export interface IdentityAttachment {
   title: string;
   fileName?: string | null;
@@ -32,7 +38,7 @@ interface PdfContext {
   pdfDoc: PDFDocument;
   font: PDFFont;
   bold: PDFFont;
-  applicantSignature: PDFImage;
+  applicantSignature: PDFImage | null;
   coApplicantSignature: PDFImage | null;
   applicantPhoto: PDFImage | null;
   coApplicantPhoto: PDFImage | null;
@@ -191,14 +197,23 @@ function valueOrDash(value: string | null | undefined): string {
   return value?.trim() ? value : '-';
 }
 
-function requireProjectId(projectId: BookingApplicationFormData['projectId']): ApplicationProjectId {
-  if (!projectId) throw new Error('Select the project before generating the application PDF.');
-  return projectId;
-}
-
 function joinValues(values: string[]): string {
   const filled = values.filter((value) => value.trim());
   return filled.length ? filled.join(' / ') : '-';
+}
+
+function applicantsLabel(formData: BookingApplicationFormData): string {
+  return joinValues([formData.applicantName, formData.coApplicantName]);
+}
+
+function amountInWords(value: number | null | undefined, fallback: string): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return valueOrDash(fallback);
+  return amountToIndianWords(value);
+}
+
+function requireProjectId(projectId: BookingApplicationFormData['projectId']): ApplicationProjectId {
+  if (!projectId) throw new Error('Select the project before generating the application PDF.');
+  return projectId;
 }
 
 function splitLongWord(font: PDFFont, word: string, size: number, maxWidth: number): string[] {
@@ -321,8 +336,10 @@ function drawFooterSignatures(ctx: PdfContext, page: PDFPage) {
   const sigHeight = sigWidth / 3.25;
   page.drawRectangle({ x: 0, y: 0, width, height: 22, color: divineGreen });
   page.drawLine({ start: { x: marginX, y: signatureTopY }, end: { x: width - marginX, y: signatureTopY }, thickness: 0.8, color: hairline });
-  page.drawImage(ctx.applicantSignature, { x: width - sigWidth - marginX, y: 52, width: sigWidth, height: sigHeight, opacity: 0.92 });
-  page.drawText('Applicant Signature', { x: width - sigWidth - marginX, y: 38, size: 7.5, font: ctx.bold, color: ink });
+  if (ctx.applicantSignature) {
+    page.drawImage(ctx.applicantSignature, { x: width - sigWidth - marginX, y: 52, width: sigWidth, height: sigHeight, opacity: 0.92 });
+    page.drawText('Applicant Signature', { x: width - sigWidth - marginX, y: 38, size: 7.5, font: ctx.bold, color: ink });
+  }
   if (ctx.coApplicantSignature) {
     page.drawImage(ctx.coApplicantSignature, { x: marginX, y: 52, width: sigWidth, height: sigHeight, opacity: 0.92 });
     page.drawText('Co-applicant Signature', { x: marginX, y: 38, size: 7.5, font: ctx.bold, color: ink });
@@ -661,11 +678,33 @@ function renderChecklistPage(ctx: PdfContext, formData: BookingApplicationFormDa
   cursor = drawAccepted(ctx, cursor, 'Checklist confirmed', formData.checklistAccepted);
 }
 
-function renderPaymentInformationPage(ctx: PdfContext, paymentInfo: PaymentStatus | null | undefined) {
-  let cursor = addPage(ctx, 'Payment confirmation', 'Booking payment details recorded before identity document attachments.');
+function renderPaymentReceiptPage(ctx: PdfContext, formData: BookingApplicationFormData, paymentInfo: PaymentStatus | null | undefined) {
+  let cursor = addPage(ctx, 'Payment receipt', 'System generated receipt for booking payment.', { signatures: false });
+  cursor.page.drawRectangle({
+    x: marginX,
+    y: cursor.y - 64,
+    width: contentWidth,
+    height: 52,
+    color: paleGreen,
+    borderColor: hairline,
+    borderWidth: 0.8,
+  });
+  cursor.page.drawText('SYSTEM GENERATED RECEIPT', { x: marginX + 16, y: cursor.y - 24, size: 14, font: ctx.bold, color: divineGreen });
+  cursor.page.drawText('This receipt is generated electronically from the customer portal.', {
+    x: marginX + 16,
+    y: cursor.y - 42,
+    size: 8.8,
+    font: ctx.font,
+    color: muted,
+  });
+  cursor.y -= 82;
   cursor = drawRows(ctx, cursor, [
+    ['Receipt in favor of', applicantsLabel(formData)],
+    ['Project', `${ctx.project.label} - ${ctx.project.location}`],
+    ['Unit / plot no.', valueOrDash(formData.unitNo)],
     ['Payment status', paymentInfo?.status === 'paid' ? 'Paid' : valueOrDash(paymentInfo?.status)],
     ['Amount paid', formatCurrencyINR(paymentInfo?.amount)],
+    ['Amount in words', amountInWords(paymentInfo?.amount, formData.bookingAmountWords)],
     ['Payment method', formatPaymentMethod(paymentInfo?.method ?? null)],
     ['Paid on', formatDateTimeIN(paymentInfo?.paidAt)],
     ['Payment reference ID', valueOrDash(paymentInfo?.paymentId)],
@@ -675,7 +714,7 @@ function renderPaymentInformationPage(ctx: PdfContext, paymentInfo: PaymentStatu
   cursor = drawParagraph(
     ctx,
     cursor,
-    'This payment information is displayed before the Aadhaar and PAN attachments as confirmation that the booking payment was completed before document submission.',
+    'Note: System generated receipt. This receipt is issued in favor of the applicant(s) named above for the booking payment recorded in the portal.',
   );
 }
 
@@ -707,8 +746,8 @@ async function renderReadableApplicationPacket(
   renderPaymentPlanPage(ctx, formData);
   renderForm60Page(ctx, formData);
   renderChecklistPage(ctx, formData);
-  renderPaymentInformationPage(ctx, paymentInfo);
   await appendIdentityAttachmentPages(ctx, identityAttachments);
+  renderPaymentReceiptPage(ctx, formData, paymentInfo);
 }
 
 async function embedPhotoOrNull(pdfDoc: PDFDocument, source: string | null | undefined): Promise<PDFImage | null> {
@@ -765,6 +804,36 @@ export async function generateApplicationPdf({
   return new Blob([buffer], { type: 'application/pdf' });
 }
 
+export async function generatePaymentReceiptPdf({ formData, paymentInfo }: GeneratePaymentReceiptPdfInput): Promise<Blob> {
+  if (!formData.projectId) {
+    throw new Error('Select the project before downloading the payment receipt.');
+  }
+  if (paymentInfo.status !== 'paid') {
+    throw new Error('Complete payment before downloading the receipt.');
+  }
+  const project = getApplicationProject(requireProjectId(formData.projectId));
+  const pdfDoc = await PDFDocument.create();
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const ctx: PdfContext = {
+    pdfDoc,
+    font,
+    bold,
+    applicantSignature: null,
+    coApplicantSignature: null,
+    applicantPhoto: null,
+    coApplicantPhoto: null,
+    pageNumber: 0,
+    project,
+  };
+
+  renderPaymentReceiptPage(ctx, formData, paymentInfo);
+
+  const bytes = await pdfDoc.save();
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  return new Blob([buffer], { type: 'application/pdf' });
+}
+
 export function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -787,6 +856,17 @@ function dataUrlToBlob(dataUrl: string): Blob {
 export function openPdfBlob(blob: Blob) {
   const url = URL.createObjectURL(blob);
   window.open(url, '_blank', 'noopener');
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+export function downloadPdfBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.append(link);
+  link.click();
+  link.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 

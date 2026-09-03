@@ -177,6 +177,9 @@ export function useChatSession() {
   const { deviceClass } = useIsMobile();
   const initStarted = useRef(false);
   const initInFlight = useRef(false);
+  // Bumped by resetSession() so a still-pending initSession() from before the
+  // reset can't write its now-stale session id back into storage/state.
+  const initEpochRef = useRef(0);
   const retriedSinceOpenRef = useRef(false);
 
   const runInit = useCallback(() => {
@@ -189,6 +192,7 @@ export function useChatSession() {
     }
 
     initInFlight.current = true;
+    const epoch = initEpochRef.current;
     dispatch({ type: 'SESSION_INIT_START' });
     const url = new URL(window.location.href);
     chatApi
@@ -198,13 +202,17 @@ export function useChatSession() {
         device_type: deviceClass,
       })
       .then((res) => {
+        if (epoch !== initEpochRef.current) return; // a resetSession() superseded this init
         writeSessionStorage(SESSION_STORAGE_KEY, res.sessionId);
         if (res.leadId) writeSessionStorage(LEAD_STORAGE_KEY, res.leadId);
         dispatch({ type: 'SESSION_READY', sessionId: res.sessionId, leadId: res.leadId });
       })
-      .catch(() => dispatch({ type: 'SESSION_INIT_FAILED' }))
+      .catch(() => {
+        if (epoch !== initEpochRef.current) return;
+        dispatch({ type: 'SESSION_INIT_FAILED' });
+      })
       .finally(() => {
-        initInFlight.current = false;
+        if (epoch === initEpochRef.current) initInFlight.current = false;
       });
   }, [deviceClass]);
 
@@ -244,6 +252,10 @@ export function useChatSession() {
     } catch {
       /* private-browsing / storage-disabled */
     }
+    // Invalidate any in-flight init and release the guard so the fresh runInit()
+    // below can start immediately instead of being skipped as a duplicate.
+    initEpochRef.current += 1;
+    initInFlight.current = false;
     dispatch({ type: 'SESSION_RESET' });
     initStarted.current = true;
     runInit();

@@ -21,6 +21,7 @@ export interface CreateVisitInput {
 }
 
 function messageForVisitsError(status: number, detail: unknown): string {
+  if (status === 0) return 'Could not reach the server. Check your connection and try again.';
   if (status === 401) {
     return detail === 'token_expired'
       ? 'Your session has expired. Please sign in again.'

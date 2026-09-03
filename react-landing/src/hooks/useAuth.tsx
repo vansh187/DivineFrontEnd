@@ -49,9 +49,15 @@ function readProfileNames(): Record<string, ProfileNameRecord> {
 
 function rememberProfileName(email: string, firstName: string | null, lastName: string | null) {
   if (!firstName && !lastName) return;
-  const all = readProfileNames();
-  all[profileNameKey(email)] = { firstName, lastName };
-  localStorage.setItem(PROFILE_NAMES_KEY, JSON.stringify(all));
+  try {
+    const all = readProfileNames();
+    all[profileNameKey(email)] = { firstName, lastName };
+    localStorage.setItem(PROFILE_NAMES_KEY, JSON.stringify(all));
+  } catch {
+    // private-browsing / storage-disabled / quota exceeded - login just falls
+    // back to the role-based display name. Never let a caching failure break
+    // signup(), whose account was already created server-side.
+  }
 }
 
 function lookupProfileName(email: string): ProfileNameRecord {
@@ -95,8 +101,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const persist = useCallback((next: AuthSession | null) => {
     setSession(next);
-    if (next) localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    else localStorage.removeItem(STORAGE_KEY);
+    try {
+      if (next) localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      else localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // private-browsing / storage-disabled / quota exceeded - the session still
+      // lives in React state for this tab; it just won't survive a reload.
+    }
   }, []);
 
   const login = useCallback(

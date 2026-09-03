@@ -9,7 +9,7 @@ import { applicationProjects } from '../data/applicationProjects';
 import type { InventoryUnit } from '../services/inventoryApi';
 import { uploadGeneratedApplicationPdf } from '../services/documentsApi';
 import { ApiError } from '../services/authApi';
-import { blobToDataUrl, generateApplicationPdf, openDataUrl, openPdfBlob } from '../services/applicationPdf';
+import { blobToDataUrl, downloadPdfBlob, generateApplicationPdf, generatePaymentReceiptPdf, openDataUrl, openPdfBlob } from '../services/applicationPdf';
 import { createPaymentOrder, recordCashPayment, verifyPayment } from '../services/paymentsApi';
 import { openRazorpayCheckout } from '../services/razorpayCheckout';
 import { amountToIndianWords } from '../utils/currency';
@@ -22,9 +22,17 @@ function parseAmount(value: string): number {
 
 type FieldName = keyof BookingApplicationFormData;
 
-function serializeFormData(formData: BookingApplicationFormData): Record<string, string | number> {
+function serializeFormData(
+  formData: BookingApplicationFormData,
+  includeCoApplicant: boolean,
+): Record<string, string | number> {
   return Object.fromEntries(
-    Object.entries(formData).map(([key, value]) => [key, typeof value === 'boolean' ? (value ? 'Yes' : 'No') : value]),
+    Object.entries(formData)
+      // Don't ship co-applicant PII (name/PAN/Aadhaar/addresses) to the backend
+      // when the booking has no co-applicant - those fields share the form but
+      // aren't part of this application.
+      .filter(([key]) => includeCoApplicant || !key.startsWith('coApplicant'))
+      .map(([key, value]) => [key, typeof value === 'boolean' ? (value ? 'Yes' : 'No') : value]),
   );
 }
 
@@ -91,6 +99,7 @@ function SelectField({
 }
 
 const GENDER_OPTIONS = ['Male', 'Female', 'Prefer not to say'];
+const RESIDENTIAL_STATUS_OPTIONS = ['Resident', 'Non Resident', 'Person of Indian Origin', 'Foreign National'];
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -265,6 +274,7 @@ export function CustomerApplicationPage() {
   const [cashAmountInput, setCashAmountInput] = useState('');
   const [paying, setPaying] = useState(false);
   const [payingCash, setPayingCash] = useState(false);
+  const [downloadingReceipt, setDownloadingReceipt] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
 
   const persist = (next: CustomerDocState) => {
@@ -467,6 +477,28 @@ export function CustomerApplicationPage() {
     }
   };
 
+  const handleDownloadPaymentReceipt = async () => {
+    if (docs.payment.status !== 'paid') {
+      setPaymentError('Complete payment before downloading the receipt.');
+      return;
+    }
+    setDownloadingReceipt(true);
+    setPaymentError(null);
+    try {
+      const blob = await generatePaymentReceiptPdf({
+        formData: docs.bookingApplication.formData,
+        paymentInfo: docs.payment,
+      });
+      const projectId = docs.bookingApplication.formData.projectId || 'project';
+      const paymentId = docs.payment.paymentId || Date.now();
+      downloadPdfBlob(blob, `${projectId}-payment-receipt-${paymentId}.pdf`);
+    } catch (err) {
+      setPaymentError(err instanceof Error ? err.message : 'Could not download the payment receipt.');
+    } finally {
+      setDownloadingReceipt(false);
+    }
+  };
+
   const handleGenerate = async () => {
     const applicantSignature = docs.applicantSignature.dataUrl;
     // Whether a co-applicant exists is set via the checkbox on the PAN card & signatures
@@ -584,7 +616,7 @@ export function CustomerApplicationPage() {
           paymentId: docs.payment.paymentId,
           razorpayOrderId: docs.payment.razorpayOrderId,
           razorpayPaymentId: docs.payment.razorpayPaymentId,
-          formData: serializeFormData(docs.bookingApplication.formData),
+          formData: serializeFormData(docs.bookingApplication.formData, hasCoApplicant),
         });
         persist({
           ...docs,
@@ -618,7 +650,13 @@ export function CustomerApplicationPage() {
   };
 
   const form = docs.bookingApplication.formData;
-  const paymentComplete = docs.payment.status === 'paid';
+  // A payment is only "complete" for this flow once it carries a paymentId — the
+  // backend needs that reference to attach the generated PDF. A record marked
+  // paid but without an id (e.g. paid under an older build before the field
+  // existed) is treated as still pending so the payment controls stay available
+  // and the customer has a way to record it again rather than hitting a dead end.
+  const paymentComplete = docs.payment.status === 'paid' && !!docs.payment.paymentId;
+  const paymentNeedsReference = docs.payment.status === 'paid' && !docs.payment.paymentId;
   const selectedProject = applicationProjects.find((project) => project.id === form.projectId);
   const pageLabels = [
     'Project',
@@ -726,9 +764,44 @@ export function CustomerApplicationPage() {
           <Field label="Email ID" type="email" value={form.email} onChange={(value) => updateForm('email', value)} />
           <Field label="Mobile no." value={form.mobile} onChange={(value) => updateForm('mobile', value)} />
           <Field label="Residence phone" value={form.phone} onChange={(value) => updateForm('phone', value)} />
-          <Field label="Residential status" value={form.residentialStatus} onChange={(value) => updateForm('residentialStatus', value)} />
-          <Field label="Permanent address" value={form.permanentAddress} onChange={(value) => updateForm('permanentAddress', value)} multiline />
-          <Field label="Correspondence address" value={form.correspondenceAddress} onChange={(value) => updateForm('correspondenceAddress', value)} multiline />
+          <SelectField
+            label="Residential status"
+            value={form.residentialStatus}
+            onChange={(value) => updateForm('residentialStatus', value)}
+            options={RESIDENTIAL_STATUS_OPTIONS}
+            placeholder="Select residential status"
+          />
+          <Field
+            label="Permanent address"
+            value={form.permanentAddress}
+            onChange={(value) =>
+              applyFormUpdates(
+                form.correspondenceSameAsPermanent
+                  ? { permanentAddress: value, correspondenceAddress: value }
+                  : { permanentAddress: value },
+              )
+            }
+            multiline
+          />
+          <CheckboxField
+            label="Correspondence address is the same as permanent address"
+            checked={form.correspondenceSameAsPermanent}
+            onChange={(checked) =>
+              applyFormUpdates(
+                checked
+                  ? { correspondenceSameAsPermanent: true, correspondenceAddress: form.permanentAddress }
+                  : { correspondenceSameAsPermanent: false },
+              )
+            }
+          />
+          {!form.correspondenceSameAsPermanent && (
+            <Field
+              label="Correspondence address"
+              value={form.correspondenceAddress}
+              onChange={(value) => updateForm('correspondenceAddress', value)}
+              multiline
+            />
+          )}
         </Section>
 
         <Section title="Co-applicant details">
@@ -744,32 +817,47 @@ export function CustomerApplicationPage() {
           <Field label="Phone no. (residence)" value={form.coApplicantPhone} onChange={(value) => updateForm('coApplicantPhone', value)} />
           <Field label="Mobile no." value={form.coApplicantMobile} onChange={(value) => updateForm('coApplicantMobile', value)} />
           <Field label="Email ID" type="email" value={form.coApplicantEmail} onChange={(value) => updateForm('coApplicantEmail', value)} />
-          <label className="block">
-            <span className="text-xs font-semibold text-ink">Residential status</span>
-            <select
-              value={form.coApplicantResidentialStatus}
-              onChange={(event) => updateForm('coApplicantResidentialStatus', event.target.value)}
-              className="mt-1 w-full rounded-lg border border-hairline bg-bg px-3 py-2.5 text-sm text-ink outline-none focus:border-green"
-            >
-              <option value="">Select residential status</option>
-              <option value="Resident">Resident</option>
-              <option value="Non Resident">Non Resident</option>
-              <option value="Person of Indian Origin">Person of Indian Origin</option>
-              <option value="Foreign National">Foreign National</option>
-            </select>
-          </label>
+          <SelectField
+            label="Residential status"
+            value={form.coApplicantResidentialStatus}
+            onChange={(value) => updateForm('coApplicantResidentialStatus', value)}
+            options={RESIDENTIAL_STATUS_OPTIONS}
+            placeholder="Select residential status"
+          />
           <Field
             label="Permanent address"
             value={form.coApplicantPermanentAddress}
-            onChange={(value) => updateForm('coApplicantPermanentAddress', value)}
+            onChange={(value) =>
+              applyFormUpdates(
+                form.coApplicantCorrespondenceSameAsPermanent
+                  ? { coApplicantPermanentAddress: value, coApplicantCorrespondenceAddress: value }
+                  : { coApplicantPermanentAddress: value },
+              )
+            }
             multiline
           />
-          <Field
-            label="Correspondence address"
-            value={form.coApplicantCorrespondenceAddress}
-            onChange={(value) => updateForm('coApplicantCorrespondenceAddress', value)}
-            multiline
+          <CheckboxField
+            label="Correspondence address is the same as permanent address"
+            checked={form.coApplicantCorrespondenceSameAsPermanent}
+            onChange={(checked) =>
+              applyFormUpdates(
+                checked
+                  ? {
+                      coApplicantCorrespondenceSameAsPermanent: true,
+                      coApplicantCorrespondenceAddress: form.coApplicantPermanentAddress,
+                    }
+                  : { coApplicantCorrespondenceSameAsPermanent: false },
+              )
+            }
           />
+          {!form.coApplicantCorrespondenceSameAsPermanent && (
+            <Field
+              label="Correspondence address"
+              value={form.coApplicantCorrespondenceAddress}
+              onChange={(value) => updateForm('coApplicantCorrespondenceAddress', value)}
+              multiline
+            />
+          )}
           <SignatureUpload
             label="Co-applicant signature image"
             status={docs.coApplicantSignature}
@@ -923,7 +1011,8 @@ export function CustomerApplicationPage() {
         <Section title="Terms and conditions">
           <LegalNote>
             <p className="font-semibold text-ink">TERMS & CONDITIONS:</p>
-            <ol className="mt-3 list-decimal space-y-2 pl-5">
+            <p className="mt-1 text-xs text-ink-muted">Scroll within the box below to review all {termsAndConditions.length} terms.</p>
+            <ol className="mt-3 max-h-72 space-y-2 overflow-y-auto rounded-lg border border-hairline bg-surface p-4 pl-8 list-decimal">
               {termsAndConditions.map((term) => (
                 <li key={term}>{term}</li>
               ))}
@@ -1069,8 +1158,15 @@ export function CustomerApplicationPage() {
                 {docs.payment.paidAt ? ` on ${new Date(docs.payment.paidAt).toLocaleDateString('en-IN')}` : ''}.
               </p>
             ) : (
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <div className="rounded-lg border border-hairline bg-surface p-4">
+              <div className="mt-4">
+                {paymentNeedsReference && (
+                  <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                    A booking payment is already recorded, but without a payment reference it can't be attached to the
+                    application PDF. Please make or record the payment again below to get a valid reference.
+                  </p>
+                )}
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="rounded-lg border border-hairline bg-surface p-4">
                   <p className="text-xs font-semibold text-ink">Online payment</p>
                   <input
                     type="number"
@@ -1110,6 +1206,7 @@ export function CustomerApplicationPage() {
                     {payingCash ? 'Recording...' : 'Record Cash Payment'}
                   </button>
                 </div>
+                </div>
               </div>
             )}
             {(paymentError || docs.payment.error) && (
@@ -1132,6 +1229,16 @@ export function CustomerApplicationPage() {
             >
               {generating ? 'Generating...' : 'Generate application PDF'}
             </button>
+            {paymentComplete && (
+              <button
+                type="button"
+                onClick={handleDownloadPaymentReceipt}
+                disabled={downloadingReceipt}
+                className="ml-3 rounded-full border border-hairline px-5 py-3 text-sm font-semibold text-ink transition-colors hover:border-green hover:text-green disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {downloadingReceipt ? 'Downloading...' : 'Download payment receipt'}
+              </button>
+            )}
             {docs.bookingApplication.pdfDataUrl && (
               <button
                 type="button"

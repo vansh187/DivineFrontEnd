@@ -19,9 +19,17 @@ export function loadPendingUnit(email: string): InventoryUnit | null {
 }
 
 export function savePendingUnit(email: string, unit: InventoryUnit) {
-  localStorage.setItem(storageKey(email), JSON.stringify(unit));
+  try {
+    localStorage.setItem(storageKey(email), JSON.stringify(unit));
+  } catch {
+    /* private-browsing / storage-disabled / quota exceeded */
+  }
 }
 
 export function clearPendingUnit(email: string) {
-  localStorage.removeItem(storageKey(email));
+  try {
+    localStorage.removeItem(storageKey(email));
+  } catch {
+    /* private-browsing / storage-disabled */
+  }
 }
