@@ -54,9 +54,7 @@ interface PageCursor {
 
 const pageSize: [number, number] = [595.28, 841.89];
 const marginX = 48;
-const topY = 792;
-const contentBottomY = 128;
-const signatureTopY = 102;
+const contentBottomY = 118;
 const contentWidth = pageSize[0] - marginX * 2;
 const labelColumnWidth = 150;
 const navy = rgb(0.024, 0.122, 0.176);
@@ -221,20 +219,44 @@ function drawCenteredText(
   page.drawText(text, { x: centerX - font.widthOfTextAtSize(text, size) / 2, y, size, font, color, opacity });
 }
 
-function receiptNumber(project: ApplicationProject, paymentInfo: PaymentStatus | null | undefined): string {
-  const code = project.id === 'ops-divine-greens' ? 'OPS' : 'SE';
-  const raw = paymentInfo?.paymentId || paymentInfo?.razorpayPaymentId || paymentInfo?.razorpayOrderId || '';
-  const tail = raw.replace(/[^A-Za-z0-9]/g, '').slice(-8).toUpperCase();
-  return `RCPT/${code}/${tail || String(Date.now()).slice(-8)}`;
+const PROJECT_MONOGRAM: Partial<Record<ApplicationProjectId, string>> = {
+  'ops-divine-greens': 'OPS',
+  'suraksha-enclave': 'SE',
+};
+
+function projectMonogram(project: ApplicationProject): string {
+  return (
+    PROJECT_MONOGRAM[project.id] ??
+    project.label
+      .split(/\s+/)
+      .map((word) => word[0]?.toUpperCase() ?? '')
+      .join('')
+      .slice(0, 3)
+  );
 }
 
-/** Blocky signage-style monogram tile — filled square + inset keyline + "OPS"
- * reversed out, matching the brand's grid-based, solid icon direction. */
-function drawOpsEmblem(page: PDFPage, x: number, y: number, size: number, ctx: PdfContext) {
+/** Splits the project label into a lead + final word so the final word can be
+ * set in the foliage tone, e.g. "OPS DIVINE " + "GREENS". */
+function projectWordmark(project: ApplicationProject): { head: string; tail: string } {
+  const parts = project.label.toUpperCase().trim().split(/\s+/);
+  const tail = parts.pop() ?? project.label.toUpperCase();
+  return { head: parts.length ? `${parts.join(' ')} ` : '', tail };
+}
+
+function receiptNumber(project: ApplicationProject, paymentInfo: PaymentStatus | null | undefined): string {
+  const raw = paymentInfo?.paymentId || paymentInfo?.razorpayPaymentId || paymentInfo?.razorpayOrderId || '';
+  const tail = raw.replace(/[^A-Za-z0-9]/g, '').slice(-8).toUpperCase();
+  return `RCPT/${projectMonogram(project)}/${tail || String(Date.now()).slice(-8)}`;
+}
+
+/** Blocky signage-style monogram tile — filled square + inset keyline + project
+ * monogram reversed out, matching the brand's grid-based, solid icon direction. */
+function drawBrandEmblem(page: PDFPage, x: number, y: number, size: number, ctx: PdfContext) {
+  const mark = projectMonogram(ctx.project);
   page.drawRectangle({ x, y, width: size, height: size, color: divineGreen });
-  page.drawRectangle({ x: x + 5, y: y + 5, width: size - 10, height: size - 10, borderColor: receiptAccent, borderWidth: 0.9 });
-  drawCenteredText(page, 'OPS', x + size / 2, y + size / 2 - size * 0.12, size * 0.32, ctx.bold, rgb(1, 1, 1));
-  page.drawRectangle({ x: x + size / 2 - 9, y: y + size * 0.26, width: 18, height: 2.2, color: receiptAccent });
+  page.drawRectangle({ x: x + size * 0.1, y: y + size * 0.1, width: size * 0.8, height: size * 0.8, borderColor: receiptAccent, borderWidth: size > 32 ? 0.9 : 0.6 });
+  drawCenteredText(page, mark, x + size / 2, y + size / 2 - size * 0.12, size * (mark.length > 2 ? 0.3 : 0.36), ctx.bold, rgb(1, 1, 1));
+  page.drawRectangle({ x: x + size / 2 - size * 0.18, y: y + size * 0.26, width: size * 0.36, height: Math.max(1.4, size * 0.045), color: receiptAccent });
 }
 
 function dataUrlToBytes(dataUrl: string): Uint8Array {
@@ -367,12 +389,13 @@ async function appendIdentityAttachmentPages(ctx: PdfContext, attachments: Ident
     if (!source) continue;
     const page = ctx.pdfDoc.addPage(pageSize);
     ctx.pageNumber += 1;
+    drawPageFrame(ctx, page);
     drawPageHeader(ctx, page, 'Attached Identity Document', attachment.title);
-    if (attachment.fileName) page.drawText(attachment.fileName, { x: marginX, y: topY - 58, size: 8, font: ctx.font, color: muted });
-    page.drawRectangle({ x: marginX, y: 128, width: contentWidth, height: 560, borderColor: hairline, borderWidth: 1 });
+    if (attachment.fileName) page.drawText(attachment.fileName, { x: marginX, y: 718, size: 8, font: ctx.font, color: muted });
+    page.drawRectangle({ x: marginX, y: 128, width: contentWidth, height: 574, borderColor: hairline, borderWidth: 1 });
     try {
       const image = await embedImageFromSource(ctx.pdfDoc, source);
-      drawTemplateImage(page, image, marginX + 18, 148, contentWidth - 36, 520);
+      drawTemplateImage(page, image, marginX + 18, 146, contentWidth - 36, 538);
     } catch {
       page.drawText('Could not embed this uploaded image. Please re-upload the document and generate again.', {
         x: marginX + 18,
@@ -404,49 +427,85 @@ async function appendTemplateCoverPage(ctx: PdfContext) {
   }
 }
 
+/** Decorative double frame + corner blocks + faint monogram watermark — drawn
+ * first on every packet page so all content sits inside the border. */
+function drawPageFrame(ctx: PdfContext, page: PDFPage) {
+  const { width, height } = page.getSize();
+  page.drawRectangle({ x: 22, y: 22, width: width - 44, height: height - 44, borderColor: divineGreen, borderWidth: 1.3 });
+  page.drawRectangle({ x: 26, y: 26, width: width - 52, height: height - 52, borderColor: receiptAccent, borderWidth: 0.5 });
+  ([[26, 26], [width - 32, 26], [26, height - 32], [width - 32, height - 32]] as Array<[number, number]>).forEach(([bx, by]) => {
+    page.drawRectangle({ x: bx, y: by, width: 6, height: 6, color: divineGreen });
+  });
+  drawCenteredText(page, projectMonogram(ctx.project), width / 2, height / 2 - 30, 150, ctx.bold, divineGreen, 0.04);
+}
+
 function drawFooterSignatures(ctx: PdfContext, page: PDFPage) {
   const { width } = page.getSize();
-  const sigWidth = 108;
-  const sigHeight = sigWidth / 3.25;
-  page.drawRectangle({ x: 0, y: 0, width, height: 22, color: divineGreen });
-  page.drawLine({ start: { x: marginX, y: signatureTopY }, end: { x: width - marginX, y: signatureTopY }, thickness: 0.8, color: hairline });
+  const co = RECEIPT_COMPANY[ctx.project.id] ?? RECEIPT_COMPANY['ops-divine-greens'];
+  const sigWidth = 104;
+  const sigHeight = sigWidth / 3.4;
+  page.drawLine({ start: { x: marginX, y: 100 }, end: { x: width - marginX, y: 100 }, thickness: 0.7, color: hairline });
   if (ctx.applicantSignature) {
-    page.drawImage(ctx.applicantSignature, { x: width - sigWidth - marginX, y: 52, width: sigWidth, height: sigHeight, opacity: 0.92 });
-    page.drawText('Applicant Signature', { x: width - sigWidth - marginX, y: 38, size: 7.5, font: ctx.bold, color: ink });
+    page.drawImage(ctx.applicantSignature, { x: width - sigWidth - marginX, y: 60, width: sigWidth, height: sigHeight, opacity: 0.9 });
   }
+  page.drawText('Applicant Signature', { x: width - sigWidth - marginX, y: 50, size: 7, font: ctx.bold, color: ink });
   if (ctx.coApplicantSignature) {
-    page.drawImage(ctx.coApplicantSignature, { x: marginX, y: 52, width: sigWidth, height: sigHeight, opacity: 0.92 });
-    page.drawText('Co-applicant Signature', { x: marginX, y: 38, size: 7.5, font: ctx.bold, color: ink });
+    page.drawImage(ctx.coApplicantSignature, { x: marginX, y: 60, width: sigWidth, height: sigHeight, opacity: 0.9 });
   }
-  page.drawText(`Page ${ctx.pageNumber}`, { x: width / 2 - 18, y: 7, size: 7.5, font: ctx.font, color: rgb(1, 1, 1) });
+  page.drawText('Co-applicant Signature', { x: marginX, y: 50, size: 7, font: ctx.bold, color: ink });
+  page.drawRectangle({ x: 26, y: 26, width: width - 52, height: 16, color: divineGreen });
+  drawCenteredText(
+    page,
+    `${ctx.project.label.toUpperCase()}     •     ${co.addressInline}     •     Page ${ctx.pageNumber}`,
+    width / 2,
+    31,
+    6.4,
+    ctx.font,
+    rgb(1, 1, 1),
+  );
 }
 
 function drawPageHeader(ctx: PdfContext, page: PDFPage, title: string, subtitle?: string) {
   const { width } = page.getSize();
-  page.drawRectangle({ x: 0, y: topY + 14, width, height: 36, color: divineGreen });
-  page.drawText(ctx.project.label.toUpperCase(), { x: marginX, y: topY + 29, size: 12, font: ctx.bold, color: rgb(1, 1, 1) });
-  drawTextRight(page, ctx.project.company, width - marginX, topY + 30, 7.5, ctx.font, rgb(1, 1, 1));
-  page.drawText(title.toUpperCase(), { x: marginX, y: topY - 9, size: 15.5, font: ctx.bold, color: divineGreen });
+  const co = RECEIPT_COMPANY[ctx.project.id] ?? RECEIPT_COMPANY['ops-divine-greens'];
+  const cRight = width - marginX;
+  const wm = projectWordmark(ctx.project);
+
+  drawBrandEmblem(page, marginX, 786, 24, ctx);
+  const wx = marginX + 34;
+  page.drawText(wm.head, { x: wx, y: 796, size: 12.5, font: ctx.bold, color: divineGreen });
+  page.drawText(wm.tail, { x: wx + ctx.bold.widthOfTextAtSize(wm.head, 12.5), y: 796, size: 12.5, font: ctx.bold, color: receiptFoliage });
+  page.drawText(co.tagline.toUpperCase(), { x: wx, y: 786, size: 5.6, font: ctx.font, color: muted });
+  drawTextRight(page, co.entity, cRight, 799, 8, ctx.bold, ink);
+  drawTextRight(page, co.addressInline, cRight, 789, 6.8, ctx.font, muted);
+
+  page.drawLine({ start: { x: marginX, y: 778 }, end: { x: cRight, y: 778 }, thickness: 1.2, color: divineGreen });
+  page.drawLine({ start: { x: marginX, y: 775 }, end: { x: cRight, y: 775 }, thickness: 0.5, color: receiptAccent });
+
+  page.drawText(title.toUpperCase(), { x: marginX, y: 756, size: 13.5, font: ctx.bold, color: divineGreen });
+  page.drawRectangle({ x: marginX, y: 749, width: 26, height: 2.4, color: receiptAccent });
   if (subtitle) {
-    const subtitleLines = wrapTextToWidth(ctx.font, subtitle, 8.5, contentWidth).slice(0, 2);
-    subtitleLines.forEach((line, index) => {
-      page.drawText(line, { x: marginX, y: topY - 28 - index * 10, size: 8.5, font: ctx.font, color: muted });
+    wrapTextToWidth(ctx.font, subtitle, 8.5, contentWidth).slice(0, 2).forEach((line, index) => {
+      page.drawText(line, { x: marginX, y: 739 - index * 10, size: 8.5, font: ctx.font, color: muted });
     });
   }
-  page.drawLine({ start: { x: marginX, y: topY - 45 }, end: { x: width - marginX, y: topY - 45 }, thickness: 1, color: hairline });
 }
 
 function addPage(ctx: PdfContext, title: string, subtitle?: string, options?: { signatures?: boolean }): PageCursor {
   ctx.pageNumber += 1;
   const page = ctx.pdfDoc.addPage(pageSize);
+  drawPageFrame(ctx, page);
   drawPageHeader(ctx, page, title, subtitle);
   if (options?.signatures !== false) drawFooterSignatures(ctx, page);
-  return { page, y: topY - 74, title };
+  return { page, y: subtitle ? 716 : 730, title };
 }
 
 function ensureSpace(ctx: PdfContext, cursor: PageCursor, needed: number): PageCursor {
   if (cursor.y - needed >= contentBottomY) return cursor;
-  return addPage(ctx, `${cursor.title} (continued)`);
+  // Strip any existing continuation suffix so overflow across several pages
+  // stays "… (cont.)" rather than "… (continued) (continued) (conti…".
+  const base = cursor.title.replace(/\s*\(cont\.\)$/i, '');
+  return addPage(ctx, `${base} (cont.)`);
 }
 
 function drawParagraph(
@@ -461,11 +520,14 @@ function drawParagraph(
   const textWidth = contentWidth - bulletWidth;
   const lines = wrapTextToWidth(ctx.font, text, size, textWidth);
   const height = lines.length * lineHeight + (options?.bottomGap ?? 8);
-  let next = ensureSpace(ctx, cursor, height);
+  const next = ensureSpace(ctx, cursor, height);
   const textX = marginX + bulletWidth;
-  if (options?.bullet) next.page.drawText(options.bullet, { x: marginX, y: next.y, size, font: ctx.bold, color: divineGreen });
+  // cursor.y is the top of the text block; the first baseline sits one glyph
+  // height below it so nothing rides up into whatever was drawn above.
+  const firstBaseline = next.y - size;
+  if (options?.bullet) next.page.drawText(options.bullet, { x: marginX, y: firstBaseline, size, font: ctx.bold, color: receiptAccent });
   lines.forEach((line, index) => {
-    next.page.drawText(line, { x: textX, y: next.y - index * lineHeight, size, font: ctx.font, color: ink });
+    next.page.drawText(line, { x: textX, y: firstBaseline - index * lineHeight, size, font: ctx.font, color: ink });
   });
   next.y -= height;
   return next;
@@ -479,38 +541,45 @@ function drawRows(ctx: PdfContext, cursor: PageCursor, rows: Array<[string, stri
     const valueX = marginX + labelColumnWidth + 16;
     const valueWidth = contentWidth - labelColumnWidth - 28;
     const lines = wrapTextToWidth(ctx.font, value, valueSize, valueWidth);
-    const height = Math.max(34, lines.length * lineHeight + 18);
-    next = ensureSpace(ctx, next, height);
+    const rowH = Math.max(30, lines.length * lineHeight + 16);
+    next = ensureSpace(ctx, next, rowH + 4);
+    const top = next.y;
+    const bottom = next.y - rowH;
     next.page.drawRectangle({
       x: marginX,
-      y: next.y - height + 7,
+      y: bottom,
       width: contentWidth,
-      height: height - 3,
+      height: rowH,
       color: index % 2 === 0 ? tableTint : paleGreen,
       borderColor: hairline,
-      borderWidth: 0.6,
+      borderWidth: 0.5,
     });
+    // accent edge on the label cell + divider between label and value
+    next.page.drawRectangle({ x: marginX, y: bottom, width: 2.4, height: rowH, color: receiptAccent });
     next.page.drawLine({
-      start: { x: marginX + labelColumnWidth, y: next.y - height + 7 },
-      end: { x: marginX + labelColumnWidth, y: next.y + 4 },
+      start: { x: marginX + labelColumnWidth, y: bottom },
+      end: { x: marginX + labelColumnWidth, y: top },
       thickness: 0.5,
       color: hairline,
     });
-    wrapTextToWidth(ctx.bold, label.toUpperCase(), 7.2, labelColumnWidth - 18).slice(0, 2).forEach((line, lineIndex) => {
-      next.page.drawText(line, { x: marginX + 10, y: next.y - 7 - lineIndex * 9, size: 7.2, font: ctx.bold, color: divineGreen });
+    wrapTextToWidth(ctx.bold, label.toUpperCase(), 7, labelColumnWidth - 22).slice(0, 2).forEach((line, lineIndex) => {
+      next.page.drawText(line, { x: marginX + 12, y: top - 13 - lineIndex * 9, size: 7, font: ctx.bold, color: divineGreen });
     });
-    lines.forEach((line, index) => {
-      next.page.drawText(line, { x: valueX, y: next.y - 8 - index * lineHeight, size: valueSize, font: ctx.font, color: ink });
+    lines.forEach((line, i) => {
+      next.page.drawText(line, { x: valueX, y: top - 14 - i * lineHeight, size: valueSize, font: ctx.font, color: ink });
     });
-    next.y -= height;
+    next.y = bottom;
   });
+  next.y -= 10;
   return next;
 }
 
 function drawSectionLabel(ctx: PdfContext, cursor: PageCursor, label: string, options?: { yOffset?: number }): PageCursor {
-  const next = ensureSpace(ctx, cursor, 26);
-  next.page.drawText(label.toUpperCase(), { x: marginX, y: next.y + (options?.yOffset ?? 0), size: 10, font: ctx.bold, color: navy });
-  next.y -= 20;
+  const next = ensureSpace(ctx, cursor, 32);
+  const yOffset = options?.yOffset ?? 0;
+  next.page.drawText(label.toUpperCase(), { x: marginX, y: next.y - 10 + yOffset, size: 10, font: ctx.bold, color: navy });
+  next.page.drawRectangle({ x: marginX, y: next.y - 18 + yOffset, width: 22, height: 2.2, color: receiptAccent });
+  next.y -= 30;
   return next;
 }
 
@@ -571,8 +640,8 @@ function drawPhotoBox(cursor: PageCursor, ctx: PdfContext, photo: PDFImage | nul
   } else {
     cursor.page.drawText('No photo', { x: x + 10, y: y + PHOTO_BOX_HEIGHT / 2, size: 8, font: ctx.font, color: muted });
   }
-  cursor.page.drawText(label.toUpperCase(), { x, y: y - 11, size: 7, font: ctx.bold, color: divineGreen });
-  return { ...cursor, y: y - 18 };
+  cursor.page.drawText(label.toUpperCase(), { x, y: y - 12, size: 7, font: ctx.bold, color: divineGreen });
+  return { ...cursor, y: y - 26 };
 }
 
 function renderApplicantPage(ctx: PdfContext, formData: BookingApplicationFormData) {
@@ -770,15 +839,16 @@ function renderPaymentReceiptPage(ctx: PdfContext, formData: BookingApplicationF
   });
 
   // ---- Watermark emblem --------------------------------------------------
-  drawCenteredText(page, 'OPS', width / 2, height / 2 - 30, 150, ctx.bold, divineGreen, 0.045);
+  drawCenteredText(page, projectMonogram(ctx.project), width / 2, height / 2 - 30, 150, ctx.bold, divineGreen, 0.045);
 
   // ---- Letterhead ------------------------------------------------------
   let y = height - 74;
-  drawOpsEmblem(page, cx, y - 44, 52, ctx);
+  drawBrandEmblem(page, cx, y - 44, 52, ctx);
   const wmX = cx + 66;
-  page.drawText('OPS DIVINE ', { x: wmX, y: y - 6, size: 19, font: ctx.bold, color: divineGreen });
-  page.drawText('GREENS', {
-    x: wmX + ctx.bold.widthOfTextAtSize('OPS DIVINE ', 19),
+  const wm = projectWordmark(ctx.project);
+  page.drawText(wm.head, { x: wmX, y: y - 6, size: 19, font: ctx.bold, color: divineGreen });
+  page.drawText(wm.tail, {
+    x: wmX + ctx.bold.widthOfTextAtSize(wm.head, 19),
     y: y - 6,
     size: 19,
     font: ctx.bold,
@@ -892,7 +962,7 @@ function renderPaymentReceiptPage(ctx: PdfContext, formData: BookingApplicationF
   page.drawLine({ start: { x: width / 2 + 12, y }, end: { x: width / 2 + flourishHalf, y }, thickness: 0.6, color: hairline });
   page.drawEllipse({ x: width / 2, y: y + 1, xScale: 2.4, yScale: 2.4, color: receiptAccent });
   drawCenteredText(page, 'THANK YOU FOR YOUR BOOKING', width / 2, y - 22, 8.5, ctx.bold, divineGreen);
-  drawCenteredText(page, 'We look forward to welcoming you to OPS Divine Greens.', width / 2, y - 34, 7.5, ctx.font, muted);
+  drawCenteredText(page, `We look forward to welcoming you to ${ctx.project.label}.`, width / 2, y - 34, 7.5, ctx.font, muted);
 
   // ---- Statutory line + footer band --------------------------
   const statutory = [co.gstin ? `GSTIN ${co.gstin}` : null, co.state ? `State ${co.state} (${co.stateCode})` : null, co.cin ? `CIN ${co.cin}` : null]
