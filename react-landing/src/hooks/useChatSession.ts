@@ -38,6 +38,10 @@ type ChatAction =
   | { type: 'SESSION_RESET' }
   | { type: 'SEND_START'; localMessage?: ChatMessage; intentIsCallback?: boolean }
   | { type: 'SEND_SUCCESS'; reply: string; buttons: ChatButton[] | null; callbackConfirmed: boolean }
+  // Like SEND_SUCCESS but for the greeting round-trip: the real backend greeting
+  // replaces the widget's local placeholder welcome (when that placeholder is
+  // still the last message) instead of stacking a second greeting on top of it.
+  | { type: 'GREETING_SUCCESS'; reply: string; buttons: ChatButton[] | null; placeholder?: string }
   // Like SEND_SUCCESS but appends nothing — used when the greeting round-trip
   // comes back with a non-greeting fallback we've chosen to swallow.
   | { type: 'SEND_SETTLED' }
@@ -149,6 +153,23 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
         messages: [...state.messages, agentMessage],
         callbackFlowActive: action.callbackConfirmed ? false : state.callbackFlowActive,
       };
+    }
+    case 'GREETING_SUCCESS': {
+      const last = state.messages[state.messages.length - 1];
+      const placeholderIsLast =
+        !!action.placeholder &&
+        last?.role === 'agent' &&
+        last.variant.kind === 'text' &&
+        last.variant.text === action.placeholder;
+      // Replace the placeholder when it's still the last thing shown; if the
+      // visitor already typed past it, leave their messages alone and just append.
+      const base = placeholderIsLast ? state.messages.slice(0, -1) : state.messages;
+      const agentMessage: ChatMessage = {
+        id: makeId(),
+        role: 'agent',
+        variant: { kind: 'text', text: action.reply, buttons: action.buttons },
+      };
+      return { ...state, isSending: false, interimStatusLine: null, messages: [...base, agentMessage] };
     }
     case 'SEND_SETTLED':
       return { ...state, isSending: false, interimStatusLine: null };
@@ -301,6 +322,10 @@ export function useChatSession() {
        * session, greeting flow changed, …) it is swallowed rather than shown —
        * the widget already renders its own welcome. */
       treatAsGreeting?: boolean;
+      /** The local placeholder welcome the widget already rendered on open. When
+       * the backend returns a real greeting, it replaces this line rather than
+       * appending a second greeting below it. */
+      greetingPlaceholder?: string;
     }) => {
       const sessionId = state.sessionId;
 
@@ -332,8 +357,17 @@ export function useChatSession() {
           long: input.long,
           intent: input.intent,
         });
-        if (input.treatAsGreeting && isNonGreetingReply(reply.reply, reply.buttons)) {
-          dispatch({ type: 'SEND_SETTLED' });
+        if (input.treatAsGreeting) {
+          if (isNonGreetingReply(reply.reply, reply.buttons)) {
+            dispatch({ type: 'SEND_SETTLED' });
+            return true;
+          }
+          dispatch({
+            type: 'GREETING_SUCCESS',
+            reply: reply.reply,
+            buttons: reply.buttons,
+            placeholder: input.greetingPlaceholder,
+          });
           return true;
         }
         dispatch({ type: 'SEND_SUCCESS', reply: reply.reply, buttons: reply.buttons, callbackConfirmed: reply.callbackConfirmed !== null });

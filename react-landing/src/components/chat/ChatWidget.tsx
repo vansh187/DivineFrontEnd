@@ -16,6 +16,10 @@ const TEASER_DELAY_MS = 1800;
 const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 const AFFIRMATIVE_LOGIN_PATTERN = /^(yes|yeah|yep|ya|sure|ok|okay|login|log in|sign in|signin)$/i;
 const LOGOUT_PATTERN = /^(logout|log out|sign out|signout)$/i;
+// "restart chat", "refresh the conversation", "start over", "new chat", etc. —
+// wipes the session and re-greets with the welcome message + starter prompts.
+const RESTART_PATTERN =
+  /^\s*(?:please\s+)?(?:(?:restart|reset|refresh|start\s+over|start\s+fresh|fresh\s+start|start\s+again|begin\s+again)(?:\s+(?:the\s+)?(?:chat|conversation|chatbot|session|bot))?|(?:clear|new|end)\s+(?:the\s+)?(?:chat|conversation|chatbot|session))\s*[.!?]*\s*$/i;
 const roleHome: Record<Role, string> = {
   customer: '/customer',
   broker: '/broker',
@@ -194,7 +198,7 @@ export function ChatWidget() {
     if (session.messages.length === 0) {
       session.appendAgentMessage({ kind: 'text', text: WELCOME_MESSAGE });
     }
-    void session.send({ message: '', treatAsGreeting: true }).then((ok) => {
+    void session.send({ message: '', treatAsGreeting: true, greetingPlaceholder: WELCOME_MESSAGE }).then((ok) => {
       greetingInFlightRef.current = false;
       if (ok) greetingSentRef.current = true;
     });
@@ -274,6 +278,18 @@ export function ChatWidget() {
       session.close();
       navigate('/', { replace: true });
       window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: 'auto' }));
+      return;
+    }
+
+    if (RESTART_PATTERN.test(text)) {
+      // Full fresh start: drop the server session + any in-progress flow, clear
+      // the thread, and let the greeting effect below re-run — it re-appends the
+      // welcome message, and StarterPrompts reappears once the thread has no
+      // user messages again.
+      greetingSentRef.current = false;
+      greetingInFlightRef.current = false;
+      greetingRetriedSinceOpenRef.current = false;
+      session.resetSession();
       return;
     }
 
