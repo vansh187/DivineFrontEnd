@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { resolveReportUrl } from '../../utils/chatReport';
+import { isReportDownloadUrl, resolveReportUrl } from '../../utils/chatReport';
 
 /**
  * Tiny, dependency-free Markdown renderer scoped to what the concierge backend
@@ -13,7 +13,17 @@ import { resolveReportUrl } from '../../utils/chatReport';
 const INLINE_RE =
   /(\*\*([^*]+)\*\*|__([^_]+)__|\*([^*\n]+)\*|(?<![A-Za-z0-9])_([^_\n]+)_(?![A-Za-z0-9])|`([^`]+)`|\[([^\]]+)\]\(([^)\s]+)\)|\[(\/[A-Za-z0-9._~\-/]+|https?:\/\/[^\]\s]+)\](?!\()|(?<![([])\b(https?:\/\/[^\s)\]]+))/g;
 
-const isDownloadUrl = (url: string) => /\/download(?![\w-])/i.test(url);
+/**
+ * Resolves a link from an agent reply. A loan/report download URL is sent to
+ * the API host and rendered as a download button; every other link (including
+ * site-relative paths like `/our-story`) is left exactly as written.
+ */
+function resolveLink(rawHref: string, fallbackLabel: string): { href: string; label: string; download: boolean } {
+  if (isReportDownloadUrl(rawHref)) {
+    return { href: resolveReportUrl(rawHref), label: 'Download report (PDF)', download: true };
+  }
+  return { href: rawHref, label: fallbackLabel, download: false };
+}
 
 function LinkNode({ href, label, download }: { href: string; label: string; download: boolean }) {
   if (download) {
@@ -29,8 +39,13 @@ function LinkNode({ href, label, download }: { href: string; label: string; down
       </a>
     );
   }
+  const external = /^https?:\/\//i.test(href);
   return (
-    <a href={href} target="_blank" rel="noreferrer" className="font-semibold text-green underline underline-offset-2">
+    <a
+      href={href}
+      {...(external ? { target: '_blank', rel: 'noreferrer' } : {})}
+      className="font-semibold text-green underline underline-offset-2"
+    >
       {label}
     </a>
   );
@@ -61,23 +76,12 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
         </code>,
       );
     } else if (linkText && linkHref) {
-      const href = resolveReportUrl(linkHref);
-      const download = isDownloadUrl(href);
-      nodes.push(
-        <LinkNode key={key} href={href} label={download ? 'Download report (PDF)' : linkText} download={download} />,
-      );
+      const link = resolveLink(linkHref, linkText);
+      nodes.push(<LinkNode key={key} href={link.href} label={link.label} download={link.download} />);
     } else if (bracketUrl || autoUrl) {
       const raw = bracketUrl || autoUrl;
-      const href = resolveReportUrl(raw);
-      const download = isDownloadUrl(href);
-      nodes.push(
-        <LinkNode
-          key={key}
-          href={href}
-          label={download ? 'Download report (PDF)' : raw}
-          download={download}
-        />,
-      );
+      const link = resolveLink(raw, raw);
+      nodes.push(<LinkNode key={key} href={link.href} label={link.label} download={link.download} />);
     }
     last = match.index + match[0].length;
   }
@@ -189,7 +193,7 @@ export function Markdown({ text }: { text: string }) {
         i += 1;
       }
       blocks.push(
-        <ul key={key++} className="my-1 flex list-disc flex-col gap-1 pl-4.5 marker:text-ink-muted">
+        <ul key={key++} className="my-1 list-disc space-y-1 pl-5 marker:text-ink-muted">
           {items.map((item, idx) => (
             <li key={idx}>{renderInline(item, `ul${key}-${idx}`)}</li>
           ))}
@@ -198,15 +202,20 @@ export function Markdown({ text }: { text: string }) {
       continue;
     }
 
-    // Ordered list
+    // Ordered list — preserve the ordinal the backend actually gave
     if (OL_RE.test(line)) {
+      const startNumber = Number.parseInt(line.match(OL_RE)![1], 10);
       const items: string[] = [];
       while (i < lines.length && OL_RE.test(lines[i])) {
         items.push(lines[i].match(OL_RE)![2]);
         i += 1;
       }
       blocks.push(
-        <ol key={key++} className="my-1 flex list-decimal flex-col gap-1 pl-4.5 marker:text-ink-muted">
+        <ol
+          key={key++}
+          start={Number.isFinite(startNumber) && startNumber !== 1 ? startNumber : undefined}
+          className="my-1 list-decimal space-y-1 pl-5 marker:text-ink-muted"
+        >
           {items.map((item, idx) => (
             <li key={idx}>{renderInline(item, `ol${key}-${idx}`)}</li>
           ))}

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { AgentMessageVariant, ChatButton } from '../../hooks/useChatSession';
 import { CheckIcon, CopyIcon, PhoneIcon } from './icons/ChatIcons';
 import { Markdown } from './Markdown';
+import { ErrorBoundary } from '../ErrorBoundary';
 
 const plotIntelligenceButton: ChatButton = {
   label: 'Find My Perfect Plot',
@@ -102,7 +103,14 @@ export function AgentMessage({ variant, interactive = false, onButtonTap }: Agen
 
   return (
     <Shell>
-      <Markdown text={variant.text} />
+      {/* A malformed reply must never crash the chat thread — fall back to the
+          raw text if the lightweight Markdown parser throws. */}
+      <ErrorBoundary
+        resetKeys={[variant.text]}
+        fallback={<p className="whitespace-pre-wrap">{variant.text}</p>}
+      >
+        <Markdown text={variant.text} />
+      </ErrorBoundary>
       {variant.buttons && variant.buttons.length > 0 && (
         <ButtonOptions buttons={variant.buttons} interactive={interactive} onButtonTap={onButtonTap} />
       )}

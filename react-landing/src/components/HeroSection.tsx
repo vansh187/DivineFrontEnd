@@ -12,7 +12,7 @@ const heroStats = [
   { value: '2005', label: 'Established' },
   { value: '7', label: 'Townships' },
   { value: '3', label: 'Districts' },
-  { value: '369', label: 'Plots at OPS Greens' },
+  { value: '368', label: 'Plots at OPS Greens' },
   { value: company.compliance.join(' & '), label: 'Approved', compact: true },
 ];
 
