@@ -91,7 +91,15 @@ export const townshipLocations: TownshipLocation[] = [
     subtitle: 'Sector 15, Ganaur · Sonipat',
     mapQuery: 'Suraksha Enclave, Village Garhi Kesri and Brahi, Sector 15, Ganaur, Sonipat, Haryana',
     connectivity: [
-      { label: 'NH-1 highway', value: '~5 min' },
+      {
+        label: 'NH-1 highway',
+        value: '~5 min',
+        photo: {
+          src: '/landmarks/nh1-ganaur.jpg',
+          alt: 'NH-1 highway passing Ganaur',
+          blurb: 'A short hop to the Delhi–Chandigarh highway via the Ganaur interchange.',
+        },
+      },
       { label: 'Delhi border', value: '~25 min' },
       {
         label: 'Ganaur railway station',

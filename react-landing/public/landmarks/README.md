@@ -11,7 +11,8 @@ entry (see the two railway-station photos).
 
 | File | Landmark | Source |
 |------|----------|--------|
-| `nh1.jpg` | NH-1 highway (OPS Divine hoarding) | developer |
+| `nh1.jpg` | NH-1 highway — OPS Divine hoarding | developer |
+| `nh1-ganaur.jpg` | NH-1 highway near Ganaur (Suraksha) | developer |
 | `karnal-haveli.jpg` | Karnal Haveli | developer |
 | `park-hospital-karnal.jpg` | Park Hospital, Karnal | developer (low-res) |
 | `dps-karnal.jpg` | Delhi Public School, Karnal | developer (low-res) |
