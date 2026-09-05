@@ -72,13 +72,20 @@ function makeId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-/** Backend "I didn't understand" style replies that must not be shown in place
- * of a greeting when the blank open-message round-trip misfires. */
-const NON_GREETING_REPLY =
-  /(didn'?t|did not) (catch|understand|get) that|type your question|sorry, i (didn'?t|couldn'?t|could not|do not|don'?t)|come again|rephrase/i;
+/** Tight "I didn't understand you" pattern: a negation plus a perception verb
+ * plus "that", inside one sentence — e.g. "Sorry, I didn't catch that". Kept
+ * narrow so a real greeting that merely says "type your question below" or
+ * "feel free to rephrase" is NOT mistaken for a fallback. */
+const DIDNT_UNDERSTAND_RE =
+  /\b(did ?n'?t|did not|could ?n'?t|could not|can ?n'?t|cannot|unable to)\b[^.?!\n]*\b(catch|understand|get|hear|follow)\b[^.?!\n]*\bthat\b/i;
 
-function isNonGreetingReply(reply: string): boolean {
-  return !reply.trim() || NON_GREETING_REPLY.test(reply);
+/** Whether a reply to the blank open-message should be swallowed rather than
+ * shown in place of the widget's own welcome. A reply carrying buttons is a
+ * real interactive menu and is always kept. */
+function isNonGreetingReply(reply: string, buttons: ChatButton[] | null): boolean {
+  if (buttons && buttons.length > 0) return false;
+  const trimmed = reply.trim();
+  return !trimmed || DIDNT_UNDERSTAND_RE.test(trimmed);
 }
 
 const initialState: ChatState = {
@@ -325,7 +332,7 @@ export function useChatSession() {
           long: input.long,
           intent: input.intent,
         });
-        if (input.treatAsGreeting && isNonGreetingReply(reply.reply)) {
+        if (input.treatAsGreeting && isNonGreetingReply(reply.reply, reply.buttons)) {
           dispatch({ type: 'SEND_SETTLED' });
           return true;
         }

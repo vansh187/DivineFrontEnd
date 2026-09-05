@@ -8,13 +8,21 @@ import { API_BASE_URL } from '../services/authApi';
 
 const REPORT_URL_RE = /(https?:\/\/[^\s)\]]+|\/[A-Za-z0-9._~\-/]+)\/download(?![\w-])/i;
 
+/**
+ * True only for a loan/report *download* URL — a `/download` path that also
+ * mentions `report` or `loan`. Deliberately narrow so a generic link that
+ * happens to contain `/download` (a floor plan, a brochure) is left alone.
+ */
+export function isReportDownloadUrl(url: string): boolean {
+  return REPORT_URL_RE.test(url) && /report|loan/i.test(url);
+}
+
 /** Extracts a loan/report download URL from an agent reply, or null. */
 export function extractReportDownloadUrl(text: string): string | null {
   const match = text.match(REPORT_URL_RE);
   if (!match) return null;
   const candidate = match[0];
-  if (!/report|loan/i.test(candidate)) return null;
-  return candidate;
+  return isReportDownloadUrl(candidate) ? candidate : null;
 }
 
 /** Resolves a possibly-relative report URL against the API host. */
