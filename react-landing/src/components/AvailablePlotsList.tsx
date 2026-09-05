@@ -53,13 +53,6 @@ function titleCase(value: string | null | undefined) {
   return value.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function formatPrice(value: number | null | undefined) {
-  if (value === null || value === undefined) return 'Price on request';
-  if (value >= 1_00_00_000) return `Rs ${(value / 1_00_00_000).toFixed(2)} Cr`;
-  if (value >= 1_00_000) return `Rs ${(value / 1_00_000).toFixed(1)}L`;
-  return `Rs ${value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
-}
-
 function plotLocation(unit: InventoryUnit) {
   return [unit.locality, unit.city].filter(Boolean).join(', ') || 'Location on request';
 }
@@ -209,7 +202,6 @@ export function AvailablePlotsList({ actionLabel, onAction, refreshSignal = 0 }:
                 </div>
               </div>
               <p className="mt-3 text-xs text-ink-muted">{plotLocation(unit)}</p>
-              <p className="mt-2 text-sm font-bold text-green">{formatPrice(unit.estimated_price)}</p>
               <div className="mt-3 flex items-center gap-2">
                 <a
                   href={contact.phoneHref}
