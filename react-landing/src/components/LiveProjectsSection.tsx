@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 import { journeyStops } from '../data/journeyStops';
@@ -29,15 +29,36 @@ function tabLabel(id: string, fallback: string) {
   return town ? `${loc.label} · ${town}` : loc.label;
 }
 
-/** Only Suraksha Enclave has a walkthrough reel; OPS Divine still uses a still. */
+/** Per-township walkthrough reels; projects without an entry fall back to a still. */
 const VIDEO_BY_PROJECT: Record<string, string> = {
   'suraksha-enclave': '/townships/suraksha-enclave.mp4',
+  'ops-divine-greens': '/townships/ops-divine.mp4',
 };
 
 export function LiveProjectsSection() {
   const [activeId, setActiveId] = useState(liveProjects[0]?.id ?? '');
   const active = liveProjects.find((p) => p.id === activeId) ?? liveProjects[0];
   const reducedMotion = usePrefersReducedMotion();
+  // Township clips are heavy — don't let the browser fetch any video bytes
+  // until this section is actually about to scroll into view.
+  const sectionRef = useRef<HTMLElement>(null);
+  const [inView, setInView] = useState(false);
+
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el || inView) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setInView(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '400px' },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [inView]);
 
   if (!active) return null;
 
@@ -48,7 +69,7 @@ export function LiveProjectsSection() {
   const videoSrc = VIDEO_BY_PROJECT[active.id];
 
   return (
-    <section id="live-projects" className="px-6 pt-10 pb-20 sm:px-10 sm:pt-14 sm:pb-28">
+    <section ref={sectionRef} id="live-projects" className="px-6 pt-10 pb-20 sm:px-10 sm:pt-14 sm:pb-28">
       <div className="eyebrow-label mb-3.5 text-terracotta">Now selling</div>
       <h2 className="font-display text-balance text-4xl font-bold text-ink sm:text-6xl">
         Two live townships on the corridor.
@@ -77,7 +98,7 @@ export function LiveProjectsSection() {
         className="group mt-8 grid overflow-hidden rounded-2xl border border-hairline bg-surface shadow-[0_30px_80px_-40px_rgba(6,31,45,0.2)] transition-shadow hover:shadow-[0_36px_90px_-40px_rgba(6,31,45,0.32)] lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]"
       >
         <div className="relative min-h-[260px] overflow-hidden lg:min-h-[440px]">
-          {videoSrc && !reducedMotion ? (
+          {videoSrc && !reducedMotion && inView ? (
             <video
               key={videoSrc}
               className="pointer-events-none absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
@@ -87,7 +108,7 @@ export function LiveProjectsSection() {
               muted
               loop
               playsInline
-              preload="metadata"
+              preload="none"
               aria-label={active.image.alt}
             />
           ) : (

@@ -2,18 +2,6 @@ import { lazy, Suspense, useLayoutEffect } from 'react';
 import type { ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { LandingPage } from './pages/LandingPage';
-import { CustomerPage } from './pages/CustomerPage';
-import { CustomerPlotsPage } from './pages/CustomerPlotsPage';
-import { CustomerProfilePage } from './pages/CustomerProfilePage';
-import { BrokerPage } from './pages/BrokerPage';
-import { BrokerProfilePage } from './pages/BrokerProfilePage';
-import { BrokerPlotsPage } from './pages/BrokerPlotsPage';
-import { BrokerLeadsPage } from './pages/BrokerLeadsPage';
-import { BrokerCommissionPage } from './pages/BrokerCommissionPage';
-import { ResidencesPage } from './pages/ResidencesPage';
-import { ProjectDetailPage } from './pages/ProjectDetailPage';
-import { OurStoryPage } from './pages/OurStoryPage';
-import { NotFoundPage } from './pages/NotFoundPage';
 import { AuthModal } from './components/AuthModal';
 import { ChatWidget } from './components/chat/ChatWidget';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -22,9 +10,26 @@ import { RoleRoute } from './components/RoleRoute';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import type { Role } from './services/authApi';
 
+// Only the landing page ships in the initial bundle. Every other route is
+// fetched on navigation so a first-time visitor isn't downloading the whole
+// customer + broker dashboard code just to read the marketing page.
+const CustomerPage = lazy(() => import('./pages/CustomerPage').then((m) => ({ default: m.CustomerPage })));
+const CustomerPlotsPage = lazy(() => import('./pages/CustomerPlotsPage').then((m) => ({ default: m.CustomerPlotsPage })));
+const CustomerProfilePage = lazy(() => import('./pages/CustomerProfilePage').then((m) => ({ default: m.CustomerProfilePage })));
 const CustomerApplicationPage = lazy(() =>
-  import('./pages/CustomerApplicationPage').then((module) => ({ default: module.CustomerApplicationPage })),
+  import('./pages/CustomerApplicationPage').then((m) => ({ default: m.CustomerApplicationPage })),
 );
+const BrokerPage = lazy(() => import('./pages/BrokerPage').then((m) => ({ default: m.BrokerPage })));
+const BrokerProfilePage = lazy(() => import('./pages/BrokerProfilePage').then((m) => ({ default: m.BrokerProfilePage })));
+const BrokerPlotsPage = lazy(() => import('./pages/BrokerPlotsPage').then((m) => ({ default: m.BrokerPlotsPage })));
+const BrokerLeadsPage = lazy(() => import('./pages/BrokerLeadsPage').then((m) => ({ default: m.BrokerLeadsPage })));
+const BrokerCommissionPage = lazy(() =>
+  import('./pages/BrokerCommissionPage').then((m) => ({ default: m.BrokerCommissionPage })),
+);
+const ResidencesPage = lazy(() => import('./pages/ResidencesPage').then((m) => ({ default: m.ResidencesPage })));
+const ProjectDetailPage = lazy(() => import('./pages/ProjectDetailPage').then((m) => ({ default: m.ProjectDetailPage })));
+const OurStoryPage = lazy(() => import('./pages/OurStoryPage').then((m) => ({ default: m.OurStoryPage })));
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage })));
 
 const roleHome: Record<Role, string> = {
   customer: '/customer',
@@ -47,6 +52,10 @@ function RouteCrashBoundary({ children }: { children: ReactNode }) {
       {children}
     </ErrorBoundary>
   );
+}
+
+function RouteLoading() {
+  return <div className="min-h-svh bg-bg px-6 pt-28 text-sm font-semibold text-ink">Loading...</div>;
 }
 
 function ScrollToRouteTop() {
@@ -74,6 +83,7 @@ function ScrollToRouteTop() {
 function AppRoutes() {
   return (
     <RouteCrashBoundary>
+      <Suspense fallback={<RouteLoading />}>
       <Routes>
         <Route path="/" element={<HomeRoute />} />
         <Route path="/residences" element={<ResidencesPage />} />
@@ -108,9 +118,7 @@ function AppRoutes() {
           element={
             <RoleRoute role="customer">
               <ErrorBoundary fallback={<AppCrashFallback />}>
-                <Suspense fallback={<div className="min-h-svh bg-bg px-6 pt-28 text-sm font-semibold text-ink">Loading application form...</div>}>
-                  <CustomerApplicationPage />
-                </Suspense>
+                <CustomerApplicationPage />
               </ErrorBoundary>
             </RoleRoute>
           }
@@ -157,6 +165,7 @@ function AppRoutes() {
         />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
+      </Suspense>
     </RouteCrashBoundary>
   );
 }
