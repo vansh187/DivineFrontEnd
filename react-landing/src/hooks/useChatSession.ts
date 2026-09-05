@@ -38,6 +38,9 @@ type ChatAction =
   | { type: 'SESSION_RESET' }
   | { type: 'SEND_START'; localMessage?: ChatMessage; intentIsCallback?: boolean }
   | { type: 'SEND_SUCCESS'; reply: string; buttons: ChatButton[] | null; callbackConfirmed: boolean }
+  // Like SEND_SUCCESS but appends nothing — used when the greeting round-trip
+  // comes back with a non-greeting fallback we've chosen to swallow.
+  | { type: 'SEND_SETTLED' }
   | { type: 'SEND_FAILURE'; message: string; localMessage?: ChatMessage }
   | { type: 'SET_INTERIM_STATUS'; text: string | null }
   | { type: 'DISMISS_CONSENT' }
@@ -67,6 +70,15 @@ function writeSessionStorage(key: string, value: string) {
 
 function makeId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/** Backend "I didn't understand" style replies that must not be shown in place
+ * of a greeting when the blank open-message round-trip misfires. */
+const NON_GREETING_REPLY =
+  /(didn'?t|did not) (catch|understand|get) that|type your question|sorry, i (didn'?t|couldn'?t|could not|do not|don'?t)|come again|rephrase/i;
+
+function isNonGreetingReply(reply: string): boolean {
+  return !reply.trim() || NON_GREETING_REPLY.test(reply);
 }
 
 const initialState: ChatState = {
@@ -131,6 +143,8 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
         callbackFlowActive: action.callbackConfirmed ? false : state.callbackFlowActive,
       };
     }
+    case 'SEND_SETTLED':
+      return { ...state, isSending: false, interimStatusLine: null };
     case 'SEND_FAILURE':
       return {
         ...state,
@@ -275,6 +289,11 @@ export function useChatSession() {
       lat?: number;
       long?: number;
       intent?: 'request_callback';
+      /** The blank message fired on open to pull the backend greeting. When the
+       * backend answers with a "sorry, didn't catch that" style fallback (stale
+       * session, greeting flow changed, …) it is swallowed rather than shown —
+       * the widget already renders its own welcome. */
+      treatAsGreeting?: boolean;
     }) => {
       const sessionId = state.sessionId;
 
@@ -306,6 +325,10 @@ export function useChatSession() {
           long: input.long,
           intent: input.intent,
         });
+        if (input.treatAsGreeting && isNonGreetingReply(reply.reply)) {
+          dispatch({ type: 'SEND_SETTLED' });
+          return true;
+        }
         dispatch({ type: 'SEND_SUCCESS', reply: reply.reply, buttons: reply.buttons, callbackConfirmed: reply.callbackConfirmed !== null });
         return true;
       } catch (err) {

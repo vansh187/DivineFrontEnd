@@ -6,6 +6,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { ApiError, API_BASE_URL } from '../../services/authApi';
 import type { Role } from '../../services/authApi';
 import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion';
+import { extractReportDownloadUrl, resolveReportUrl, triggerReportDownload } from '../../utils/chatReport';
 import { ChatLauncher } from './ChatLauncher';
 import { ChatTeaser } from './ChatTeaser';
 import { ChatWindow } from './ChatWindow';
@@ -19,6 +20,10 @@ const roleHome: Record<Role, string> = {
   customer: '/customer',
   broker: '/broker',
 };
+
+const WELCOME_MESSAGE =
+  "Hi, I'm Divine Assistant. I can help with plot availability, pricing and payment plans, " +
+  'home-loan guidance, RERA and approval details, or booking a site visit. What would you like to know?';
 
 function readTeaserDismissed(): boolean {
   try {
@@ -99,6 +104,8 @@ export function ChatWidget() {
   const greetingRetriedSinceOpenRef = useRef(false);
   const geoCoordsRef = useRef<{ lat: number; long: number } | null>(null);
   const geoRequestedRef = useRef(false);
+  // Report URLs already auto-downloaded, so re-renders don't re-fire the download.
+  const downloadedReportsRef = useRef<Set<string>>(new Set());
 
   // A real login/logout through the website's own auth (the modal, or a direct link
   // into a role-gated page with an already-stored session) makes any in-progress chat
@@ -179,7 +186,15 @@ export function ChatWidget() {
     if (!session.sessionId) return;
     greetingRetriedSinceOpenRef.current = true;
     greetingInFlightRef.current = true;
-    void session.send({ message: '' }).then((ok) => {
+    // Always show a proper welcome straight away so the visitor never faces an
+    // empty thread (or a backend "didn't catch that" fallback) on open. The
+    // backend greeting still fires below and — when it returns a real menu —
+    // is appended after this line; a fallback reply is swallowed (see
+    // treatAsGreeting in useChatSession).
+    if (session.messages.length === 0) {
+      session.appendAgentMessage({ kind: 'text', text: WELCOME_MESSAGE });
+    }
+    void session.send({ message: '', treatAsGreeting: true }).then((ok) => {
       greetingInFlightRef.current = false;
       if (ok) greetingSentRef.current = true;
     });
@@ -211,6 +226,21 @@ export function ChatWidget() {
       { timeout: 8000 },
     );
   }, [session.isOpen]);
+
+  // When the concierge returns a loan-eligibility report link (e.g. after
+  // "Download Report"), fetch the PDF straight away instead of leaving a raw
+  // URL in the bubble. The message still renders a "Download report (PDF)"
+  // button (see Markdown) as a manual fallback if the browser blocks this.
+  useEffect(() => {
+    const last = session.messages[session.messages.length - 1];
+    if (!last || last.role !== 'agent' || last.variant.kind !== 'text') return;
+    const rawUrl = extractReportDownloadUrl(last.variant.text);
+    if (!rawUrl) return;
+    const absoluteUrl = resolveReportUrl(rawUrl);
+    if (downloadedReportsRef.current.has(absoluteUrl)) return;
+    downloadedReportsRef.current.add(absoluteUrl);
+    triggerReportDownload(absoluteUrl);
+  }, [session.messages]);
 
   const withPendingGeo = (extra: { message?: string; displayText?: string; audio?: Blob }) => {
     const coords = geoCoordsRef.current;

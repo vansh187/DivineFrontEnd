@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { ConsentBanner } from './ConsentBanner';
 import { QuickActionBar } from './QuickActionBar';
+import { StarterPrompts } from './StarterPrompts';
 import { MessageList } from './MessageList';
 import { InputBar } from './InputBar';
 import { CloseIcon } from './icons/ChatIcons';
@@ -154,6 +155,10 @@ export function ChatWindow({
             onRequestCallback={onRequestCallback}
             onDesktopContactCard={onDesktopContactCard}
           />
+
+          {messages.every((message) => message.role === 'agent') && (
+            <StarterPrompts onPick={onSendText} disabled={isSending} />
+          )}
 
           <MessageList
             messages={messages}
