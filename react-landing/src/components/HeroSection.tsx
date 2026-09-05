@@ -7,6 +7,15 @@ type HeroSectionProps = {
   onBookVisit?: () => void;
 };
 
+/** Headline proof points for the hero stat band. */
+const heroStats = [
+  { value: '2005', label: 'Established' },
+  { value: '7', label: 'Townships' },
+  { value: '3', label: 'Districts' },
+  { value: '369', label: 'Plots at OPS Greens' },
+  { value: company.compliance.join(' & '), label: 'Approved', compact: true },
+];
+
 export function HeroSection({ onBookVisit }: HeroSectionProps) {
   const sectionRef = useRef<HTMLElement>(null);
   const canvasWrapRef = useRef<HTMLDivElement>(null);
@@ -63,15 +72,27 @@ export function HeroSection({ onBookVisit }: HeroSectionProps) {
           </a>
         </div>
 
-        <div className="mt-2 hidden flex-wrap items-center justify-center gap-x-8 gap-y-3 rounded-none border border-white/14 bg-black/32 px-7 py-3.5 text-white/90 backdrop-blur-sm sm:flex">
-          <span className="text-sm">
-            <strong className="font-display font-bold text-white">20</strong> yrs on the corridor
-          </span>
-          <span className="text-sm">
-            <strong className="font-display font-bold text-white">5</strong> townships delivered
-          </span>
-          <span className="text-sm">{company.compliance.join(' & ')} approved</span>
-        </div>
+        <dl className="mt-4 grid w-full max-w-md grid-cols-2 gap-px overflow-hidden rounded-none border border-white/18 border-t-[3px] border-t-terracotta bg-white/14 backdrop-blur-md min-[440px]:grid-cols-3 sm:mt-7 sm:max-w-3xl sm:grid-cols-5">
+          {heroStats.map((stat) => (
+            <div
+              key={stat.label}
+              className="flex flex-col-reverse items-center justify-center gap-1.5 bg-black/45 px-2 py-4 text-center last:col-span-full sm:gap-2 sm:px-4 sm:py-6 sm:last:col-span-1"
+            >
+              <dt className="eyebrow-label text-[8.5px] leading-tight text-white/72 sm:text-[11px]">
+                {stat.label}
+              </dt>
+              <dd
+                className={`font-display font-bold leading-none text-white [text-shadow:0_2px_18px_rgba(0,0,0,0.55)] ${
+                  stat.compact
+                    ? 'text-[clamp(14px,3.2vw,20px)] leading-tight tracking-[0.02em]'
+                    : 'text-[clamp(30px,7.4vw,52px)]'
+                }`}
+              >
+                {stat.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
       </div>
     </header>
   );

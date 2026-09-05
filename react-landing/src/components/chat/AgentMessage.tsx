@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { AgentMessageVariant, ChatButton } from '../../hooks/useChatSession';
 import { CheckIcon, CopyIcon, PhoneIcon } from './icons/ChatIcons';
+import { Markdown } from './Markdown';
 
 const plotIntelligenceButton: ChatButton = {
   label: 'Find My Perfect Plot',
@@ -101,7 +102,7 @@ export function AgentMessage({ variant, interactive = false, onButtonTap }: Agen
 
   return (
     <Shell>
-      <p>{variant.text}</p>
+      <Markdown text={variant.text} />
       {variant.buttons && variant.buttons.length > 0 && (
         <ButtonOptions buttons={variant.buttons} interactive={interactive} onButtonTap={onButtonTap} />
       )}
