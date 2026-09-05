@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 import { journeyStops } from '../data/journeyStops';
 import { townshipLocations } from '../data/locationConnectivity';
 import { getProjectDetail, type ProjectSpec } from '../data/projectDetails';
@@ -28,15 +29,23 @@ function tabLabel(id: string, fallback: string) {
   return town ? `${loc.label} · ${town}` : loc.label;
 }
 
+/** Only Suraksha Enclave has a walkthrough reel; OPS Divine still uses a still. */
+const VIDEO_BY_PROJECT: Record<string, string> = {
+  'suraksha-enclave': '/townships/suraksha-enclave.mp4',
+};
+
 export function LiveProjectsSection() {
   const [activeId, setActiveId] = useState(liveProjects[0]?.id ?? '');
   const active = liveProjects.find((p) => p.id === activeId) ?? liveProjects[0];
+  const reducedMotion = usePrefersReducedMotion();
 
   if (!active) return null;
 
   const location = townshipLocations.find((loc) => loc.id === active.id);
   const specs = specsFor(active.id, active.reraId);
   const detailHref = `/residences/${active.id}`;
+  const posterSrc = active.heroSrc ?? active.image.src;
+  const videoSrc = VIDEO_BY_PROJECT[active.id];
 
   return (
     <section id="live-projects" className="px-6 pt-10 pb-20 sm:px-10 sm:pt-14 sm:pb-28">
@@ -68,11 +77,26 @@ export function LiveProjectsSection() {
         className="group mt-8 grid overflow-hidden rounded-2xl border border-hairline bg-surface shadow-[0_30px_80px_-40px_rgba(6,31,45,0.2)] transition-shadow hover:shadow-[0_36px_90px_-40px_rgba(6,31,45,0.32)] lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]"
       >
         <div className="relative min-h-[260px] overflow-hidden lg:min-h-[440px]">
-          <img
-            src={active.heroSrc ?? active.image.src}
-            alt={active.image.alt}
-            className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
-          />
+          {videoSrc && !reducedMotion ? (
+            <video
+              key={videoSrc}
+              className="pointer-events-none absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+              src={videoSrc}
+              poster={posterSrc}
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="metadata"
+              aria-label={active.image.alt}
+            />
+          ) : (
+            <img
+              src={posterSrc}
+              alt={active.image.alt}
+              className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+            />
+          )}
           <span className="eyebrow-label absolute left-4 top-4 rounded bg-bg/95 px-2.5 py-1.5 text-[10px] text-ink/80 shadow-sm">
             {active.reraId ? `RERA: ${active.reraId}` : active.image.tag}
           </span>
