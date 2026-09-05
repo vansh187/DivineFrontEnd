@@ -5,6 +5,7 @@ import { Footer } from '../components/Footer';
 import { SiteVisitDrawer } from '../components/SiteVisitDrawer';
 import { journeyStops } from '../data/journeyStops';
 import { townshipLocations } from '../data/locationConnectivity';
+import { ConnectivityList } from '../components/ConnectivityList';
 import { getProjectDetail } from '../data/projectDetails';
 import { contact } from '../data/contact';
 import { useAuth } from '../hooks/useAuth';
@@ -109,14 +110,7 @@ export function ProjectDetailPage() {
               <>
                 <h2 className="mt-10 font-display text-2xl font-bold text-ink">Location & connectivity</h2>
                 <p className="mt-1 text-sm text-ink-muted">{location.subtitle}</p>
-                <div className="mt-4 divide-y divide-hairline border-t border-hairline">
-                  {location.connectivity.map((item) => (
-                    <div key={item.label} className="flex items-center justify-between py-3.5">
-                      <span className="text-sm text-ink-muted">{item.label}</span>
-                      <span className="font-display text-base font-semibold text-ink">{item.value}</span>
-                    </div>
-                  ))}
-                </div>
+                <ConnectivityList items={location.connectivity} className="mt-4" />
                 <p className="mt-3 text-xs leading-relaxed text-ink-muted/80">
                   Drive times are estimates for reference only — confirm exact routes with the sales desk.
                 </p>
