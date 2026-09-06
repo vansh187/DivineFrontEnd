@@ -46,31 +46,15 @@ export function ProjectDetailPage() {
     ? `https://www.google.com/maps?q=${encodeURIComponent(location.mapQuery)}&output=embed`
     : undefined;
 
-  // Same township walkthrough reel used on the landing "Now selling" card —
-  // shown in the hero here, with the still as its poster / reduced-motion fallback.
-  const heroVideo = reducedMotion ? undefined : townshipVideoFor(id);
+  // Same township walkthrough reel used on the landing "Now selling" card.
+  const detailVideo = reducedMotion ? undefined : townshipVideoFor(id);
 
   return (
     <>
       <Navbar onBookVisit={() => setSiteVisitOpen(true)} />
 
       <header className="relative flex min-h-[52svh] items-end overflow-hidden pt-24">
-        {heroVideo ? (
-          <video
-            key={heroVideo}
-            className="absolute inset-0 h-full w-full object-cover"
-            src={heroVideo}
-            poster={township.image.src}
-            autoPlay
-            muted
-            loop
-            playsInline
-            preload="metadata"
-            aria-label={township.image.alt}
-          />
-        ) : (
-          <img src={township.image.src} alt={township.image.alt} className="absolute inset-0 h-full w-full object-cover" />
-        )}
+        <img src={township.image.src} alt={township.image.alt} className="absolute inset-0 h-full w-full object-cover" />
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(44,62,80,0.35)_0%,rgba(44,62,80,0.2)_40%,rgba(44,62,80,0.86)_100%)]" />
         <div className="relative z-10 px-4 pb-10 sm:px-10 sm:pb-14">
           <div className="flex items-center justify-between gap-4">
@@ -143,7 +127,22 @@ export function ProjectDetailPage() {
           <div className="flex flex-col gap-6">
             {township.heroSrc && (
               <div className="overflow-hidden rounded-2xl border border-hairline shadow-[0_30px_80px_-40px_rgba(44,62,80,0.2)]">
-                <img src={township.heroSrc} alt={township.image.alt} className="h-56 w-full object-cover" />
+                {detailVideo ? (
+                  <video
+                    key={detailVideo}
+                    className="h-56 w-full object-cover"
+                    src={detailVideo}
+                    poster={township.heroSrc}
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    preload="metadata"
+                    aria-label={township.image.alt}
+                  />
+                ) : (
+                  <img src={township.heroSrc} alt={township.image.alt} className="h-56 w-full object-cover" />
+                )}
               </div>
             )}
 
