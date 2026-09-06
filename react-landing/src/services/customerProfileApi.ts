@@ -51,6 +51,21 @@ export interface CustomerScheduleRow {
   status?: string | null;
 }
 
+/**
+ * The derived booking payment plan the backend returns on
+ * `POST /documents/generate` (upload_booking_application). Rows share the shape
+ * of `CustomerScheduleRow`. Milestones: On Booking (= amount paid), then
+ * +45 / +90 / +180 / +270 days splitting the outstanding equally.
+ */
+export interface PaymentPlan {
+  total_receivable?: number | null;
+  total_received?: number | null;
+  total_outstanding?: number | null;
+  total_outstanding_words?: string | null;
+  booking_date?: string | null;
+  rows: CustomerScheduleRow[];
+}
+
 export interface CustomerProfile {
   /** Human-facing reference like "ODG-7695". */
   customer_id?: string | null;

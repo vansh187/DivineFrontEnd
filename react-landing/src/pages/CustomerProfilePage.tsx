@@ -245,15 +245,38 @@ export function CustomerProfilePage() {
     const plotArea = plotAreaSqYd ? `${plotAreaSqYd} sq. yd.` : unknown;
     const unitType = firstText(rb.unit_type, hasRemote ? '' : form.unitType) || unknown;
 
-    const localTotal = hasRemote ? null : Number(String(form.totalAmount).replace(/[^0-9.]/g, '')) || null;
-    const totalAmount = typeof rb.total_consideration === 'number' ? rb.total_consideration : localTotal;
+    // The payment plan the backend derived on the last application upload — used
+    // as a fallback for the letters and schedule until GET /customer/profile is live.
+    const storedPlan = docs.bookingApplication.paymentPlan;
+    const localTotalPlot = hasRemote
+      ? null
+      : Number(String(form.totalPlotAmount || form.totalAmount).replace(/[^0-9.]/g, '')) || null;
+    const totalAmount =
+      typeof rb.total_consideration === 'number'
+        ? rb.total_consideration
+        : typeof storedPlan?.total_receivable === 'number'
+          ? storedPlan.total_receivable
+          : localTotalPlot;
     const bookingAmount = hasRemote ? 0 : Number(String(form.bookingAmount).replace(/[^0-9.]/g, '')) || 0;
     const paidAmount = !hasRemote && docs.payment.status === 'paid' && docs.payment.amount ? docs.payment.amount : 0;
     const localReceived = Math.max(bookingAmount, paidAmount) || null;
-    const receivedAmount = typeof rb.amount_received === 'number' ? rb.amount_received : localReceived;
-    const bookingDate = firstText(rb.booking_date, hasRemote ? '' : form.applicationDate);
+    const receivedAmount =
+      typeof rb.amount_received === 'number'
+        ? rb.amount_received
+        : typeof storedPlan?.total_received === 'number'
+          ? storedPlan.total_received
+          : localReceived;
+    const bookingDate = firstText(rb.booking_date, storedPlan?.booking_date ?? '', hasRemote ? '' : form.applicationDate);
     const serverSchedule = Array.isArray(rb.payment_schedule) ? rb.payment_schedule : null;
-    const paymentSchedule = serverSchedule?.length ? serverScheduleRows(serverSchedule) : localScheduleRows(totalAmount);
+    // Rows for the letters: live profile schedule first, then the stored upload plan.
+    const letterScheduleRows: CustomerScheduleRow[] | null = serverSchedule?.length
+      ? serverSchedule
+      : storedPlan?.rows?.length
+        ? storedPlan.rows
+        : null;
+    const paymentSchedule = letterScheduleRows?.length
+      ? serverScheduleRows(letterScheduleRows)
+      : localScheduleRows(totalAmount);
 
     const photo = docs.applicantPhoto.dataUrl || freshSignedUrl(docs.applicantPhoto.signedUrl, docs.applicantPhoto.signedUrlExpiresAt);
     const hasBooking =
@@ -277,6 +300,8 @@ export function CustomerProfilePage() {
       totalAmount,
       receivedAmount,
       bookingDate,
+      scheduleRows: letterScheduleRows,
+      outstandingWords: storedPlan?.total_outstanding_words ?? null,
     };
 
     return {
@@ -293,7 +318,7 @@ export function CustomerProfilePage() {
       totalAmount,
       receivedAmount,
       paymentSchedule,
-      usesServerSchedule: Boolean(serverSchedule?.length),
+      usesServerSchedule: Boolean(letterScheduleRows?.length),
       pdfInput,
     };
   }, [session, remote, photoVersion]);

@@ -9,6 +9,7 @@
  */
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import type { PDFFont, PDFPage } from 'pdf-lib';
+import type { CustomerScheduleRow } from './customerProfileApi';
 
 export interface ProfilePdfInput {
   name: string;
@@ -32,6 +33,45 @@ export interface ProfilePdfInput {
   receivedAmount: number | null;
   /** ISO date the booking application was filed; blank falls back to today. */
   bookingDate: string;
+  /** The backend-derived payment plan rows (from the application upload or
+   * GET /customer/profile). When present, the letters render these verbatim
+   * instead of the hard-coded percentage split. */
+  scheduleRows?: CustomerScheduleRow[] | null;
+  /** Amount-in-words for the outstanding total, if the backend supplied it. */
+  outstandingWords?: string | null;
+}
+
+interface ResolvedRow {
+  label: string;
+  dueDate: Date;
+  amount: number;
+  percentText: string;
+}
+
+/** Turn either the backend rows or the hard-coded schedule into a uniform list
+ *  the letter renderers can lay out. `amounts` foot exactly to `total`. */
+function resolveScheduleRows(input: ProfilePdfInput): ResolvedRow[] {
+  const base = input.bookingDate ? new Date(input.bookingDate) : new Date();
+  const total = input.totalAmount ?? 0;
+  const rows = input.scheduleRows ?? [];
+
+  if (rows.length > 0) {
+    return rows.map((row, i) => ({
+      label: row.label,
+      dueDate: row.due_date ? new Date(row.due_date) : addDays(base, row.due_days ?? 0),
+      amount: typeof row.amount === 'number' ? row.amount : total && Number.isFinite(row.percent) ? Math.round((total * row.percent) / 100) : 0,
+      percentText: Number.isFinite(row.percent) ? `${Math.round(row.percent)}%` : `${i + 1}`,
+    }));
+  }
+
+  const amounts = PAYMENT_SCHEDULE.map((row) => Math.round(total * row.share));
+  if (total) amounts[amounts.length - 1] = total - amounts.slice(0, -1).reduce((a, b) => a + b, 0);
+  return PAYMENT_SCHEDULE.map((row, i) => ({
+    label: row.label,
+    dueDate: addDays(base, row.days),
+    amount: amounts[i],
+    percentText: `${Math.round(row.share * 100)}%`,
+  }));
 }
 
 const chrome = rgb(44 / 255, 62 / 255, 80 / 255);
@@ -222,10 +262,12 @@ export async function generateAllotmentLetterPdf(input: ProfilePdfInput): Promis
   // Keep the payment-milestone reference on the allotment letter.
   doc.y -= 18;
   text(doc, 'Indicative payment schedule', { bold: true, size: 11, gap: 16 });
-  PAYMENT_SCHEDULE.forEach(({ label, share }) => {
-    doc.page.drawText(`${Math.round(share * 100)}%`, { x: MARGIN, y: doc.y, size: 9, font: doc.bold, color: muted });
-    doc.page.drawText(label, { x: MARGIN + 40, y: doc.y, size: 9, font: doc.font, color: ink });
-    doc.page.drawText(input.totalAmount ? formatRs(input.totalAmount * share) : '—', {
+  let allotCumulative = 0;
+  resolveScheduleRows(input).forEach(({ label, amount, percentText, dueDate }) => {
+    allotCumulative += amount;
+    doc.page.drawText(percentText, { x: MARGIN, y: doc.y, size: 9, font: doc.bold, color: muted });
+    doc.page.drawText(`${label}  (by ${formatDate(dueDate)})`, { x: MARGIN + 40, y: doc.y, size: 9, font: doc.font, color: ink });
+    doc.page.drawText(amount > 0 ? formatRs(amount) : '—', {
       x: PAGE[0] - MARGIN - 90,
       y: doc.y,
       size: 9,
@@ -234,6 +276,17 @@ export async function generateAllotmentLetterPdf(input: ProfilePdfInput): Promis
     });
     doc.y -= 14;
   });
+  if (input.totalAmount || allotCumulative) {
+    doc.page.drawText('Total', { x: MARGIN + 40, y: doc.y, size: 9, font: doc.bold, color: ink });
+    doc.page.drawText(formatRs(input.totalAmount ?? allotCumulative), {
+      x: PAGE[0] - MARGIN - 90,
+      y: doc.y,
+      size: 9,
+      font: doc.bold,
+      color: ink,
+    });
+    doc.y -= 14;
+  }
 
   return toBlob(doc.pdfDoc);
 }
@@ -388,18 +441,20 @@ export async function generateDemandLetterPdf(input: ProfilePdfInput): Promise<B
   y -= 14;
 
   // --- Table --------------------------------------------------------
-  const total = input.totalAmount ?? 0;
+  const scheduleRows = resolveScheduleRows(input);
+  const total = input.totalAmount ?? scheduleRows.reduce((sum, row) => sum + row.amount, 0);
   const received = Math.max(0, input.receivedAmount ?? 0);
   const outstanding = Math.max(0, total - received);
   // When the total consideration isn't on record yet, `outstanding` collapses to
   // 0 - which would print a self-contradictory "Rs. 0 / Rupees Zero Only" demand
   // next to a real "received" figure. Show a dash and a generic remit line instead.
   const hasTotal = total > 0;
-  const base = input.bookingDate ? new Date(input.bookingDate) : new Date();
-  const dueDates = PAYMENT_SCHEDULE.map((row) => addDays(base, row.days));
-  const amounts = PAYMENT_SCHEDULE.map((row) => Math.round(total * row.share));
-  // absorb rounding drift into the final instalment so the column foots to `total`
-  if (total) amounts[amounts.length - 1] = total - amounts.slice(0, -1).reduce((a, b) => a + b, 0);
+  const labels = scheduleRows.map((row) => row.label);
+  const dueDates = scheduleRows.map((row) => row.dueDate);
+  const amounts = scheduleRows.map((row) => row.amount);
+  // "Total Installment" column is a cumulative running sum of the rows above.
+  const cumulative: number[] = [];
+  amounts.reduce((sum, amt, i) => (cumulative[i] = sum + amt), 0);
 
   const cX0 = left;
   const cHead = left + 190;
@@ -431,15 +486,15 @@ export async function generateDemandLetterPdf(input: ProfilePdfInput): Promise<B
 
   // data rows
   const dataTop = ty;
-  PAYMENT_SCHEDULE.forEach((row, i) => {
+  labels.forEach((label, i) => {
     cell(page, cX0, ty, cHead, ty - RH);
-    cellText(page, row.label, cX0, ty, ty - RH, font, 7.6);
+    cellText(page, label, cX0, ty, ty - RH, font, 7.6);
     cell(page, cDue, ty, cInst, ty - RH);
     cellText(page, formatDate(dueDates[i]), cDue, ty, ty - RH, font, 8, 'center', cInst);
     cell(page, cInst, ty, cTot, ty - RH);
     cellText(page, total ? amounts[i].toLocaleString('en-IN') : '—', cInst, ty, ty - RH, font, 8, 'right', cTot);
     cell(page, cTot, ty, cX1, ty - RH);
-    cellText(page, total ? amounts[i].toLocaleString('en-IN') : '—', cTot, ty, ty - RH, font, 8, 'right', cX1);
+    cellText(page, total ? cumulative[i].toLocaleString('en-IN') : '—', cTot, ty, ty - RH, font, 8, 'right', cX1);
     ty -= RH;
   });
   // merged "Basic Price" head cell
@@ -473,7 +528,10 @@ export async function generateDemandLetterPdf(input: ProfilePdfInput): Promise<B
   cell(page, cX0, ty, cHead, ty - wordsRowH);
   cellText(page, 'Total Outstanding Amount (In Words)', cX0, ty, ty - wordsRowH, bold, 7.2);
   cell(page, cHead, ty, cX1, ty - wordsRowH);
-  const wordsValue = hasTotal ? `${rupeesInWords(outstanding)}.` : '—';
+  const outstandingWords = input.outstandingWords?.trim()
+    ? `Rupees ${input.outstandingWords.trim().replace(/^Rupees\s+/i, '').replace(/\s+Only\.?$/i, '')} Only`
+    : rupeesInWords(outstanding);
+  const wordsValue = hasTotal ? `${outstandingWords}.` : '—';
   let wordsSize = 8;
   while (wordsSize > 5 && font.widthOfTextAtSize(wordsValue, wordsSize) > cX1 - cHead - 8) wordsSize -= 0.25;
   cellText(page, wordsValue, cHead, ty, ty - wordsRowH, font, wordsSize);
@@ -484,7 +542,7 @@ export async function generateDemandLetterPdf(input: ProfilePdfInput): Promise<B
   // --- Remit instruction -------------------------------------------
   const lastDue = formatDate(dueDates[dueDates.length - 1]);
   const remitSentence = hasTotal
-    ? `You are requested to remit the total dues of ${formatRs(outstanding)}/- (${rupeesInWords(outstanding)}) in favour of "${COMPANY.name}" payable on or before ${lastDue}.`
+    ? `You are requested to remit the total dues of ${formatRs(outstanding)}/- (${outstandingWords}) in favour of "${COMPANY.name}" payable on or before ${lastDue}.`
     : `You are requested to remit the dues as per the payment plan opted by you in favour of "${COMPANY.name}" as and when they fall due.`;
   for (const line of wrap(
     font,

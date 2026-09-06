@@ -1,4 +1,5 @@
 import { ApiError, authedRequest as authedRequestBase } from './authApi';
+import type { PaymentPlan } from './customerProfileApi';
 
 export interface GeneratedDocument {
   id: string;
@@ -9,6 +10,9 @@ export interface GeneratedDocument {
   created_date: string;
   signed_url: string;
   signed_url_expires_in: number;
+  /** Present on a booking-application upload: the derived payment plan
+   * (On Booking + 45/90/180/270-day milestones). */
+  payment_plan?: PaymentPlan | null;
 }
 
 export interface GenerateDocumentInput {
@@ -57,6 +61,10 @@ function messageForDocumentsError(status: number, detail: unknown): string {
     if (detail === 'document_type_required') return 'Document type is missing. Please refresh and try again.';
     if (detail === 'project_id_required') return 'Project is missing. Please select the project and try again.';
     if (detail === 'payment_id_required') return 'Payment reference is missing. Please complete payment again before generating the PDF.';
+    if (detail === 'total_amount_required')
+      return 'Enter the Total Plot Amount on the Pricing page before generating the application PDF.';
+    if (detail === 'booking_amount_exceeds_total')
+      return 'The Total Plot Amount is less than the booking amount already paid. Please correct it on the Pricing page.';
     if (detail === 'invalid_form_data') return 'Application form data could not be uploaded. Please refresh and try again.';
     if (detail === 'payment_not_found') return 'Payment record was not found. Please complete payment again before generating the PDF.';
     if (detail === 'payment_not_completed') return 'Payment is not completed yet. Please wait for confirmation before generating the PDF.';
