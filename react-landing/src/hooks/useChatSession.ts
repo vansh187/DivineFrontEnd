@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import * as chatApi from '../services/chatApi';
-import type { ChatButton } from '../services/chatApi';
+import type { ChatButton, PlotListItem, StructuredResult } from '../services/chatApi';
 import { ApiError } from '../services/authApi';
 import { useIsMobile } from './useIsMobile';
 
-export type { ChatButton };
+export type { ChatButton, PlotListItem };
 
 export type AgentMessageVariant =
   | { kind: 'text'; text: string; buttons?: ChatButton[] | null }
+  | { kind: 'plot_list'; text: string; plots: PlotListItem[]; buttons?: ChatButton[] | null }
   | { kind: 'contact_card'; phone: string; phoneHref: string };
 
 export type ChatMessage =
@@ -37,7 +38,13 @@ type ChatAction =
   | { type: 'SESSION_EXPIRED' }
   | { type: 'SESSION_RESET' }
   | { type: 'SEND_START'; localMessage?: ChatMessage; intentIsCallback?: boolean }
-  | { type: 'SEND_SUCCESS'; reply: string; buttons: ChatButton[] | null; callbackConfirmed: boolean }
+  | {
+      type: 'SEND_SUCCESS';
+      reply: string;
+      buttons: ChatButton[] | null;
+      structuredResult: StructuredResult | null;
+      callbackConfirmed: boolean;
+    }
   // Like SEND_SUCCESS but for the greeting round-trip: the real backend greeting
   // replaces the widget's local placeholder welcome (when that placeholder is
   // still the last message) instead of stacking a second greeting on top of it.
@@ -92,6 +99,20 @@ function isNonGreetingReply(reply: string, buttons: ChatButton[] | null): boolea
   return !trimmed || DIDNT_UNDERSTAND_RE.test(trimmed);
 }
 
+/** Turns a raw reply into the agent message variant to store — a `plot_list`
+ * structured_result becomes a `plot_list` variant, everything else stays text. */
+function buildAgentVariant(
+  reply: string,
+  buttons: ChatButton[] | null,
+  structuredResult: StructuredResult | null,
+): AgentMessageVariant {
+  const plots = structuredResult?.type === 'plot_list' ? (structuredResult.data?.plots ?? null) : null;
+  if (plots && plots.length > 0) {
+    return { kind: 'plot_list', text: reply, plots, buttons };
+  }
+  return { kind: 'text', text: reply, buttons };
+}
+
 const initialState: ChatState = {
   isOpen: false,
   sessionId: null,
@@ -144,7 +165,7 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
       const agentMessage: ChatMessage = {
         id: makeId(),
         role: 'agent',
-        variant: { kind: 'text', text: action.reply, buttons: action.buttons },
+        variant: buildAgentVariant(action.reply, action.buttons, action.structuredResult),
       };
       return {
         ...state,
@@ -370,7 +391,13 @@ export function useChatSession() {
           });
           return true;
         }
-        dispatch({ type: 'SEND_SUCCESS', reply: reply.reply, buttons: reply.buttons, callbackConfirmed: reply.callbackConfirmed !== null });
+        dispatch({
+          type: 'SEND_SUCCESS',
+          reply: reply.reply,
+          buttons: reply.buttons,
+          structuredResult: reply.structuredResult,
+          callbackConfirmed: reply.callbackConfirmed !== null,
+        });
         return true;
       } catch (err) {
         if (err instanceof ApiError && err.status === 404 && err.detail === 'session_not_found') {

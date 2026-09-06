@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
-import type { ChatButton, ChatMessage } from '../../hooks/useChatSession';
+import type { ChatButton, ChatMessage, PlotListItem } from '../../hooks/useChatSession';
 import { UserMessage } from './UserMessage';
 import { AgentMessage } from './AgentMessage';
 import { TypingIndicator } from './TypingIndicator';
@@ -12,9 +12,17 @@ interface MessageListProps {
   interimStatusLine: string | null;
   scrollRef: RefObject<HTMLDivElement | null>;
   onButtonTap?: (button: ChatButton) => void;
+  onPlotSelect?: (plot: PlotListItem) => void;
 }
 
-export function MessageList({ messages, isSending, interimStatusLine, scrollRef, onButtonTap }: MessageListProps) {
+export function MessageList({
+  messages,
+  isSending,
+  interimStatusLine,
+  scrollRef,
+  onButtonTap,
+  onPlotSelect,
+}: MessageListProps) {
   const endRef = useRef<HTMLDivElement>(null);
   const reducedMotion = usePrefersReducedMotion();
 
@@ -40,6 +48,7 @@ export function MessageList({ messages, isSending, interimStatusLine, scrollRef,
             variant={message.variant}
             interactive={!isSending && message.id === lastMessageId}
             onButtonTap={onButtonTap}
+            onPlotSelect={onPlotSelect}
           />
         ),
       )}

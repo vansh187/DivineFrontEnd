@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useChatSession } from '../../hooks/useChatSession';
-import type { AgentMessageVariant, ChatButton } from '../../hooks/useChatSession';
+import type { AgentMessageVariant, ChatButton, PlotListItem } from '../../hooks/useChatSession';
 import { useAuth } from '../../hooks/useAuth';
 import { ApiError, API_BASE_URL } from '../../services/authApi';
 import type { Role } from '../../services/authApi';
@@ -24,6 +24,38 @@ const roleHome: Record<Role, string> = {
   customer: '/customer',
   broker: '/broker',
 };
+
+// Public SPA routes a chat button may link to without an explicit
+// `action: "navigate"`. These get client-side routing so a static host doesn't
+// 404 on them. Auth-gated dashboard routes (/customer, /broker) are deliberately
+// excluded — those always want a full page load, which the backend now sends as
+// an `action: "navigate"` button handled separately.
+const INTERNAL_ROUTE_PREFIXES = ['/book-plot', '/residences', '/our-story'];
+
+/**
+ * If `rawUrl` refers to a page inside this site's own SPA, return its
+ * path (+search +hash) for `navigate()`. Returns null for anything that should
+ * stay a real link/window.open (API resources, external sites).
+ */
+function toInternalAppPath(rawUrl: string): string | null {
+  let path = rawUrl;
+  if (/^https?:\/\//i.test(rawUrl)) {
+    try {
+      const parsed = new URL(rawUrl);
+      if (parsed.origin !== window.location.origin) return null;
+      path = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    } catch {
+      return null;
+    }
+  } else if (!path.startsWith('/')) {
+    return null;
+  }
+  const pathname = path.split(/[?#]/)[0];
+  if (pathname === '/' || INTERNAL_ROUTE_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+    return path;
+  }
+  return null;
+}
 
 const WELCOME_MESSAGE =
   "Hi, I'm Divine Assistant. I can help with plot availability, pricing and payment plans, " +
@@ -385,14 +417,37 @@ export function ChatWidget() {
       return;
     }
 
+    // Backend-driven full-page navigation (e.g. "Browse & Book Plots" →
+    // /customer/plots?...). Always same-tab via location.assign — chat links
+    // never open a new tab, so `target: "_blank"` is intentionally ignored.
+    if (button.action === 'navigate' && button.url) {
+      window.location.assign(button.url);
+      return;
+    }
+
     if (button.url) {
-      // Backend buttons (e.g. loan report downloads) may return a path relative
-      // to the API host — resolve it there instead of the frontend's own origin,
-      // otherwise it 404s against the SPA router.
-      const absoluteUrl = /^https?:\/\//i.test(button.url) ? button.url : `${API_BASE_URL}${button.url}`;
-      window.open(absoluteUrl, '_blank', 'noopener,noreferrer');
+      const internalPath = toInternalAppPath(button.url);
+      if (internalPath) {
+        // A link into the site's own SPA (e.g. "Browse & Book Plots" → /book-plot).
+        // Route it through the client router so it doesn't hard-navigate to a
+        // path the static host has no file for and land on the 404 page.
+        session.close();
+        navigate(internalPath);
+      } else {
+        // Backend buttons (e.g. loan report downloads) may return a path relative
+        // to the API host — resolve it there instead of the frontend's own origin,
+        // otherwise it 404s against the SPA router.
+        const absoluteUrl = /^https?:\/\//i.test(button.url) ? button.url : `${API_BASE_URL}${button.url}`;
+        window.open(absoluteUrl, '_blank', 'noopener,noreferrer');
+      }
     }
     handleSendText(button.value, button.label);
+  };
+
+  const handlePlotSelect = (plot: PlotListItem) => {
+    // structured_result 'plot_list' rows: same-tab navigation to the plot's
+    // booking URL, per the chatbot contract (never window.open / _blank).
+    window.location.assign(plot.book_url);
   };
 
   const handleDesktopContactCard = (variant: AgentMessageVariant) => {
@@ -436,6 +491,7 @@ export function ChatWidget() {
             onSendText={handleSendText}
             onSendAudio={handleSendAudio}
             onButtonTap={handleButtonTap}
+            onPlotSelect={handlePlotSelect}
             onMicStateChange={session.setMicState}
             onMicPermissionDenied={handleMicPermissionDenied}
           />
