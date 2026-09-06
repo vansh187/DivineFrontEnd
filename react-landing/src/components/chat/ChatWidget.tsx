@@ -51,15 +51,27 @@ function isAuthGatedPath(path: string): boolean {
   return /^\/(customer|broker)(\/|$|\?)/.test(path);
 }
 
+// Stored in pendingChatNavRef when the visitor showed a "browse / book plots"
+// intent but the button carried no usable target — resolved to the role's plots
+// view once we know which role they logged in as. Not a real path (no leading /).
+const PLOTS_INTENT = 'plots';
+
+/** A button that means "show me plots to book" regardless of its action/url —
+ * covers the backend's `book_plots` value and any "browse/book plots" wording. */
+function isBrowsePlotsButton(button: ChatButton): boolean {
+  return /(^|_)book_?plots?($|_)/i.test(button.value) || /brows\w*\s+(?:&|and)?\s*book|book.*plot|brows\w*.*plot/i.test(`${button.label} ${button.value}`);
+}
+
 /** Where to land after a chat-driven login, given where the visitor was headed
  * when we detoured them through the login flow (e.g. tapped "Browse & Book
  * Plots" while signed out). */
-function postLoginDestination(role: Role, pendingPath: string | null): string {
-  if (!pendingPath) return roleHome[role];
-  if (pendingPath === roleHome[role] || pendingPath.startsWith(`${roleHome[role]}/`)) return pendingPath;
+function postLoginDestination(role: Role, pending: string | null): string {
+  if (!pending) return roleHome[role];
+  if (pending === PLOTS_INTENT) return `${roleHome[role]}/plots`;
+  if (pending === roleHome[role] || pending.startsWith(`${roleHome[role]}/`)) return pending;
   // Headed somewhere role-specific that isn't this role's area — send them to
   // this role's plots view if that's what they were after, else their home.
-  if (/\/plots(\/|$|\?)/.test(pendingPath)) return `${roleHome[role]}/plots`;
+  if (/\/plots(\/|$|\?)/.test(pending)) return `${roleHome[role]}/plots`;
   return roleHome[role];
 }
 
@@ -337,6 +349,7 @@ export function ChatWidget() {
     if (LOGOUT_PATTERN.test(text.trim())) {
       session.appendUserMessage(displayText);
       chatInitiatedAuthChangeRef.current = true;
+      pendingChatNavRef.current = null;
       logout();
       greetingSentRef.current = false;
       greetingInFlightRef.current = false;
@@ -353,6 +366,7 @@ export function ChatWidget() {
       // the thread, and let the greeting effect below re-run — it re-appends the
       // welcome message, and StarterPrompts reappears once the thread has no
       // user messages again.
+      pendingChatNavRef.current = null;
       greetingSentRef.current = false;
       greetingInFlightRef.current = false;
       greetingRetriedSinceOpenRef.current = false;
@@ -456,6 +470,15 @@ export function ChatWidget() {
       session.appendUserMessage(button.label);
       setPlotIntelligenceOpen(true);
       return;
+    }
+
+    // "Browse & Book Plots" tapped while signed out: whatever the backend does
+    // next (a login menu, or an action:navigate we can't follow yet), remember
+    // that the visitor wants the plots view so the login handlers can land them
+    // there — on /customer/plots or /broker/plots — instead of the dashboard.
+    if (!authSession && isBrowsePlotsButton(button)) {
+      const path = button.url ? urlPath(button.url) : '';
+      pendingChatNavRef.current = path && isAuthGatedPath(path) ? path : PLOTS_INTENT;
     }
 
     // Backend-driven full-page navigation (e.g. "Browse & Book Plots" →
