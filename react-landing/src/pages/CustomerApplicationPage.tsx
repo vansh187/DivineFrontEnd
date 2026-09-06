@@ -100,6 +100,11 @@ function SelectField({
 
 const GENDER_OPTIONS = ['Male', 'Female', 'Prefer not to say'];
 const RESIDENTIAL_STATUS_OPTIONS = ['Resident', 'Non Resident', 'Person of Indian Origin', 'Foreign National'];
+const PAYMENT_MODE_OPTIONS = ['Cheque', 'Demand Draft', 'NEFT / RTGS / UTR', 'Cash', 'Online transfer', 'Other'];
+/** Modes that count as an offline booking payment captured on Page 2 — enough,
+ *  with a reference no. and amount, to generate the packet without an online/cash
+ *  transaction on the last page. */
+const OFFLINE_PAYMENT_MODES = ['Cheque', 'Demand Draft', 'NEFT / RTGS / UTR', 'Online transfer', 'Other'];
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -137,17 +142,22 @@ function SignatureUpload({
   label,
   status,
   onUpload,
+  accept = 'image/jpeg,image/png',
+  hint,
 }: {
   label: string;
   status: SignatureStatus;
   onUpload: (file: File) => void;
+  accept?: string;
+  hint?: string;
 }) {
   return (
     <label className="block sm:col-span-2">
       <span className="text-xs font-semibold text-ink">{label}</span>
+      {hint && <span className="mt-1 block text-[11px] font-medium text-ink-muted">{hint}</span>}
       <input
         type="file"
-        accept="image/jpeg,image/png"
+        accept={accept}
         onChange={(event) => {
           const file = event.target.files?.[0];
           if (file) void onUpload(file);
@@ -365,8 +375,18 @@ export function CustomerApplicationPage() {
     });
   };
 
-  const handleSignatureUpload = async (kind: 'applicant' | 'coApplicant' | 'cancelledCheque', file: File) => {
-    const key = kind === 'applicant' ? 'applicantSignature' : kind === 'coApplicant' ? 'coApplicantSignature' : 'cancelledCheque';
+  const handleSignatureUpload = async (
+    kind: 'applicant' | 'coApplicant' | 'cancelledCheque' | 'paymentProof',
+    file: File,
+  ) => {
+    const key =
+      kind === 'applicant'
+        ? 'applicantSignature'
+        : kind === 'coApplicant'
+          ? 'coApplicantSignature'
+          : kind === 'paymentProof'
+            ? 'paymentProof'
+            : 'cancelledCheque';
     try {
       const dataUrl = await blobToDataUrl(file);
       persist({
@@ -505,12 +525,13 @@ export function CustomerApplicationPage() {
     // tile (Documents page) - the single source of truth for whether their signature/photo
     // are required, not whatever happens to be typed into the name field below.
     const hasCoApplicant = docs.hasCoApplicant;
-    if (docs.payment.status !== 'paid') {
-      setError('Complete the plot booking payment before generating the application PDF.');
-      return;
-    }
-    if (!docs.payment.paymentId) {
-      setError('Payment reference is missing. Please complete payment again before generating the application PDF.');
+    // Either the online/cash transaction is complete, or the offline payment
+    // (cheque / DD / UTR) has been captured on the "Fill application form" page.
+    const onlinePaymentComplete = docs.payment.status === 'paid' && !!docs.payment.paymentId;
+    if (!onlinePaymentComplete && !offlinePaymentEntered) {
+      setError(
+        'Complete the plot booking payment, or enter the cheque / DD / UTR payment mode, reference number and amount on the "Fill application form" page, before generating the application PDF.',
+      );
       return;
     }
     if (!docs.bookingApplication.formData.projectId) {
@@ -604,11 +625,47 @@ export function CustomerApplicationPage() {
             fileName: docs.cancelledCheque.fileName,
             dataUrl: docs.cancelledCheque.dataUrl,
           },
+          ...(docs.paymentProof.dataUrl
+            ? [
+                {
+                  title: 'Payment Proof - Cheque / DD / UTR',
+                  fileName: docs.paymentProof.fileName,
+                  dataUrl: docs.paymentProof.dataUrl,
+                },
+              ]
+            : []),
         ],
       });
       const fileName = `${docs.bookingApplication.formData.projectId || 'project'}-booking-application-${Date.now()}.pdf`;
       const pdfFile = blobToFile(blob, fileName);
       const pdfDataUrl = await blobToDataUrl(blob);
+
+      // Offline payment (cheque / DD / UTR) has no payment reference for the
+      // backend's document endpoint — keep the packet local so the customer
+      // still gets it, and submit the physical instrument to the sales desk.
+      if (!onlinePaymentComplete) {
+        persist({
+          ...docs,
+          bookingApplication: {
+            ...docs.bookingApplication,
+            generatedAt: new Date().toISOString(),
+            pdfFileName: fileName,
+            pdfDataUrl,
+            backendDocumentId: null,
+            signedUrl: null,
+            signedUrlExpiresAt: null,
+            error: null,
+          },
+        });
+        openPdfBlob(blob);
+        return;
+      }
+
+      if (!docs.payment.paymentId) {
+        setError('Payment reference is missing. Please complete payment again before generating the application PDF.');
+        return;
+      }
+
       try {
         const backendDoc = await uploadGeneratedApplicationPdf(session.token, {
           file: pdfFile,
@@ -657,6 +714,14 @@ export function CustomerApplicationPage() {
   // and the customer has a way to record it again rather than hitting a dead end.
   const paymentComplete = docs.payment.status === 'paid' && !!docs.payment.paymentId;
   const paymentNeedsReference = docs.payment.status === 'paid' && !docs.payment.paymentId;
+  // Offline booking payment captured on Page 2 (cheque / DD / UTR): mode + a
+  // reference no. + a positive amount. This unlocks PDF generation without an
+  // online or cash transaction on the last page.
+  const offlinePaymentEntered =
+    OFFLINE_PAYMENT_MODES.includes(form.paymentMode.trim()) &&
+    form.chequeNo.trim() !== '' &&
+    parseAmount(form.bookingAmount) > 0;
+  const canGeneratePdf = paymentComplete || offlinePaymentEntered;
   const selectedProject = applicationProjects.find((project) => project.id === form.projectId);
   const pageLabels = [
     'Project',
@@ -726,10 +791,25 @@ export function CustomerApplicationPage() {
           <UndertakingCopy projectName={selectedProject?.label ?? ''} />
           <Field label="Booking amount remitted (Rs.)" type="number" value={form.bookingAmount} onChange={(value) => updateForm('bookingAmount', value)} />
           <Field label="Amount in words" value={form.bookingAmountWords} onChange={(value) => updateForm('bookingAmountWords', value)} />
-          <Field label="Bank draft / cheque / reference no." value={form.chequeNo} onChange={(value) => updateForm('chequeNo', value)} />
+          <SelectField
+            label="Payment mode"
+            value={form.paymentMode}
+            onChange={(value) => updateForm('paymentMode', value)}
+            options={PAYMENT_MODE_OPTIONS}
+            placeholder="Select payment mode"
+          />
+          <Field
+            label="Cheque / DD / UTR / reference no."
+            value={form.chequeNo}
+            onChange={(value) => updateForm('chequeNo', value)}
+          />
           <Field label="Dated" type="date" value={form.chequeDate} onChange={(value) => updateForm('chequeDate', value)} />
           <Field label="Drawn on bank" value={form.bankName} onChange={(value) => updateForm('bankName', value)} />
-          <Field label="Payment mode" value={form.paymentMode} onChange={(value) => updateForm('paymentMode', value)} />
+          <div className="sm:col-span-2 rounded-lg border border-hairline bg-bg p-3 text-xs leading-relaxed text-ink-muted">
+            Paying by cheque, demand draft or bank transfer? Enter the mode, reference number and amount above, then
+            attach the instrument below. That is enough to generate the application packet on the last page — an online
+            or cash transaction is not required.
+          </div>
           <SignatureUpload
             label="First applicant signature for undertaking"
             status={docs.applicantSignature}
@@ -739,6 +819,13 @@ export function CustomerApplicationPage() {
             label="Cancelled cheque (mandatory)"
             status={docs.cancelledCheque}
             onUpload={(file) => void handleSignatureUpload('cancelledCheque', file)}
+          />
+          <SignatureUpload
+            label="Payment proof - cheque / DD / UTR receipt (optional)"
+            hint="Image (JPG/PNG) or PDF. Attached to the generated application PDF."
+            accept="image/jpeg,image/png,application/pdf"
+            status={docs.paymentProof}
+            onUpload={(file) => void handleSignatureUpload('paymentProof', file)}
           />
         </Section>
 
@@ -1144,13 +1231,31 @@ export function CustomerApplicationPage() {
               <div>
                 <p className="font-semibold text-ink">Plot booking payment</p>
                 <p className="mt-1 text-xs leading-relaxed text-ink-muted">
-                  Pay online through Razorpay or record cash received. PDF generation unlocks only after payment is successful.
+                  Pay online through Razorpay or record cash received here — or enter cheque / DD / UTR details on the
+                  &ldquo;Fill application form&rdquo; page. PDF generation unlocks once any of these is done.
                 </p>
               </div>
-              <span className={`rounded-full px-3 py-1 text-xs font-semibold ${paymentComplete ? 'bg-green text-white' : 'bg-hairline text-ink-muted'}`}>
-                {paymentComplete ? 'Paid' : 'Payment pending'}
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                  paymentComplete
+                    ? 'bg-green text-white'
+                    : offlinePaymentEntered
+                      ? 'bg-terracotta text-white'
+                      : 'bg-hairline text-ink-muted'
+                }`}
+              >
+                {paymentComplete ? 'Paid' : offlinePaymentEntered ? 'Offline payment entered' : 'Payment pending'}
               </span>
             </div>
+            {!paymentComplete && offlinePaymentEntered && (
+              <p className="mt-4 rounded-lg border border-terracotta-light bg-terracotta/5 px-3 py-2 text-xs leading-relaxed text-ink-muted">
+                <span className="font-semibold text-ink">
+                  {form.paymentMode} · Ref {form.chequeNo} · Rs. {parseAmount(form.bookingAmount).toLocaleString('en-IN')}
+                </span>{' '}
+                captured on the application form. You can generate the packet now; hand the physical cheque / draft to the
+                sales desk. An online / cash transaction below is optional.
+              </p>
+            )}
             {paymentComplete ? (
               <p className="mt-4 text-sm text-ink-muted">
                 <span className="font-semibold text-ink">Rs. {docs.payment.amount?.toLocaleString('en-IN')}</span> paid
@@ -1216,15 +1321,16 @@ export function CustomerApplicationPage() {
             )}
           </div>
           <div className="basis-full pt-8">
-            {!paymentComplete && (
+            {!canGeneratePdf && (
               <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
-                Complete the plot booking payment first. After Razorpay verifies the payment, PDF generation will be enabled.
+                Complete the plot booking payment, or enter the cheque / DD / UTR payment mode, reference number and amount
+                on the &ldquo;Fill application form&rdquo; page, to enable PDF generation.
               </p>
             )}
             <button
               type="button"
               onClick={handleGenerate}
-              disabled={generating || !paymentComplete}
+              disabled={generating || !canGeneratePdf}
               className="rounded-full bg-green px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
             >
               {generating ? 'Generating...' : 'Generate application PDF'}
