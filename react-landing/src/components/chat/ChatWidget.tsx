@@ -232,6 +232,11 @@ export function ChatWidget() {
   // itself (returned auth_token). The credential handlers check it after their
   // send to decide whether the auth-API fallback still needs to run.
   const chatLoginHandledRef = useRef(false);
+  // True only while a credential turn is awaiting its reply. The reply handler
+  // applies an `auth_token` ONLY in this window, so a stray/late token on some
+  // other reply can never silently sign a signed-out visitor back in (e.g. right
+  // after they used the "Log out" menu).
+  const pendingChatLoginRef = useRef(false);
   useEffect(() => {
     const currentToken = authSession?.token ?? null;
     if (authTokenRef.current === undefined) {
@@ -240,6 +245,8 @@ export function ChatWidget() {
     }
     if (authTokenRef.current === currentToken) return;
     authTokenRef.current = currentToken;
+    // Any auth change ends a chat-login window - a late token must not re-apply.
+    pendingChatLoginRef.current = false;
     if (chatInitiatedAuthChangeRef.current) {
       chatInitiatedAuthChangeRef.current = false;
       return;
@@ -377,6 +384,7 @@ export function ChatWidget() {
       session.appendUserMessage(displayText);
       chatInitiatedAuthChangeRef.current = true;
       pendingChatNavRef.current = null;
+      pendingChatLoginRef.current = false;
       logout();
       greetingSentRef.current = false;
       greetingInFlightRef.current = false;
@@ -406,6 +414,8 @@ export function ChatWidget() {
     // Otherwise fall back to the auth API — covers a backend not yet serving the
     // in-chat login contract.
     const finishChatLogin = (role: Role, runFallback: () => Promise<void>) => {
+      // The reply has landed — the auth_token window is over either way.
+      pendingChatLoginRef.current = false;
       if (chatLoginHandledRef.current) return;
       void runFallback()
         .then(() => {
@@ -444,6 +454,7 @@ export function ChatWidget() {
 
       chatInitiatedAuthChangeRef.current = true;
       chatLoginHandledRef.current = false;
+      pendingChatLoginRef.current = true;
       // Send the confirmation to the backend so it can complete the login and
       // hand back auth_token + redirect_url; fall back to the auth API if not.
       void session
@@ -467,6 +478,7 @@ export function ChatWidget() {
       const password = text;
       chatInitiatedAuthChangeRef.current = true;
       chatLoginHandledRef.current = false;
+      pendingChatLoginRef.current = true;
       void session
         .send(withPendingGeo({ message: text, displayText }))
         .then(() => finishChatLogin(role, () => login(role, toAuthLoginInput({ username, password }))));
@@ -562,16 +574,19 @@ export function ChatWidget() {
   // page boots already signed in), then navigate in the same tab. Reassigned
   // every render so it closes over the latest session/messages.
   chatReplyHandlerRef.current = (reply: ChatReply) => {
-    if (reply.authToken) {
-      chatLoginHandledRef.current = true;
-      chatInitiatedAuthChangeRef.current = true;
-      applySession({
-        token: reply.authToken,
-        role: reply.authRole ?? inferChatRole(session.messages),
-        email: lastTypedEmail(session.messages),
-      });
-      pendingChatNavRef.current = null;
-    }
+    // Only honour an auth_token / redirect while a credential turn is actually
+    // awaiting its reply. Outside that window a token on some later reply is
+    // ignored, so a signed-out visitor is never silently signed back in.
+    if (!pendingChatLoginRef.current || !reply.authToken) return;
+    pendingChatLoginRef.current = false;
+    chatLoginHandledRef.current = true;
+    chatInitiatedAuthChangeRef.current = true;
+    applySession({
+      token: reply.authToken,
+      role: reply.authRole ?? inferChatRole(session.messages),
+      email: lastTypedEmail(session.messages),
+    });
+    pendingChatNavRef.current = null;
     if (reply.redirectUrl) {
       session.close();
       // redirect_target is always "_self" per the contract — same tab, full load.
