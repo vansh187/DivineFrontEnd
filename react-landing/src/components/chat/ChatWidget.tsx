@@ -32,6 +32,37 @@ const roleHome: Record<Role, string> = {
 // an `action: "navigate"` button handled separately.
 const INTERNAL_ROUTE_PREFIXES = ['/book-plot', '/residences', '/our-story'];
 
+/** pathname(+search) of a chat-button url, absolute same-origin or relative;
+ * '' when it can't be resolved to a local path. */
+function urlPath(rawUrl: string): string {
+  if (/^https?:\/\//i.test(rawUrl)) {
+    try {
+      const parsed = new URL(rawUrl);
+      return `${parsed.pathname}${parsed.search}`;
+    } catch {
+      return '';
+    }
+  }
+  return rawUrl.startsWith('/') ? rawUrl : '';
+}
+
+/** Routes that RoleRoute guards — a logged-out visitor can't land on these. */
+function isAuthGatedPath(path: string): boolean {
+  return /^\/(customer|broker)(\/|$|\?)/.test(path);
+}
+
+/** Where to land after a chat-driven login, given where the visitor was headed
+ * when we detoured them through the login flow (e.g. tapped "Browse & Book
+ * Plots" while signed out). */
+function postLoginDestination(role: Role, pendingPath: string | null): string {
+  if (!pendingPath) return roleHome[role];
+  if (pendingPath === roleHome[role] || pendingPath.startsWith(`${roleHome[role]}/`)) return pendingPath;
+  // Headed somewhere role-specific that isn't this role's area — send them to
+  // this role's plots view if that's what they were after, else their home.
+  if (/\/plots(\/|$|\?)/.test(pendingPath)) return `${roleHome[role]}/plots`;
+  return roleHome[role];
+}
+
 /**
  * If `rawUrl` refers to a page inside this site's own SPA, return its
  * path (+search +hash) for `navigate()`. Returns null for anything that should
@@ -158,6 +189,10 @@ export function ChatWidget() {
   // below must skip its reset for exactly that one transition instead of wiping out the
   // "You are logged in as..." confirmation it's about to append.
   const chatInitiatedAuthChangeRef = useRef(false);
+  // Set when a logged-out visitor taps a chat button headed for an auth-gated
+  // page (e.g. "Browse & Book Plots" → /customer/plots). We can't navigate there
+  // yet, so we remember it and resume once the in-chat login succeeds.
+  const pendingChatNavRef = useRef<string | null>(null);
   useEffect(() => {
     const currentToken = authSession?.token ?? null;
     if (authTokenRef.current === undefined) {
@@ -345,7 +380,9 @@ export function ChatWidget() {
       chatInitiatedAuthChangeRef.current = true;
       void loginAfterChatSignup(role, credentials)
         .then(() => {
-          navigate(roleHome[role]);
+          const dest = postLoginDestination(role, pendingChatNavRef.current);
+          pendingChatNavRef.current = null;
+          navigate(dest);
           session.appendAgentMessage({
             kind: 'text',
             text: `You are logged in as ${role}.`,
@@ -353,6 +390,7 @@ export function ChatWidget() {
         })
         .catch((err) => {
           chatInitiatedAuthChangeRef.current = false;
+          pendingChatNavRef.current = null;
           session.appendAgentMessage({
             kind: 'text',
             text: err instanceof ApiError ? err.message : 'I could not log you in. Please check your email and password and try again.',
@@ -376,11 +414,14 @@ export function ChatWidget() {
       chatInitiatedAuthChangeRef.current = true;
       void login(role, toAuthLoginInput({ username, password: text }))
         .then(() => {
-          navigate(roleHome[role]);
+          const dest = postLoginDestination(role, pendingChatNavRef.current);
+          pendingChatNavRef.current = null;
+          navigate(dest);
           session.appendAgentMessage({ kind: 'text', text: `You are logged in as ${role}.` });
         })
         .catch((err) => {
           chatInitiatedAuthChangeRef.current = false;
+          pendingChatNavRef.current = null;
           session.appendAgentMessage({
             kind: 'text',
             text: err instanceof ApiError ? err.message : 'I could not log you in. Please check your email and password and try again.',
@@ -421,6 +462,14 @@ export function ChatWidget() {
     // /customer/plots?...). Always same-tab via location.assign — chat links
     // never open a new tab, so `target: "_blank"` is intentionally ignored.
     if (button.action === 'navigate' && button.url) {
+      const path = urlPath(button.url);
+      if (!authSession && path && isAuthGatedPath(path)) {
+        // Signed out and headed for a role-gated page — remember the target and
+        // let the backend run its login prompt; resume in the login handlers.
+        pendingChatNavRef.current = path;
+        handleSendText(button.value, button.label);
+        return;
+      }
       window.location.assign(button.url);
       return;
     }
@@ -447,6 +496,12 @@ export function ChatWidget() {
   const handlePlotSelect = (plot: PlotListItem) => {
     // structured_result 'plot_list' rows: same-tab navigation to the plot's
     // booking URL, per the chatbot contract (never window.open / _blank).
+    const path = urlPath(plot.book_url);
+    if (!authSession && path && isAuthGatedPath(path)) {
+      pendingChatNavRef.current = path;
+      handleSendText('book_plots', 'Book a plot');
+      return;
+    }
     window.location.assign(plot.book_url);
   };
 
