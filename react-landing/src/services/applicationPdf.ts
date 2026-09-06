@@ -380,6 +380,30 @@ function drawTemplateImage(page: PDFPage, image: PDFImage, x: number, y: number,
   page.drawImage(image, { x: x + (maxWidth - width) / 2, y: y + (maxHeight - height) / 2, width, height, opacity: 0.94 });
 }
 
+function isPdfSource(source: string): boolean {
+  return source.startsWith('data:application/pdf') || source.toLowerCase().split(/[?#]/)[0].endsWith('.pdf');
+}
+
+/** Copies every page of an uploaded PDF (e.g. a cheque / DD / UTR receipt) into
+ *  the generated packet, each stamped with the attachment title. */
+async function appendUploadedPdfPages(ctx: PdfContext, title: string, source: string) {
+  const bytes = source.startsWith('data:') ? dataUrlToBytes(source) : await bytesFromUrl(source);
+  const uploadedDoc = await PDFDocument.load(bytes, { ignoreEncryption: true });
+  const copied = await ctx.pdfDoc.copyPages(uploadedDoc, uploadedDoc.getPageIndices());
+  for (const copiedPage of copied) {
+    ctx.pdfDoc.addPage(copiedPage);
+    ctx.pageNumber += 1;
+    const { height } = copiedPage.getSize();
+    copiedPage.drawText(`Attached: ${title}`, {
+      x: 24,
+      y: height - 22,
+      size: 8,
+      font: ctx.bold,
+      color: muted,
+    });
+  }
+}
+
 async function appendIdentityAttachmentPages(ctx: PdfContext, attachments: IdentityAttachment[] = []) {
   const available = attachments.filter((attachment) => attachment.dataUrl || attachment.signedUrl);
   if (!available.length) return;
@@ -387,6 +411,27 @@ async function appendIdentityAttachmentPages(ctx: PdfContext, attachments: Ident
   for (const attachment of available) {
     const source = attachment.dataUrl || attachment.signedUrl;
     if (!source) continue;
+
+    if (isPdfSource(source)) {
+      try {
+        await appendUploadedPdfPages(ctx, attachment.title, source);
+      } catch {
+        const page = ctx.pdfDoc.addPage(pageSize);
+        ctx.pageNumber += 1;
+        drawPageFrame(ctx, page);
+        drawPageHeader(ctx, page, 'Attached Document', attachment.title);
+        page.drawText('Could not embed this uploaded PDF. Please re-upload the document and generate again.', {
+          x: marginX + 18,
+          y: 430,
+          size: 9,
+          font: ctx.bold,
+          color: muted,
+        });
+        drawFooterSignatures(ctx, page);
+      }
+      continue;
+    }
+
     const page = ctx.pdfDoc.addPage(pageSize);
     ctx.pageNumber += 1;
     drawPageFrame(ctx, page);

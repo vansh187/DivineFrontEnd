@@ -313,6 +313,10 @@ export interface CustomerDocState {
   /** Mandatory cancelled cheque upload (Page 2 - Fill application form) - client-side
    * only, same as the signatures, embedded as an identity attachment page in the PDF. */
   cancelledCheque: SignatureStatus;
+  /** Optional proof of an offline booking payment - a scan/photo or PDF of the
+   * cheque, demand draft, or NEFT/RTGS/UTR receipt entered on Page 2. Client-side
+   * only; appended to the generated application PDF. */
+  paymentProof: SignatureStatus;
   /** Co-applicant details are optional - this is the single source of truth (set via
    * a checkbox on the PAN card & signatures tile) for whether the co-applicant
    * signature/photo are required and whether the photo upload tile is shown at all. */
@@ -406,6 +410,7 @@ export function loadCustomerDocs(email: string): CustomerDocState {
       applicantSignature: { ...emptySignatureStatus(), ...(parsed.applicantSignature ?? parsed.signature) },
       coApplicantSignature: { ...emptySignatureStatus(), ...parsed.coApplicantSignature },
       cancelledCheque: { ...emptySignatureStatus(), ...parsed.cancelledCheque },
+      paymentProof: { ...emptySignatureStatus(), ...parsed.paymentProof },
       // State cached before this checkbox existed won't have it - infer from whether a
       // co-applicant signature was already on file rather than defaulting everyone to false.
       hasCoApplicant: parsed.hasCoApplicant ?? Boolean(parsed.coApplicantSignature?.fileName),
@@ -431,6 +436,7 @@ export function loadCustomerDocs(email: string): CustomerDocState {
       applicantSignature: emptySignatureStatus(),
       coApplicantSignature: emptySignatureStatus(),
       cancelledCheque: emptySignatureStatus(),
+      paymentProof: emptySignatureStatus(),
       hasCoApplicant: false,
       generatedDoc: emptyGeneratedDocStatus(),
       bookingApplication: emptyBookingApplicationStatus(),
