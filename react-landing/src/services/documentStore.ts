@@ -456,8 +456,74 @@ export function loadCustomerDocs(email: string): CustomerDocState {
   }
 }
 
+function isQuotaError(err: unknown): boolean {
+  return (
+    err instanceof DOMException &&
+    (err.name === 'QuotaExceededError' || err.name === 'NS_ERROR_DOM_QUOTA_REACHED' || err.code === 22 || err.code === 1014)
+  );
+}
+
+/**
+ * Drop the heavy base64 payloads so the record fits localStorage (~5 MB).
+ * `aggressive` also drops the copies that only exist locally — a last resort
+ * before giving up. The in-memory React state keeps every `dataUrl`; this only
+ * trims what goes to disk, and anything with a `documentId`/`signedUrl` can be
+ * re-fetched from the backend on the next load.
+ */
+function slimDocsForStorage<T>(state: T, aggressive: boolean): T {
+  const clone = JSON.parse(JSON.stringify(state)) as Record<string, unknown>;
+
+  const booking = clone.bookingApplication as Record<string, unknown> | undefined;
+  if (booking && typeof booking.pdfDataUrl === 'string') booking.pdfDataUrl = null;
+
+  for (const value of Object.values(clone)) {
+    if (!value || typeof value !== 'object' || !('dataUrl' in value)) continue;
+    const doc = value as { dataUrl?: string | null; documentId?: string | null; signedUrl?: string | null };
+    if (typeof doc.dataUrl !== 'string') continue;
+    if (aggressive || doc.documentId || doc.signedUrl) doc.dataUrl = null;
+  }
+  return clone as T;
+}
+
+/** Free space by dropping doc caches for accounts other than the current one. */
+function purgeStaleDocCaches(currentKey: string) {
+  try {
+    const stale: string[] = [];
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('dvi_docs_') && k !== currentKey) stale.push(k);
+    }
+    stale.forEach((k) => localStorage.removeItem(k));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** localStorage.setItem that never throws: on a quota error it purges stale
+ * caches and falls back to progressively slimmer payloads; if nothing fits it
+ * leaves the previously stored value untouched. No-ops when storage is off. */
+function persistDocs(key: string, state: unknown) {
+  const tryWrite = (payload: string): boolean | 'quota' => {
+    try {
+      localStorage.setItem(key, payload);
+      return true;
+    } catch (err) {
+      return isQuotaError(err) ? 'quota' : false;
+    }
+  };
+
+  if (tryWrite(JSON.stringify(state)) === true) return;
+
+  purgeStaleDocCaches(key);
+  const slim = JSON.stringify(slimDocsForStorage(state, false));
+  if (tryWrite(slim) === true) return;
+
+  tryWrite(JSON.stringify(slimDocsForStorage(state, true)));
+  // If even that failed, the last good value stays in place.
+}
+
 export function saveCustomerDocs(email: string, state: CustomerDocState) {
-  localStorage.setItem(storageKey('customer', email), JSON.stringify(state));
+  persistDocs(storageKey('customer', email), state);
 }
 
 export function loadBrokerDocs(email: string): BrokerDocState {
@@ -484,5 +550,5 @@ export function loadBrokerDocs(email: string): BrokerDocState {
 }
 
 export function saveBrokerDocs(email: string, state: BrokerDocState) {
-  localStorage.setItem(storageKey('broker', email), JSON.stringify(state));
+  persistDocs(storageKey('broker', email), state);
 }
