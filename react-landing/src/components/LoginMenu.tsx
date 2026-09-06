@@ -212,6 +212,9 @@ export function LoginMenu({ light = false }: { light?: boolean }) {
                   onClick={() => {
                     logout();
                     setOpen(false);
+                    // Always land on the public home page after signing out,
+                    // whatever page the menu was opened from.
+                    navigate('/', { replace: true });
                   }}
                   className="group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-ink transition-colors hover:bg-bg"
                 >
