@@ -72,7 +72,7 @@ export function OurStoryPage() {
           <div className="pointer-events-none absolute inset-0 opacity-[0.45] [background-image:linear-gradient(rgba(6,31,45,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(6,31,45,0.06)_1px,transparent_1px)] [background-size:88px_88px]" />
           <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-chrome" />
 
-          <div className="relative z-10 mx-auto grid max-w-7xl gap-8 lg:grid-cols-[minmax(340px,0.68fr)_minmax(580px,1.32fr)] lg:items-start">
+          <div className="relative z-10 mx-auto grid max-w-7xl gap-6 lg:grid-cols-[minmax(340px,0.9fr)_minmax(260px,360px)_minmax(340px,0.95fr)] lg:items-start">
             <div className="flex max-w-xl flex-col pt-2">
               <p className="eyebrow-label text-terracotta">Founder's Page</p>
               <h1 className="mt-4 max-w-[12ch] font-display text-balance text-4xl font-bold leading-tight text-ink sm:text-5xl xl:text-6xl">
@@ -105,44 +105,113 @@ export function OurStoryPage() {
                   </div>
                 ))}
               </div>
+              <figure className="mt-5 rounded-xl bg-chrome p-6 text-white shadow-[0_30px_82px_-48px_rgba(6,31,45,0.62)]">
+                <figcaption className="eyebrow-label text-terracotta-light">Signature Goal</figcaption>
+                <blockquote className="mt-3 font-display text-3xl font-bold leading-tight">
+                  Clear on paper. Confident on site. Valuable over time.
+                </blockquote>
+                <div className="mt-5 h-px w-20 bg-terracotta" />
+                <p className="mt-4 text-sm leading-[1.75] text-white/72">
+                  A founder-led standard for every buyer conversation, every township plan and every delivery milestone.
+                </p>
+              </figure>
+              <div className="mt-7 rounded-xl border border-hairline bg-white/72 p-5 shadow-[0_22px_58px_-42px_rgba(6,31,45,0.34)] backdrop-blur-sm">
+                <p className="eyebrow-label text-chrome">Founder's Principles</p>
+                <div className="mt-4 grid gap-3">
+                  {[
+                    ['Approval-led', 'Every township begins with clear compliance and buyer confidence.'],
+                    ['Site-first', 'Progress should be visible on ground before it becomes a promise.'],
+                    ['Built to mature', 'Planning, landscape and infrastructure must hold value over time.'],
+                  ].map(([title, text]) => (
+                    <div key={title} className="border-t border-hairline pt-3 first:border-t-0 first:pt-0">
+                      <p className="font-display text-lg font-bold leading-tight text-ink">{title}</p>
+                      <p className="mt-1 text-sm leading-[1.65] text-ink-muted">{text}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
 
-            <div className="relative mx-auto flex w-full max-w-4xl flex-col lg:pt-2">
-              <div className="relative overflow-hidden rounded-xl border border-hairline bg-black shadow-[0_24px_64px_-44px_rgba(6,31,45,0.42)]">
+            <div className="mx-auto grid w-full max-w-[360px] gap-5">
+              <div className="relative overflow-hidden rounded-xl border border-white/20 bg-black shadow-[0_34px_90px_-44px_rgba(6,31,45,0.72)]">
                 <video
                   ref={videoRef}
-                  className="block aspect-video h-auto w-full object-contain"
-                  src="/our-story/our-story-hero.mp4"
-                  poster="/our-story/our-story-hero-poster.jpg"
+                  className="block aspect-[9/16] w-full object-cover"
+                  src="/our-story/founders-desk.mp4"
                   autoPlay
                   muted={muted}
                   loop
                   playsInline
-                  aria-label="Owner message about the Divine Vision story with optional sound"
+                  aria-label="Founder desk message about the Divine Vision story with optional sound"
                 />
-                <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10" />
+                <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/16" />
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[linear-gradient(180deg,rgba(6,31,45,0.45),transparent)]" />
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-[linear-gradient(0deg,rgba(6,31,45,0.34),transparent)]" />
                 <button
                   type="button"
                   onClick={toggleMute}
                   aria-pressed={!muted}
                   aria-label={muted ? 'Turn on story video sound' : 'Mute story video sound'}
-                  className="absolute right-4 top-4 z-20 flex h-11 w-11 items-center justify-center rounded-full border border-white/30 bg-black/52 text-white backdrop-blur-sm transition-colors duration-200 hover:bg-black/72"
+                  className="absolute right-4 top-4 z-20 flex h-11 w-11 items-center justify-center rounded-full border border-white/35 bg-black/52 text-white backdrop-blur-sm transition-colors duration-200 hover:bg-black/72"
                 >
                   {muted ? <SpeakerMutedIcon /> : <SpeakerOnIcon />}
                 </button>
               </div>
-              <div className="mt-4 grid gap-4 rounded-lg border border-hairline bg-surface p-5 shadow-[0_18px_48px_-36px_rgba(6,31,45,0.28)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+              <div className="rounded-xl border border-hairline bg-white/82 p-5 text-center shadow-[0_20px_58px_-42px_rgba(6,31,45,0.42)]">
+                <p className="eyebrow-label text-terracotta">Founder's Desk</p>
+                <p className="mt-3 font-display text-2xl font-bold leading-tight text-ink">
+                  Leadership you can hear. Delivery you can verify.
+                </p>
+                <div className="mx-auto mt-4 h-px w-20 bg-terracotta" />
+                <p className="mt-4 text-sm leading-[1.7] text-ink-muted">
+                  A direct message on the discipline behind every Divine Vision township.
+                </p>
+              </div>
+              <div className="rounded-xl border border-hairline bg-[linear-gradient(180deg,#ffffff_0%,#f2efe6_100%)] p-5 shadow-[0_20px_58px_-42px_rgba(6,31,45,0.34)]">
+                <p className="eyebrow-label text-chrome">Corridor Legacy</p>
+                <div className="mt-4 grid gap-3">
+                  {[
+                    ['2005', 'Started with a long-term view of the NH-1 growth corridor.'],
+                    ['2007-17', 'Delivered communities across Kurukshetra and Karnal.'],
+                    ['Today', 'Active plotted townships shaped for premium family ownership.'],
+                  ].map(([year, text]) => (
+                    <div key={year} className="grid grid-cols-[64px_minmax(0,1fr)] gap-3 border-t border-hairline pt-3 first:border-t-0 first:pt-0">
+                      <span className="font-display text-xl font-bold text-terracotta">{year}</span>
+                      <p className="text-sm leading-[1.65] text-ink-muted">{text}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-5 lg:pt-2">
+              <div className="flex min-h-[332px] flex-col justify-between rounded-xl border border-hairline bg-[linear-gradient(135deg,#ffffff_0%,#f7f2e8_58%,#eef4ef_100%)] p-5 shadow-[0_28px_74px_-48px_rgba(6,31,45,0.36)] lg:p-7">
                 <div>
                   <span className="eyebrow-label text-chrome">Leadership Message</span>
-                  <p className="mt-2 max-w-3xl text-sm leading-[1.75] text-ink-muted">
+                  <h2 className="mt-4 max-w-[12ch] font-display text-4xl font-bold leading-tight text-ink xl:text-5xl">
+                    Disciplined leadership. Delivered communities.
+                  </h2>
+                  <div className="mt-6 h-px w-20 bg-terracotta" />
+                </div>
+                <div className="mt-8">
+                  <p className="max-w-3xl text-sm leading-[1.85] text-ink-muted">
                     The founder's message sets the tone for how Divine Vision wants every buyer
                     to experience the brand: with clarity, respect for timelines and a premium
                     township environment that feels practical, composed and future-ready.
                   </p>
+                  <div className="mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-hairline bg-hairline text-center">
+                    {['Approval-led', 'Site-first', 'Premium planning', 'Long-term value'].map((item) => (
+                      <span key={item} className="bg-white/82 px-3 py-4 text-xs font-semibold uppercase tracking-[0.08em] text-chrome">
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                  <span className="mt-6 block text-right text-xs font-semibold text-ink-muted">
+                    Divine Vision Infratech Pvt. Ltd.
+                  </span>
                 </div>
-                <span className="text-xs font-semibold text-ink-muted">Divine Vision Infratech Pvt. Ltd.</span>
               </div>
-              <div className="mt-4 rounded-lg border border-hairline bg-surface p-5 shadow-[0_18px_48px_-36px_rgba(6,31,45,0.28)]">
+              <div className="rounded-xl border border-hairline bg-surface p-5 shadow-[0_18px_48px_-36px_rgba(6,31,45,0.28)] lg:p-7">
                 <p className="eyebrow-label text-terracotta">Today</p>
                 <h2 className="mt-2 font-display text-2xl font-bold leading-tight text-ink">
                   The next chapter is more refined, more connected and more deliberate.
@@ -159,6 +228,23 @@ export function OurStoryPage() {
                 >
                   Book a site visit
                 </button>
+              </div>
+              <div className="overflow-hidden rounded-xl border border-hairline bg-white/78 shadow-[0_18px_54px_-40px_rgba(6,31,45,0.28)]">
+                <div className="border-b border-hairline px-5 py-4 sm:px-6">
+                  <p className="eyebrow-label text-terracotta">The Divine Standard</p>
+                </div>
+                <div className="grid gap-px bg-hairline">
+                  {[
+                    ['Location discipline', 'Projects chosen around real access, daily movement and visible corridor value.'],
+                    ['Approval clarity', 'Compliance, plot planning and buyer documentation kept central from the start.'],
+                    ['Refined handover', 'Infrastructure, landscape and common spaces planned to feel complete over time.'],
+                  ].map(([title, text]) => (
+                    <div key={title} className="bg-white/78 p-5 sm:p-6">
+                      <h3 className="font-display text-xl font-bold leading-tight text-ink">{title}</h3>
+                      <p className="mt-3 text-sm leading-[1.7] text-ink-muted">{text}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
