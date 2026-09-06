@@ -22,7 +22,7 @@ import {
   type ProfilePdfInput,
 } from '../services/customerProfilePdf';
 import { blobToDataUrl } from '../services/applicationPdf';
-import { getLatestDocumentByType, uploadApplicantPhoto } from '../services/documentsApi';
+import { fetchDemandLetterPdf, getLatestDocumentByType, uploadApplicantPhoto } from '../services/documentsApi';
 
 function formatINR(amount: number): string {
   return `₹ ${Math.round(amount).toLocaleString('en-IN')}`;
@@ -319,6 +319,7 @@ export function CustomerProfilePage() {
       receivedAmount,
       paymentSchedule,
       usesServerSchedule: Boolean(letterScheduleRows?.length),
+      backendDocumentId: docs.bookingApplication.backendDocumentId,
       pdfInput,
     };
   }, [session, remote, photoVersion]);
@@ -402,16 +403,40 @@ export function CustomerProfilePage() {
   };
 
   const handleDownload = async (kind: 'allotment' | 'demand') => {
+    if (!session) return;
     setDownloading(kind);
     setError('');
     try {
       if (kind === 'allotment') {
         const blob = await generateAllotmentLetterPdf(profile.pdfInput);
         downloadBlob(blob, 'Divine-Vision-Allotment-Letter.pdf');
-      } else {
-        const blob = await generateDemandLetterPdf(profile.pdfInput);
-        downloadBlob(blob, 'OPS-Divine-Greens-Demand-Letter.pdf');
+        return;
       }
+
+      // Demand letter: prefer the server-rendered PDF; fall back to the
+      // client-side render only for recoverable failures.
+      let blob: Blob | null = null;
+      if (profile.backendDocumentId) {
+        try {
+          blob = await fetchDemandLetterPdf(session.token, profile.backendDocumentId);
+        } catch (err) {
+          if (err instanceof ApiError && err.status === 401) {
+            logout();
+            openModal('signin', 'customer');
+            return;
+          }
+          // Ownership / wrong-type errors are real - surface them, don't paper
+          // over with a locally-rendered letter for a document they can't access.
+          if (err instanceof ApiError && (err.status === 403 || err.detail === 'not_a_booking_application')) {
+            setError(err.message);
+            return;
+          }
+          // 404 / not-ready / 5xx / network / empty / non-PDF → fall through to
+          // the local render so the customer still gets a usable letter.
+        }
+      }
+      if (!blob) blob = await generateDemandLetterPdf(profile.pdfInput);
+      downloadBlob(blob, 'OPS-Divine-Greens-Demand-Letter.pdf');
     } catch {
       setError('Could not generate the document. Please try again.');
     } finally {
