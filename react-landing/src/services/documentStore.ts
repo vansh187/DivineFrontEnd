@@ -1,3 +1,5 @@
+import type { PaymentPlan } from './customerProfileApi';
+
 /**
  * Local persistence for the document-upload flow. Aadhar/PAN file storage and
  * e-signature verification have no backend yet, so those stay simulated
@@ -160,6 +162,10 @@ export interface BookingApplicationFormData {
   plcRatePerSqYd: string;
   plcPrice: string;
   totalAmount: string;
+  /** Agreed total plot consideration in rupees. Sent to the backend as
+   * `total_amount` and drives the demand / allotment payment plan. Defaults to
+   * A + B but the sales team can override it. */
+  totalPlotAmount: string;
   amountInFigure: string;
   totalAmountWords: string;
   bookingAmount: string;
@@ -207,6 +213,9 @@ export interface BookingApplicationStatus {
   backendDocumentId: string | null;
   signedUrl: string | null;
   signedUrlExpiresAt: number | null;
+  /** The payment plan the backend derived on the last successful upload — used
+   * to fill the demand / allotment letters until GET /customer/profile is live. */
+  paymentPlan: PaymentPlan | null;
   error: string | null;
 }
 
@@ -248,6 +257,7 @@ export function emptyBookingApplicationFormData(): BookingApplicationFormData {
     plcRatePerSqYd: '',
     plcPrice: '',
     totalAmount: '',
+    totalPlotAmount: '',
     amountInFigure: '',
     totalAmountWords: '',
     bookingAmount: '',
@@ -297,6 +307,7 @@ export function emptyBookingApplicationStatus(): BookingApplicationStatus {
     backendDocumentId: null,
     signedUrl: null,
     signedUrlExpiresAt: null,
+    paymentPlan: null,
     error: null,
   };
 }

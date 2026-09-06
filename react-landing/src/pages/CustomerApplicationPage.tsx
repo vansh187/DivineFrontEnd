@@ -26,14 +26,22 @@ function serializeFormData(
   formData: BookingApplicationFormData,
   includeCoApplicant: boolean,
 ): Record<string, string | number> {
-  return Object.fromEntries(
+  const serialized = Object.fromEntries(
     Object.entries(formData)
       // Don't ship co-applicant PII (name/PAN/Aadhaar/addresses) to the backend
       // when the booking has no co-applicant - those fields share the form but
       // aren't part of this application.
       .filter(([key]) => includeCoApplicant || !key.startsWith('coApplicant'))
       .map(([key, value]) => [key, typeof value === 'boolean' ? (value ? 'Yes' : 'No') : value]),
-  );
+  ) as Record<string, string | number>;
+
+  // The backend needs the total plot consideration as `total_amount` (a number)
+  // to build the payment plan - NOT the booking amount, which comes from the
+  // payment record. Prefer the explicit "Total Plot Amount", fall back to A + B.
+  const totalAmount = parseAmount(formData.totalPlotAmount) || parseAmount(formData.totalAmount);
+  if (totalAmount > 0) serialized.total_amount = totalAmount;
+
+  return serialized;
 }
 
 function blobToFile(blob: Blob, fileName: string): File {
@@ -364,11 +372,16 @@ export function CustomerApplicationPage() {
   // amount-in-figure, and amount-in-words all derive from their sum so they can never
   // drift out of sync with what was actually entered.
   const updatePrice = (field: 'basicSalePrice' | 'plcPrice', value: string) => {
-    const nextForm = { ...docs.bookingApplication.formData, [field]: value };
+    const prevForm = docs.bookingApplication.formData;
+    const nextForm = { ...prevForm, [field]: value };
     const total = parseAmount(nextForm.basicSalePrice) + parseAmount(nextForm.plcPrice);
     nextForm.totalAmount = total ? String(total) : '';
     nextForm.amountInFigure = total ? String(total) : '';
     nextForm.totalAmountWords = total ? amountToIndianWords(total) : '';
+    // Keep the agreed "Total Plot Amount" tracking A + B until it's edited by hand.
+    if (!prevForm.totalPlotAmount || prevForm.totalPlotAmount === prevForm.totalAmount) {
+      nextForm.totalPlotAmount = total ? String(total) : '';
+    }
     persist({
       ...docs,
       bookingApplication: { ...docs.bookingApplication, formData: nextForm, error: null },
@@ -666,6 +679,16 @@ export function CustomerApplicationPage() {
         return;
       }
 
+      const totalForPlan = parseAmount(form.totalPlotAmount) || parseAmount(form.totalAmount);
+      if (totalForPlan <= 0) {
+        setError('Enter the Total Plot Amount on the Pricing page before generating the application PDF.');
+        return;
+      }
+      if (docs.payment.amount && totalForPlan < docs.payment.amount) {
+        setError('The Total Plot Amount is less than the booking amount already paid. Please correct it on the Pricing page.');
+        return;
+      }
+
       try {
         const backendDoc = await uploadGeneratedApplicationPdf(session.token, {
           file: pdfFile,
@@ -685,6 +708,7 @@ export function CustomerApplicationPage() {
             backendDocumentId: backendDoc.id,
             signedUrl: backendDoc.signed_url,
             signedUrlExpiresAt: Date.now() + backendDoc.signed_url_expires_in * 1000,
+            paymentPlan: backendDoc.payment_plan ?? docs.bookingApplication.paymentPlan,
             error: null,
           },
         });
@@ -981,6 +1005,22 @@ export function CustomerApplicationPage() {
                 <span className="font-semibold text-ink">Total Amount (A+B)</span>
                 <span />
                 <input value={form.totalAmount} readOnly className="mx-2 cursor-not-allowed rounded border border-hairline bg-bg px-2 py-1 text-ink-muted outline-none" />
+              </div>
+              <div className="grid grid-cols-[1.3fr_1fr_1fr] bg-surface p-3">
+                <span className="font-semibold text-ink">
+                  Total Plot Amount
+                  <span className="mt-0.5 block text-[11px] font-normal text-ink-muted">
+                    Agreed consideration. Drives the payment plan; edit if it differs from A+B.
+                  </span>
+                </span>
+                <span />
+                <input
+                  type="number"
+                  value={form.totalPlotAmount}
+                  onChange={(event) => updateForm('totalPlotAmount', event.target.value)}
+                  placeholder="e.g. 5000000"
+                  className="mx-2 h-9 self-start rounded border border-hairline bg-bg px-2 py-1 outline-none focus:border-green"
+                />
               </div>
               <div className="grid grid-cols-[1.3fr_1fr_1fr] bg-surface p-3">
                 <span className="font-semibold text-ink">Amount in Figure</span>

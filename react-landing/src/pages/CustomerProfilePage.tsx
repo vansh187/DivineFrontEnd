@@ -22,7 +22,7 @@ import {
   type ProfilePdfInput,
 } from '../services/customerProfilePdf';
 import { blobToDataUrl } from '../services/applicationPdf';
-import { getLatestDocumentByType, uploadApplicantPhoto } from '../services/documentsApi';
+import { fetchDemandLetterPdf, getLatestDocumentByType, uploadApplicantPhoto } from '../services/documentsApi';
 
 function formatINR(amount: number): string {
   return `₹ ${Math.round(amount).toLocaleString('en-IN')}`;
@@ -245,15 +245,38 @@ export function CustomerProfilePage() {
     const plotArea = plotAreaSqYd ? `${plotAreaSqYd} sq. yd.` : unknown;
     const unitType = firstText(rb.unit_type, hasRemote ? '' : form.unitType) || unknown;
 
-    const localTotal = hasRemote ? null : Number(String(form.totalAmount).replace(/[^0-9.]/g, '')) || null;
-    const totalAmount = typeof rb.total_consideration === 'number' ? rb.total_consideration : localTotal;
+    // The payment plan the backend derived on the last application upload — used
+    // as a fallback for the letters and schedule until GET /customer/profile is live.
+    const storedPlan = docs.bookingApplication.paymentPlan;
+    const localTotalPlot = hasRemote
+      ? null
+      : Number(String(form.totalPlotAmount || form.totalAmount).replace(/[^0-9.]/g, '')) || null;
+    const totalAmount =
+      typeof rb.total_consideration === 'number'
+        ? rb.total_consideration
+        : typeof storedPlan?.total_receivable === 'number'
+          ? storedPlan.total_receivable
+          : localTotalPlot;
     const bookingAmount = hasRemote ? 0 : Number(String(form.bookingAmount).replace(/[^0-9.]/g, '')) || 0;
     const paidAmount = !hasRemote && docs.payment.status === 'paid' && docs.payment.amount ? docs.payment.amount : 0;
     const localReceived = Math.max(bookingAmount, paidAmount) || null;
-    const receivedAmount = typeof rb.amount_received === 'number' ? rb.amount_received : localReceived;
-    const bookingDate = firstText(rb.booking_date, hasRemote ? '' : form.applicationDate);
+    const receivedAmount =
+      typeof rb.amount_received === 'number'
+        ? rb.amount_received
+        : typeof storedPlan?.total_received === 'number'
+          ? storedPlan.total_received
+          : localReceived;
+    const bookingDate = firstText(rb.booking_date, storedPlan?.booking_date ?? '', hasRemote ? '' : form.applicationDate);
     const serverSchedule = Array.isArray(rb.payment_schedule) ? rb.payment_schedule : null;
-    const paymentSchedule = serverSchedule?.length ? serverScheduleRows(serverSchedule) : localScheduleRows(totalAmount);
+    // Rows for the letters: live profile schedule first, then the stored upload plan.
+    const letterScheduleRows: CustomerScheduleRow[] | null = serverSchedule?.length
+      ? serverSchedule
+      : storedPlan?.rows?.length
+        ? storedPlan.rows
+        : null;
+    const paymentSchedule = letterScheduleRows?.length
+      ? serverScheduleRows(letterScheduleRows)
+      : localScheduleRows(totalAmount);
 
     const photo = docs.applicantPhoto.dataUrl || freshSignedUrl(docs.applicantPhoto.signedUrl, docs.applicantPhoto.signedUrlExpiresAt);
     const hasBooking =
@@ -277,6 +300,8 @@ export function CustomerProfilePage() {
       totalAmount,
       receivedAmount,
       bookingDate,
+      scheduleRows: letterScheduleRows,
+      outstandingWords: storedPlan?.total_outstanding_words ?? null,
     };
 
     return {
@@ -293,7 +318,8 @@ export function CustomerProfilePage() {
       totalAmount,
       receivedAmount,
       paymentSchedule,
-      usesServerSchedule: Boolean(serverSchedule?.length),
+      usesServerSchedule: Boolean(letterScheduleRows?.length),
+      backendDocumentId: docs.bookingApplication.backendDocumentId,
       pdfInput,
     };
   }, [session, remote, photoVersion]);
@@ -377,16 +403,40 @@ export function CustomerProfilePage() {
   };
 
   const handleDownload = async (kind: 'allotment' | 'demand') => {
+    if (!session) return;
     setDownloading(kind);
     setError('');
     try {
       if (kind === 'allotment') {
         const blob = await generateAllotmentLetterPdf(profile.pdfInput);
         downloadBlob(blob, 'Divine-Vision-Allotment-Letter.pdf');
-      } else {
-        const blob = await generateDemandLetterPdf(profile.pdfInput);
-        downloadBlob(blob, 'OPS-Divine-Greens-Demand-Letter.pdf');
+        return;
       }
+
+      // Demand letter: prefer the server-rendered PDF; fall back to the
+      // client-side render only for recoverable failures.
+      let blob: Blob | null = null;
+      if (profile.backendDocumentId) {
+        try {
+          blob = await fetchDemandLetterPdf(session.token, profile.backendDocumentId);
+        } catch (err) {
+          if (err instanceof ApiError && err.status === 401) {
+            logout();
+            openModal('signin', 'customer');
+            return;
+          }
+          // Ownership / wrong-type errors are real - surface them, don't paper
+          // over with a locally-rendered letter for a document they can't access.
+          if (err instanceof ApiError && (err.status === 403 || err.detail === 'not_a_booking_application')) {
+            setError(err.message);
+            return;
+          }
+          // 404 / not-ready / 5xx / network / empty / non-PDF → fall through to
+          // the local render so the customer still gets a usable letter.
+        }
+      }
+      if (!blob) blob = await generateDemandLetterPdf(profile.pdfInput);
+      downloadBlob(blob, 'OPS-Divine-Greens-Demand-Letter.pdf');
     } catch {
       setError('Could not generate the document. Please try again.');
     } finally {

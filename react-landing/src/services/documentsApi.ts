@@ -1,4 +1,5 @@
-import { ApiError, authedRequest as authedRequestBase } from './authApi';
+import { ApiError, API_BASE_URL, authedRequest as authedRequestBase } from './authApi';
+import type { PaymentPlan } from './customerProfileApi';
 
 export interface GeneratedDocument {
   id: string;
@@ -9,6 +10,9 @@ export interface GeneratedDocument {
   created_date: string;
   signed_url: string;
   signed_url_expires_in: number;
+  /** Present on a booking-application upload: the derived payment plan
+   * (On Booking + 45/90/180/270-day milestones). */
+  payment_plan?: PaymentPlan | null;
 }
 
 export interface GenerateDocumentInput {
@@ -46,7 +50,11 @@ function messageForDocumentsError(status: number, detail: unknown): string {
     return 'Please sign in again to continue.';
   }
   if (status === 403) return 'You can only upload documents for your own account.';
-  if (status === 404) return 'That document could not be found.';
+  if (status === 404) {
+    if (detail === 'demand_letter_not_available' || detail === 'letter_not_generated')
+      return 'The demand letter is not ready for this booking yet. Please try again shortly.';
+    return 'That document could not be found.';
+  }
   if (status === 429) return 'Too many attempts. Please wait a minute and try again.';
   if (status === 400) {
     if (detail === 'empty_file') return 'That file is empty. Please choose a different file.';
@@ -57,6 +65,14 @@ function messageForDocumentsError(status: number, detail: unknown): string {
     if (detail === 'document_type_required') return 'Document type is missing. Please refresh and try again.';
     if (detail === 'project_id_required') return 'Project is missing. Please select the project and try again.';
     if (detail === 'payment_id_required') return 'Payment reference is missing. Please complete payment again before generating the PDF.';
+    if (detail === 'total_amount_required')
+      return 'Enter the Total Plot Amount on the Pricing page before generating the application PDF.';
+    if (detail === 'booking_amount_exceeds_total')
+      return 'The Total Plot Amount is less than the booking amount already paid. Please correct it on the Pricing page.';
+    if (detail === 'not_a_booking_application' || detail === 'wrong_document_type')
+      return 'A demand letter is only available for a booking application document.';
+    if (detail === 'payment_plan_missing' || detail === 'no_payment_plan')
+      return 'The payment plan for this booking is not ready yet. Please try again after it is generated.';
     if (detail === 'invalid_form_data') return 'Application form data could not be uploaded. Please refresh and try again.';
     if (detail === 'payment_not_found') return 'Payment record was not found. Please complete payment again before generating the PDF.';
     if (detail === 'payment_not_completed') return 'Payment is not completed yet. Please wait for confirmation before generating the PDF.';
@@ -186,4 +202,67 @@ export function uploadGeneratedApplicationPdf(token: string, input: UploadGenera
     method: 'POST',
     body: formData,
   });
+}
+
+/** Best-effort extraction of a FastAPI-style `{ detail }` from a non-OK response
+ *  whose body may be JSON, plain text, or HTML. */
+async function readErrorDetail(res: Response): Promise<unknown> {
+  const text = await res.text().catch(() => '');
+  if (!text) return null;
+  try {
+    const parsed = JSON.parse(text) as { detail?: unknown };
+    return parsed?.detail ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Downloads the server-rendered demand letter for a booking-application
+ * document: `GET /documents/{id}/demand-letter` → application/pdf.
+ * Throws a typed `ApiError` for every failure mode (network, auth, ownership,
+ * not-found / not-ready, rate limit, server error, empty or non-PDF body) so
+ * the caller can decide whether to surface it or fall back to a local render.
+ */
+export async function fetchDemandLetterPdf(token: string, documentId: string): Promise<Blob> {
+  const id = documentId?.trim();
+  if (!id) {
+    throw new ApiError(400, 'document_id_required', 'This booking has not been submitted yet, so a demand letter is not available.');
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}/documents/${encodeURIComponent(id)}/demand-letter`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/pdf' },
+      redirect: 'follow',
+    });
+  } catch {
+    throw new ApiError(0, null, messageForDocumentsError(0, null));
+  }
+
+  if (!res.ok) {
+    const detail = await readErrorDetail(res);
+    throw new ApiError(res.status, detail, messageForDocumentsError(res.status, detail));
+  }
+
+  const contentType = (res.headers.get('content-type') ?? '').toLowerCase();
+  const blob = await res.blob().catch(() => null);
+
+  if (!blob || blob.size === 0) {
+    throw new ApiError(502, 'empty_pdf', 'The demand letter came back empty. Please try again in a moment.');
+  }
+  // A 200 that isn't a PDF is usually an error page or JSON that slipped through.
+  if (contentType && !contentType.includes('application/pdf') && !contentType.includes('octet-stream')) {
+    const detail = await blob.text().then((t) => {
+      try {
+        return (JSON.parse(t) as { detail?: unknown }).detail ?? null;
+      } catch {
+        return null;
+      }
+    });
+    throw new ApiError(502, detail ?? 'unexpected_response', messageForDocumentsError(502, detail));
+  }
+
+  return blob.type === 'application/pdf' ? blob : new Blob([blob], { type: 'application/pdf' });
 }
