@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useChatSession } from '../../hooks/useChatSession';
-import type { AgentMessageVariant, ChatButton, PlotListItem } from '../../hooks/useChatSession';
+import type {
+  AgentMessageVariant,
+  ChatButton,
+  ChatMessage,
+  ChatReply,
+  PlotListItem,
+} from '../../hooks/useChatSession';
 import { useAuth } from '../../hooks/useAuth';
 import { ApiError, API_BASE_URL } from '../../services/authApi';
 import type { Role } from '../../services/authApi';
@@ -14,6 +20,19 @@ import { ChatWindow } from './ChatWindow';
 const TEASER_STORAGE_KEY = 'dvi_chat_teaser_dismissed';
 const TEASER_DELAY_MS = 1800;
 const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
+
+/** The most recent email address the visitor typed into the chat — used to tag
+ * the session when the backend hands back an auth token without a profile. */
+function lastTypedEmail(messages: ChatMessage[]): string | undefined {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message.role === 'user') {
+      const match = message.text.match(EMAIL_PATTERN);
+      if (match) return match[0];
+    }
+  }
+  return undefined;
+}
 const AFFIRMATIVE_LOGIN_PATTERN = /^(yes|yeah|yep|ya|sure|ok|okay|login|log in|sign in|signin)$/i;
 const LOGOUT_PATTERN = /^(logout|log out|sign out|signout)$/i;
 // "restart chat", "refresh the conversation", "start over", "new chat", etc. —
@@ -167,8 +186,12 @@ function toAuthLoginInput(credentials: { username: string; password: string }) {
 }
 
 export function ChatWidget() {
-  const session = useChatSession();
-  const { login, logout, signup, session: authSession } = useAuth();
+  // Set below once the component's own helpers exist; `useChatSession` calls it
+  // on every /chatbot/message reply so the backend's chat-login contract
+  // (auth_token + redirect_url on the password turn) is honoured.
+  const chatReplyHandlerRef = useRef<((reply: ChatReply) => void) | null>(null);
+  const session = useChatSession({ onReply: (reply) => chatReplyHandlerRef.current?.(reply) });
+  const { login, logout, signup, applySession, session: authSession } = useAuth();
   const navigate = useNavigate();
   const reducedMotion = usePrefersReducedMotion();
   const [entered, setEntered] = useState(false);
@@ -205,6 +228,10 @@ export function ChatWidget() {
   // page (e.g. "Browse & Book Plots" → /customer/plots). We can't navigate there
   // yet, so we remember it and resume once the in-chat login succeeds.
   const pendingChatNavRef = useRef<string | null>(null);
+  // Flipped true by the reply handler when the backend completed a chat login
+  // itself (returned auth_token). The credential handlers check it after their
+  // send to decide whether the auth-API fallback still needs to run.
+  const chatLoginHandledRef = useRef(false);
   useEffect(() => {
     const currentToken = authSession?.token ?? null;
     if (authTokenRef.current === undefined) {
@@ -374,60 +401,15 @@ export function ChatWidget() {
       return;
     }
 
-    const lastMessage = session.messages[session.messages.length - 1];
-    if (
-      lastMessage?.role === 'agent' &&
-      isLoginConfirmationPrompt(lastMessage.variant) &&
-      AFFIRMATIVE_LOGIN_PATTERN.test(text.trim())
-    ) {
-      session.appendUserMessage(displayText);
-      const credentials = inferChatSignupCredentials(session.messages);
-      const role = inferChatRole(session.messages);
-      if (!credentials) {
-        session.appendAgentMessage({
-          kind: 'text',
-          text: 'I need the email and password you used for signup to log you in. Please type them again, or use the sign-in button.',
-        });
-        return;
-      }
-
-      chatInitiatedAuthChangeRef.current = true;
-      void loginAfterChatSignup(role, credentials)
+    // After a chat login attempt: if the backend completed it itself (returned
+    // auth_token, handled in chatReplyHandlerRef), there's nothing more to do.
+    // Otherwise fall back to the auth API — covers a backend not yet serving the
+    // in-chat login contract.
+    const finishChatLogin = (role: Role, runFallback: () => Promise<void>) => {
+      if (chatLoginHandledRef.current) return;
+      void runFallback()
         .then(() => {
-          const dest = postLoginDestination(role, pendingChatNavRef.current);
-          pendingChatNavRef.current = null;
-          navigate(dest);
-          session.appendAgentMessage({
-            kind: 'text',
-            text: `You are logged in as ${role}.`,
-          });
-        })
-        .catch((err) => {
-          chatInitiatedAuthChangeRef.current = false;
-          pendingChatNavRef.current = null;
-          session.appendAgentMessage({
-            kind: 'text',
-            text: err instanceof ApiError ? err.message : 'I could not log you in. Please check your email and password and try again.',
-          });
-        });
-      return;
-    }
-
-    if (lastMessage?.role === 'agent' && isPasswordLoginPrompt(lastMessage.variant)) {
-      session.appendUserMessage(displayText);
-      const username = session.messages
-        .map((message) => (message.role === 'user' ? message.text.match(EMAIL_PATTERN)?.[0] : null))
-        .filter(Boolean)
-        .at(-1);
-      const role = inferChatRole(session.messages);
-      if (!username) {
-        session.appendAgentMessage({ kind: 'text', text: 'Please enter your email first, then I can log you in.' });
-        return;
-      }
-
-      chatInitiatedAuthChangeRef.current = true;
-      void login(role, toAuthLoginInput({ username, password: text }))
-        .then(() => {
+          if (chatLoginHandledRef.current) return;
           const dest = postLoginDestination(role, pendingChatNavRef.current);
           pendingChatNavRef.current = null;
           navigate(dest);
@@ -441,6 +423,53 @@ export function ChatWidget() {
             text: err instanceof ApiError ? err.message : 'I could not log you in. Please check your email and password and try again.',
           });
         });
+    };
+
+    const lastMessage = session.messages[session.messages.length - 1];
+    if (
+      lastMessage?.role === 'agent' &&
+      isLoginConfirmationPrompt(lastMessage.variant) &&
+      AFFIRMATIVE_LOGIN_PATTERN.test(text.trim())
+    ) {
+      const credentials = inferChatSignupCredentials(session.messages);
+      const role = inferChatRole(session.messages);
+      if (!credentials) {
+        session.appendUserMessage(displayText);
+        session.appendAgentMessage({
+          kind: 'text',
+          text: 'I need the email and password you used for signup to log you in. Please type them again, or use the sign-in button.',
+        });
+        return;
+      }
+
+      chatInitiatedAuthChangeRef.current = true;
+      chatLoginHandledRef.current = false;
+      // Send the confirmation to the backend so it can complete the login and
+      // hand back auth_token + redirect_url; fall back to the auth API if not.
+      void session
+        .send(withPendingGeo({ message: text, displayText }))
+        .then(() => finishChatLogin(role, () => loginAfterChatSignup(role, credentials)));
+      return;
+    }
+
+    if (lastMessage?.role === 'agent' && isPasswordLoginPrompt(lastMessage.variant)) {
+      const username = session.messages
+        .map((message) => (message.role === 'user' ? message.text.match(EMAIL_PATTERN)?.[0] : null))
+        .filter(Boolean)
+        .at(-1);
+      const role = inferChatRole(session.messages);
+      if (!username) {
+        session.appendUserMessage(displayText);
+        session.appendAgentMessage({ kind: 'text', text: 'Please enter your email first, then I can log you in.' });
+        return;
+      }
+
+      const password = text;
+      chatInitiatedAuthChangeRef.current = true;
+      chatLoginHandledRef.current = false;
+      void session
+        .send(withPendingGeo({ message: text, displayText }))
+        .then(() => finishChatLogin(role, () => login(role, toAuthLoginInput({ username, password }))));
       return;
     }
 
@@ -526,6 +555,28 @@ export function ChatWidget() {
       return;
     }
     window.location.assign(plot.book_url);
+  };
+
+  // The backend finishes a chat-driven login on its own turn and returns the
+  // token plus where to send the visitor. Persist the token first (so the target
+  // page boots already signed in), then navigate in the same tab. Reassigned
+  // every render so it closes over the latest session/messages.
+  chatReplyHandlerRef.current = (reply: ChatReply) => {
+    if (reply.authToken) {
+      chatLoginHandledRef.current = true;
+      chatInitiatedAuthChangeRef.current = true;
+      applySession({
+        token: reply.authToken,
+        role: reply.authRole ?? inferChatRole(session.messages),
+        email: lastTypedEmail(session.messages),
+      });
+      pendingChatNavRef.current = null;
+    }
+    if (reply.redirectUrl) {
+      session.close();
+      // redirect_target is always "_self" per the contract — same tab, full load.
+      window.location.assign(reply.redirectUrl);
+    }
   };
 
   const handleDesktopContactCard = (variant: AgentMessageVariant) => {

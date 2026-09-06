@@ -4,6 +4,7 @@ import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 import { journeyStops } from '../data/journeyStops';
 import { townshipLocations } from '../data/locationConnectivity';
 import { getProjectDetail, type ProjectSpec } from '../data/projectDetails';
+import { townshipVideoByProject } from '../data/townshipVideos';
 
 /** Ongoing, bookable townships — the ones with a RERA id and plot sizing. */
 const liveProjects = journeyStops.filter(
@@ -28,12 +29,6 @@ function tabLabel(id: string, fallback: string) {
   const town = loc.subtitle.split('·')[0].split(',').pop()?.trim();
   return town ? `${loc.label} · ${town}` : loc.label;
 }
-
-/** Per-township walkthrough reels; projects without an entry fall back to a still. */
-const VIDEO_BY_PROJECT: Record<string, string> = {
-  'suraksha-enclave': '/townships/suraksha-enclave.mp4',
-  'ops-divine-greens': '/townships/ops-divine.mp4',
-};
 
 export function LiveProjectsSection() {
   const [activeId, setActiveId] = useState(liveProjects[0]?.id ?? '');
@@ -66,7 +61,7 @@ export function LiveProjectsSection() {
   const specs = specsFor(active.id, active.reraId);
   const detailHref = `/residences/${active.id}`;
   const posterSrc = active.heroSrc ?? active.image.src;
-  const videoSrc = VIDEO_BY_PROJECT[active.id];
+  const videoSrc = townshipVideoByProject[active.id];
 
   return (
     <section ref={sectionRef} id="live-projects" className="px-6 pt-10 pb-20 sm:px-10 sm:pt-14 sm:pb-28">

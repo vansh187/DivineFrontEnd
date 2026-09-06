@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import * as chatApi from '../services/chatApi';
-import type { ChatButton, PlotListItem, StructuredResult } from '../services/chatApi';
+import type { ChatButton, ChatReply, PlotListItem, StructuredResult } from '../services/chatApi';
 import { ApiError } from '../services/authApi';
 import { useIsMobile } from './useIsMobile';
 
-export type { ChatButton, PlotListItem };
+export type { ChatButton, ChatReply, PlotListItem };
 
 export type AgentMessageVariant =
   | { kind: 'text'; text: string; buttons?: ChatButton[] | null }
@@ -235,9 +235,13 @@ function parseUtmParams(url: URL) {
 /** Owns all AI Concierge widget state. Session/consent persist per-tab via
  * sessionStorage; message history does not survive a reload (server retains
  * conversational memory under the same session_id even though the UI resets). */
-export function useChatSession() {
+export function useChatSession(options?: { onReply?: (reply: ChatReply) => void }) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const { deviceClass } = useIsMobile();
+  // Kept in a ref so `send` always calls the latest handler without needing it
+  // in its dependency list.
+  const onReplyRef = useRef(options?.onReply);
+  onReplyRef.current = options?.onReply;
   const initStarted = useRef(false);
   const initInFlight = useRef(false);
   // Bumped by resetSession() so a still-pending initSession() from before the
@@ -398,6 +402,7 @@ export function useChatSession() {
           structuredResult: reply.structuredResult,
           callbackConfirmed: reply.callbackConfirmed !== null,
         });
+        onReplyRef.current?.(reply);
         return true;
       } catch (err) {
         if (err instanceof ApiError && err.status === 404 && err.detail === 'session_not_found') {

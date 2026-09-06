@@ -70,6 +70,8 @@ interface AuthContextValue {
   /** Creates the account only — does not sign the visitor in. Call login()
    * afterwards once they've confirmed on the sign-in screen. */
   signup: (role: Role, input: SignupInput) => Promise<void>;
+  /** Persist a session from a token issued outside the auth API (chat login). */
+  applySession: (input: { token: string; role?: Role; email?: string }) => void;
   logout: () => void;
   isModalOpen: boolean;
   modalMode: ModalMode;
@@ -132,6 +134,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     rememberProfileName(input.email, input.first_name || null, input.last_name || null);
   }, []);
 
+  /** Persist a session from a bearer token the backend already issued elsewhere
+   * (e.g. the chat completes login on its own turn and hands back auth_token) —
+   * no auth API round-trip. */
+  const applySession = useCallback(
+    (input: { token: string; role?: Role; email?: string }) => {
+      const claims = authApi.decodeJwtClaims(input.token);
+      const email = input.email ?? claims?.username ?? '';
+      const { firstName, lastName } = email ? lookupProfileName(email) : { firstName: null, lastName: null };
+      persist({
+        token: input.token,
+        role: input.role ?? claims?.role ?? 'customer',
+        userId: claims?.sub ?? '',
+        email,
+        firstName,
+        lastName,
+      });
+    },
+    [persist],
+  );
+
   const logout = useCallback(() => persist(null), [persist]);
 
   const openModal = useCallback((mode: ModalMode, role: Role = 'customer') => {
@@ -147,6 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       login,
       signup,
+      applySession,
       logout,
       isModalOpen,
       modalMode,
@@ -156,7 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setModalMode,
       setModalRole,
     }),
-    [session, login, signup, logout, isModalOpen, modalMode, modalRole, openModal, closeModal],
+    [session, login, signup, applySession, logout, isModalOpen, modalMode, modalRole, openModal, closeModal],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
