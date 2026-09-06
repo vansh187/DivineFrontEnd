@@ -1,4 +1,5 @@
 import { ApiError, API_BASE_URL } from './authApi';
+import type { Role } from './authApi';
 import type { DeviceClass } from '../hooks/useIsMobile';
 
 export interface SessionInitRequest {
@@ -60,6 +61,12 @@ export interface ChatReply {
   callbackConfirmed: CallbackConfirmed | null;
   guardrailPassed: boolean | null;
   llmProvider: string | null;
+  /** Chat-driven login: the backend completes auth on the password turn and
+   * hands the frontend the token + where to send the visitor next. */
+  authToken: string | null;
+  authRole: Role | null;
+  redirectUrl: string | null;
+  redirectTarget: string | null;
 }
 
 export interface SendChatMessageInput {
@@ -80,7 +87,16 @@ type RawChatReply = Partial<{
   callback_confirmed: Partial<{ name: string; phone: string; preferred_time: string }> | null;
   guardrail_passed: boolean | null;
   llm_provider: string | null;
+  auth_token: string | null;
+  auth_role: string | null;
+  redirect_url: string | null;
+  redirect_target: string | null;
 }>;
+
+function normalizeRole(raw: string | null | undefined): Role | null {
+  if (!raw) return null;
+  return /broker|channel|partner/i.test(raw) ? 'broker' : 'customer';
+}
 
 function normalizeStructuredResult(raw: StructuredResult | null | undefined): StructuredResult | null {
   if (!raw || typeof raw.type !== 'string') return null;
@@ -169,5 +185,9 @@ export async function sendChatMessage(input: SendChatMessageInput): Promise<Chat
       : null,
     guardrailPassed: raw.guardrail_passed ?? null,
     llmProvider: raw.llm_provider ?? null,
+    authToken: raw.auth_token ?? null,
+    authRole: normalizeRole(raw.auth_role),
+    redirectUrl: raw.redirect_url ?? null,
+    redirectTarget: raw.redirect_target ?? null,
   };
 }
