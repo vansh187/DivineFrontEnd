@@ -5,7 +5,7 @@ import { StarterPrompts } from './StarterPrompts';
 import { MessageList } from './MessageList';
 import { InputBar } from './InputBar';
 import { CloseIcon } from './icons/ChatIcons';
-import type { AgentMessageVariant, ChatButton, ChatMessage } from '../../hooks/useChatSession';
+import type { AgentMessageVariant, ChatButton, ChatMessage, PlotListItem } from '../../hooks/useChatSession';
 import { PlotIntelligencePanel } from './PlotIntelligencePanel';
 import { ErrorBoundary } from '../ErrorBoundary';
 
@@ -45,6 +45,7 @@ interface ChatWindowProps {
   onSendText: (text: string) => void;
   onSendAudio: (audio: Blob) => void;
   onButtonTap: (button: ChatButton) => void;
+  onPlotSelect: (plot: PlotListItem) => void;
   onMicStateChange: (state: 'idle' | 'recording' | 'transcribing') => void;
   onMicPermissionDenied: () => void;
 }
@@ -67,6 +68,7 @@ export function ChatWindow({
   onSendText,
   onSendAudio,
   onButtonTap,
+  onPlotSelect,
   onMicStateChange,
   onMicPermissionDenied,
 }: ChatWindowProps) {
@@ -166,6 +168,7 @@ export function ChatWindow({
             interimStatusLine={interimStatusLine}
             scrollRef={scrollRef}
             onButtonTap={onButtonTap}
+            onPlotSelect={onPlotSelect}
           />
 
           <InputBar

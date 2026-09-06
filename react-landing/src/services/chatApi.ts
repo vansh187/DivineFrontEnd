@@ -25,11 +25,38 @@ export interface ChatButton {
   value: string;
   action: string;
   url?: string | null;
+  /** Only meaningful for action === 'navigate'. The backend sends '_self'; we
+   * never open chat navigation in a new tab regardless. */
+  target?: '_self' | '_blank' | null;
+}
+
+/** One row in a structured_result of type 'plot_list'. Only `book_url` is relied
+ * on; every other field is best-effort display text, so the shape stays loose. */
+export interface PlotListItem {
+  book_url: string;
+  label?: string | null;
+  title?: string | null;
+  name?: string | null;
+  project_name?: string | null;
+  size?: string | null;
+  area_sqyd?: number | string | null;
+  price?: string | null;
+  unit_number?: string | null;
+  block?: string | null;
+  location?: string | null;
+  availability?: string | null;
+  [key: string]: unknown;
+}
+
+export interface StructuredResult {
+  type: string;
+  data?: { plots?: PlotListItem[] | null } | null;
 }
 
 export interface ChatReply {
   reply: string;
   buttons: ChatButton[] | null;
+  structuredResult: StructuredResult | null;
   callbackConfirmed: CallbackConfirmed | null;
   guardrailPassed: boolean | null;
   llmProvider: string | null;
@@ -49,10 +76,20 @@ type RawSessionInitResponse = Partial<{ session_id: string; lead_id: string }>;
 type RawChatReply = Partial<{
   reply: string;
   buttons: ChatButton[] | null;
+  structured_result: StructuredResult | null;
   callback_confirmed: Partial<{ name: string; phone: string; preferred_time: string }> | null;
   guardrail_passed: boolean | null;
   llm_provider: string | null;
 }>;
+
+function normalizeStructuredResult(raw: StructuredResult | null | undefined): StructuredResult | null {
+  if (!raw || typeof raw.type !== 'string') return null;
+  const plots = raw.data?.plots;
+  return {
+    type: raw.type,
+    data: { plots: Array.isArray(plots) ? plots.filter((p) => p && typeof p.book_url === 'string' && p.book_url) : null },
+  };
+}
 
 /** The backend's own sketch for encoding a recorded clip (see chatbot API
  * reference, "Recording voice input") — base64 over JSON, not multipart. */
@@ -122,6 +159,7 @@ export async function sendChatMessage(input: SendChatMessageInput): Promise<Chat
   return {
     reply: raw.reply ?? '',
     buttons: raw.buttons ?? null,
+    structuredResult: normalizeStructuredResult(raw.structured_result),
     callbackConfirmed: raw.callback_confirmed
       ? {
           name: raw.callback_confirmed.name ?? '',

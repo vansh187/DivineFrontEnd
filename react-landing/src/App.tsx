@@ -29,6 +29,7 @@ const BrokerCommissionPage = lazy(() =>
 const ResidencesPage = lazy(() => import('./pages/ResidencesPage').then((m) => ({ default: m.ResidencesPage })));
 const ProjectDetailPage = lazy(() => import('./pages/ProjectDetailPage').then((m) => ({ default: m.ProjectDetailPage })));
 const OurStoryPage = lazy(() => import('./pages/OurStoryPage').then((m) => ({ default: m.OurStoryPage })));
+const BookPlotPage = lazy(() => import('./pages/BookPlotPage').then((m) => ({ default: m.BookPlotPage })));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage })));
 
 const roleHome: Record<Role, string> = {
@@ -89,6 +90,8 @@ function AppRoutes() {
         <Route path="/residences" element={<ResidencesPage />} />
         <Route path="/residences/:id" element={<ProjectDetailPage />} />
         <Route path="/our-story" element={<OurStoryPage />} />
+        <Route path="/book-plot" element={<BookPlotPage />} />
+        <Route path="/book-plots" element={<Navigate to="/book-plot" replace />} />
         <Route
           path="/customer"
           element={
