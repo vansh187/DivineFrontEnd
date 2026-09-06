@@ -3,7 +3,13 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import * as store from '../services/documentStore';
 import type { BrokerDocState, ScheduledVisit } from '../services/documentStore';
-import { createVisit, listVisits, listVisitHistory, cancelVisit as cancelVisitApi } from '../services/visitsApi';
+import {
+  createVisit,
+  listVisits,
+  listVisitHistory,
+  cancelVisit as cancelVisitApi,
+  completeVisit as completeVisitApi,
+} from '../services/visitsApi';
 import type { VisitRecord } from '../services/visitsApi';
 import { ApiError } from '../services/authApi';
 import { TileShell } from './DocumentTile';
@@ -79,6 +85,10 @@ export function BrokerDocuments() {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [savingVisit, setSavingVisit] = useState(false);
   const [cancellingVisitId, setCancellingVisitId] = useState<string | null>(null);
+  const [completingVisitId, setCompletingVisitId] = useState<string | null>(null);
+  // Which upcoming visit has its "mark complete" notes form open, and its draft.
+  const [completeForId, setCompleteForId] = useState<string | null>(null);
+  const [completeNotes, setCompleteNotes] = useState('');
   const [visitError, setVisitError] = useState<string | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
 
@@ -215,6 +225,42 @@ export function BrokerDocuments() {
     }
   };
 
+  const openCompleteForm = (visit: ScheduledVisit) => {
+    if (completeForId === visit.id) {
+      setCompleteForId(null);
+      return;
+    }
+    setCompleteForId(visit.id);
+    setCompleteNotes(visit.notes ?? '');
+    setVisitError(null);
+  };
+
+  const completeVisit = async (id: string) => {
+    if (!session) return;
+    setCompletingVisitId(id);
+    setVisitError(null);
+    try {
+      const completed = await completeVisitApi(session.token, id, completeNotes.trim());
+      persistVisits(upcomingVisits.filter((visit) => visit.id !== id));
+      const latestHistory = await listVisitHistory(session.token).catch(() => null);
+      setHistoryVisits(latestHistory ? latestHistory.map(visitFromApi) : [visitFromApi(completed), ...historyVisits]);
+      setCompleteForId(null);
+      setCompleteNotes('');
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        persistVisits(upcomingVisits.filter((visit) => visit.id !== id));
+        const latestHistory = await listVisitHistory(session.token).catch(() => null);
+        if (latestHistory) setHistoryVisits(latestHistory.map(visitFromApi));
+        setVisitError('That visit is no longer available. The upcoming list has been refreshed.');
+        setCompleteForId(null);
+      } else {
+        handleVisitError(err);
+      }
+    } finally {
+      setCompletingVisitId(null);
+    }
+  };
+
   return (
     <section className="mt-10">
       <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -243,27 +289,78 @@ export function BrokerDocuments() {
               </div>
             ) : upcomingVisits.length > 0 ? (
               <div className="max-h-80 overflow-y-auto rounded-xl border border-hairline">
-                {upcomingVisits.map((visit, i) => (
-                  <div
-                    key={visit.id}
-                    className={`grid gap-3 bg-bg px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center ${i > 0 ? 'border-t border-hairline' : ''}`}
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-ink">{visit.customerName}</p>
-                      <p className="truncate text-xs text-ink-muted">{visit.customerContact || 'No contact provided'}</p>
-                      {visit.notes && <p className="mt-1 line-clamp-2 text-xs leading-[1.5] text-ink-muted">{visit.notes}</p>}
+                {upcomingVisits.map((visit, i) => {
+                  const busy = cancellingVisitId === visit.id || completingVisitId === visit.id;
+                  return (
+                    <div key={visit.id} className={`bg-bg ${i > 0 ? 'border-t border-hairline' : ''}`}>
+                      <div className="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-ink">{visit.customerName}</p>
+                          <p className="truncate text-xs text-ink-muted">{visit.customerContact || 'No contact provided'}</p>
+                          {visit.notes && <p className="mt-1 line-clamp-2 text-xs leading-[1.5] text-ink-muted">{visit.notes}</p>}
+                        </div>
+                        <p className="text-sm font-semibold text-ink sm:text-right">{formatVisitDate(visit)}</p>
+                        <div className="flex items-center gap-3 justify-self-start sm:justify-self-end">
+                          <button
+                            type="button"
+                            onClick={() => openCompleteForm(visit)}
+                            disabled={busy}
+                            className="text-xs font-semibold text-green hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {completeForId === visit.id ? 'Close' : 'Complete'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => cancelVisit(visit.id)}
+                            disabled={busy}
+                            className="text-xs font-semibold text-terracotta hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {cancellingVisitId === visit.id ? 'Cancelling...' : 'Cancel'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {completeForId === visit.id && (
+                        <div className="border-t border-hairline px-4 py-3">
+                          <label className="block text-xs font-semibold text-ink" htmlFor={`outcome-${visit.id}`}>
+                            Meeting outcome notes
+                          </label>
+                          <textarea
+                            id={`outcome-${visit.id}`}
+                            value={completeNotes}
+                            onChange={(event) => setCompleteNotes(event.target.value)}
+                            placeholder="What was discussed, customer interest, next steps..."
+                            aria-label="Meeting outcome notes"
+                            maxLength={1000}
+                            rows={3}
+                            className="mt-1 w-full rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-green"
+                          />
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => completeVisit(visit.id)}
+                              disabled={completingVisitId === visit.id}
+                              className="rounded-full bg-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {completingVisitId === visit.id ? 'Saving...' : 'Mark complete'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCompleteForId(null);
+                                setCompleteNotes('');
+                              }}
+                              disabled={completingVisitId === visit.id}
+                              className="rounded-full border border-hairline px-4 py-2 text-xs font-semibold text-ink-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Dismiss
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <p className="text-sm font-semibold text-ink sm:text-right">{formatVisitDate(visit)}</p>
-                    <button
-                      type="button"
-                      onClick={() => cancelVisit(visit.id)}
-                      disabled={cancellingVisitId === visit.id}
-                      className="justify-self-start text-xs font-semibold text-terracotta hover:underline disabled:cursor-not-allowed disabled:opacity-60 sm:justify-self-end"
-                    >
-                      {cancellingVisitId === visit.id ? 'Cancelling...' : 'Cancel'}
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="rounded-xl border border-dashed border-hairline bg-bg px-4 py-6 text-sm text-ink-muted">

@@ -33,7 +33,7 @@ function messageForVisitsError(status: number, detail: unknown): string {
       : 'You can only manage your own visits.';
   }
   if (status === 404) return 'That visit could not be found.';
-  if (status === 405) return 'Visit history is not available yet. Please ask the backend team to enable GET /visits/history.';
+  if (status === 405) return 'That visits action is not available yet. Please ask the backend team to enable the endpoint.';
   if (status === 400) {
     if (detail === 'invalid_date') return 'Choose a valid visit date.';
     if (detail === 'invalid_time') return 'Choose a valid visit time.';
@@ -64,4 +64,14 @@ export function createVisit(token: string, input: CreateVisitInput): Promise<Vis
 
 export function cancelVisit(token: string, visitId: string): Promise<VisitRecord> {
   return authedRequest<VisitRecord>(`/visits/${encodeURIComponent(visitId)}`, token, { method: 'DELETE' });
+}
+
+/** Mark a scheduled visit as completed once the meeting has happened, recording
+ *  the broker's outcome notes. */
+export function completeVisit(token: string, visitId: string, notes: string): Promise<VisitRecord> {
+  return authedRequest<VisitRecord>(`/visits/${encodeURIComponent(visitId)}`, token, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'completed', notes }),
+  });
 }
