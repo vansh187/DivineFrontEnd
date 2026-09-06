@@ -20,6 +20,15 @@ function parseAmount(value: string): number {
   return Number.isFinite(cleaned) ? cleaned : 0;
 }
 
+/** On-booking instalment share of the total plot amount — first milestone of the
+ * 10 / 15 / 25 / 25 / 25 payment plan (see PAYMENT_SCHEDULE in customerProfilePdf.ts).
+ * The booking amount is derived from this, never typed by the customer. */
+const BOOKING_SHARE = 0.1;
+
+function bookingAmountFor(totalPlotAmount: number): number {
+  return totalPlotAmount > 0 ? Math.round(totalPlotAmount * BOOKING_SHARE) : 0;
+}
+
 type FieldName = keyof BookingApplicationFormData;
 
 function serializeFormData(
@@ -54,21 +63,32 @@ function Field({
   onChange,
   type = 'text',
   multiline = false,
+  readOnly = false,
+  hint,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   type?: string;
   multiline?: boolean;
+  readOnly?: boolean;
+  hint?: string;
 }) {
   const className = 'mt-1 rounded-lg border border-hairline bg-bg px-3 py-2.5 text-sm text-ink outline-none focus:border-green';
   return (
     <label className="block">
       <span className="text-xs font-semibold text-ink">{label}</span>
+      {hint && <span className="mt-0.5 block text-[11px] font-normal text-ink-muted">{hint}</span>}
       {multiline ? (
         <textarea value={value} onChange={(event) => onChange(event.target.value)} rows={3} className={`${className} w-full resize-none`} />
       ) : (
-        <input type={type} value={value} onChange={(event) => onChange(event.target.value)} className={`${className} w-full`} />
+        <input
+          type={type}
+          value={value}
+          readOnly={readOnly}
+          onChange={(event) => onChange(event.target.value)}
+          className={`${className} w-full${readOnly ? ' cursor-not-allowed text-ink-muted' : ''}`}
+        />
       )}
     </label>
   );
@@ -288,8 +308,6 @@ export function CustomerApplicationPage() {
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [pageDirection, setPageDirection] = useState<'forward' | 'back'>('forward');
-  const [amountInput, setAmountInput] = useState(() => (docs.payment.amount ? String(docs.payment.amount) : ''));
-  const [cashAmountInput, setCashAmountInput] = useState('');
   const [paying, setPaying] = useState(false);
   const [payingCash, setPayingCash] = useState(false);
   const [downloadingReceipt, setDownloadingReceipt] = useState(false);
@@ -382,9 +400,23 @@ export function CustomerApplicationPage() {
     if (!prevForm.totalPlotAmount || prevForm.totalPlotAmount === prevForm.totalAmount) {
       nextForm.totalPlotAmount = total ? String(total) : '';
     }
+    // Booking amount is always 10% of the total plot amount — derived, never typed.
+    const booking = bookingAmountFor(parseAmount(nextForm.totalPlotAmount));
+    nextForm.bookingAmount = booking ? String(booking) : '';
+    nextForm.bookingAmountWords = booking ? amountToIndianWords(booking) : '';
     persist({
       ...docs,
       bookingApplication: { ...docs.bookingApplication, formData: nextForm, error: null },
+    });
+  };
+
+  /** Total Plot Amount edited directly — keep the derived booking amount in sync. */
+  const updateTotalPlotAmount = (value: string) => {
+    const booking = bookingAmountFor(parseAmount(value));
+    applyFormUpdates({
+      totalPlotAmount: value,
+      bookingAmount: booking ? String(booking) : '',
+      bookingAmountWords: booking ? amountToIndianWords(booking) : '',
     });
   };
 
@@ -423,6 +455,10 @@ export function CustomerApplicationPage() {
     }
   };
 
+  // A confirmed payment for less than the fixed 10% booking instalment is not
+  // acceptable - reject it rather than marking the booking paid.
+  const isShortPayment = (paidAmount: number) => bookingDueAmount > 0 && paidAmount + 1 < bookingDueAmount;
+
   const describePaymentError = (err: unknown): string => {
     if (err instanceof ApiError) {
       if (err.status === 401) {
@@ -435,9 +471,9 @@ export function CustomerApplicationPage() {
   };
 
   const handlePayNow = async () => {
-    const amount = Number(amountInput);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setPaymentError('Enter a valid amount.');
+    const amount = bookingDueAmount;
+    if (amount <= 0) {
+      setPaymentError('Enter the Total Plot Amount on the Pricing page first — the booking amount is 10% of it.');
       return;
     }
     setPaying(true);
@@ -459,6 +495,10 @@ export function CustomerApplicationPage() {
         razorpay_payment_id: result.razorpay_payment_id,
         razorpay_signature: result.razorpay_signature,
       });
+      if (isShortPayment(record.amount)) {
+        setPaymentError('Please correct the amount.');
+        return;
+      }
       persist({
         ...docs,
         payment: {
@@ -481,15 +521,19 @@ export function CustomerApplicationPage() {
   };
 
   const handlePayByCash = async () => {
-    const amount = Number(cashAmountInput);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setPaymentError('Enter a valid cash amount.');
+    const amount = bookingDueAmount;
+    if (amount <= 0) {
+      setPaymentError('Enter the Total Plot Amount on the Pricing page first — the booking amount is 10% of it.');
       return;
     }
     setPayingCash(true);
     setPaymentError(null);
     try {
       const record = await recordCashPayment(session.token, amount, 'Cash recorded from booking application final page.');
+      if (isShortPayment(record.amount)) {
+        setPaymentError('Please correct the amount.');
+        return;
+      }
       persist({
         ...docs,
         payment: {
@@ -738,6 +782,10 @@ export function CustomerApplicationPage() {
   // and the customer has a way to record it again rather than hitting a dead end.
   const paymentComplete = docs.payment.status === 'paid' && !!docs.payment.paymentId;
   const paymentNeedsReference = docs.payment.status === 'paid' && !docs.payment.paymentId;
+  // The booking instalment is fixed at 10% of the Total Plot Amount - the
+  // customer never types it.
+  const totalPlotAmount = parseAmount(form.totalPlotAmount) || parseAmount(form.totalAmount);
+  const bookingDueAmount = bookingAmountFor(totalPlotAmount);
   // Offline booking payment captured on Page 2 (cheque / DD / UTR): mode + a
   // reference no. + a positive amount. This unlocks PDF generation without an
   // online or cash transaction on the last page.
@@ -813,8 +861,15 @@ export function CustomerApplicationPage() {
 
         <Section title="Fill application form">
           <UndertakingCopy projectName={selectedProject?.label ?? ''} />
-          <Field label="Booking amount remitted (Rs.)" type="number" value={form.bookingAmount} onChange={(value) => updateForm('bookingAmount', value)} />
-          <Field label="Amount in words" value={form.bookingAmountWords} onChange={(value) => updateForm('bookingAmountWords', value)} />
+          <Field
+            label="Booking amount remitted (Rs.)"
+            type="number"
+            value={form.bookingAmount}
+            onChange={() => {}}
+            readOnly
+            hint="Auto-calculated: 10% of the Total Plot Amount (Pricing page)."
+          />
+          <Field label="Amount in words" value={form.bookingAmountWords} onChange={() => {}} readOnly />
           <SelectField
             label="Payment mode"
             value={form.paymentMode}
@@ -1017,7 +1072,7 @@ export function CustomerApplicationPage() {
                 <input
                   type="number"
                   value={form.totalPlotAmount}
-                  onChange={(event) => updateForm('totalPlotAmount', event.target.value)}
+                  onChange={(event) => updateTotalPlotAmount(event.target.value)}
                   placeholder="e.g. 5000000"
                   className="mx-2 h-9 self-start rounded border border-hairline bg-bg px-2 py-1 outline-none focus:border-green"
                 />
@@ -1271,8 +1326,9 @@ export function CustomerApplicationPage() {
               <div>
                 <p className="font-semibold text-ink">Plot booking payment</p>
                 <p className="mt-1 text-xs leading-relaxed text-ink-muted">
-                  Pay online through Razorpay or record cash received here — or enter cheque / DD / UTR details on the
-                  &ldquo;Fill application form&rdquo; page. PDF generation unlocks once any of these is done.
+                  The booking instalment is fixed at 10% of the Total Plot Amount. Pay it online through Razorpay or
+                  record it as cash here — or enter cheque / DD / UTR details on the &ldquo;Fill application form&rdquo;
+                  page. PDF generation unlocks once any of these is done.
                 </p>
               </div>
               <span
@@ -1310,47 +1366,42 @@ export function CustomerApplicationPage() {
                     application PDF. Please make or record the payment again below to get a valid reference.
                   </p>
                 )}
+                <div className="mb-4 rounded-lg border border-hairline bg-bg px-3 py-3">
+                  <p className="text-xs font-semibold text-ink-muted">Booking instalment (10% of Total Plot Amount)</p>
+                  <p className="mt-1 font-display text-2xl font-bold text-ink">
+                    {bookingDueAmount > 0 ? `Rs. ${bookingDueAmount.toLocaleString('en-IN')}` : '—'}
+                  </p>
+                  {bookingDueAmount <= 0 && (
+                    <p className="mt-1 text-xs text-amber-800">
+                      Enter the Total Plot Amount on the Pricing page to set the booking amount.
+                    </p>
+                  )}
+                </div>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="rounded-lg border border-hairline bg-surface p-4">
-                  <p className="text-xs font-semibold text-ink">Online payment</p>
-                  <input
-                    type="number"
-                    min="1"
-                    step="0.01"
-                    value={amountInput}
-                    onChange={(event) => setAmountInput(event.target.value)}
-                    placeholder="Amount (Rs.)"
-                    className="mt-2 w-full rounded-lg border border-hairline bg-bg px-3 py-2.5 text-sm text-ink outline-none focus:border-green"
-                  />
-                  <button
-                    type="button"
-                    onClick={handlePayNow}
-                    disabled={paying}
-                    className="mt-3 rounded-full bg-green px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {paying ? 'Processing...' : 'Pay Now'}
-                  </button>
-                </div>
-                <div className="rounded-lg border border-hairline bg-surface p-4">
-                  <p className="text-xs font-semibold text-ink">Cash transaction</p>
-                  <input
-                    type="number"
-                    min="1"
-                    step="0.01"
-                    value={cashAmountInput}
-                    onChange={(event) => setCashAmountInput(event.target.value)}
-                    placeholder="Cash amount received (Rs.)"
-                    className="mt-2 w-full rounded-lg border border-hairline bg-bg px-3 py-2.5 text-sm text-ink outline-none focus:border-green"
-                  />
-                  <button
-                    type="button"
-                    onClick={handlePayByCash}
-                    disabled={payingCash}
-                    className="mt-3 rounded-full border border-hairline px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-green hover:text-green disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {payingCash ? 'Recording...' : 'Record Cash Payment'}
-                  </button>
-                </div>
+                    <p className="text-xs font-semibold text-ink">Online payment</p>
+                    <p className="mt-1 text-xs text-ink-muted">Razorpay, for the fixed booking instalment above.</p>
+                    <button
+                      type="button"
+                      onClick={handlePayNow}
+                      disabled={paying || bookingDueAmount <= 0}
+                      className="mt-3 rounded-full bg-green px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {paying ? 'Processing...' : 'Pay Now'}
+                    </button>
+                  </div>
+                  <div className="rounded-lg border border-hairline bg-surface p-4">
+                    <p className="text-xs font-semibold text-ink">Cash transaction</p>
+                    <p className="mt-1 text-xs text-ink-muted">Records the fixed booking instalment above as cash received.</p>
+                    <button
+                      type="button"
+                      onClick={handlePayByCash}
+                      disabled={payingCash || bookingDueAmount <= 0}
+                      className="mt-3 rounded-full border border-hairline px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-green hover:text-green disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {payingCash ? 'Recording...' : 'Record Cash Payment'}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
