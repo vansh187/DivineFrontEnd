@@ -7,14 +7,17 @@ import { journeyStops } from '../data/journeyStops';
 import { townshipLocations } from '../data/locationConnectivity';
 import { ConnectivityList } from '../components/ConnectivityList';
 import { getProjectDetail } from '../data/projectDetails';
+import { townshipVideoFor } from '../data/townshipVideos';
 import { contact } from '../data/contact';
 import { useAuth } from '../hooks/useAuth';
+import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 import { loadSavedTownships, toggleSavedTownship } from '../services/savedTownships';
 
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [siteVisitOpen, setSiteVisitOpen] = useState(false);
   const { session, openModal } = useAuth();
+  const reducedMotion = usePrefersReducedMotion();
   const email = session?.email ?? null;
 
   const [savedIds, setSavedIds] = useState<string[]>(() => (email ? loadSavedTownships(email) : []));
@@ -43,12 +46,31 @@ export function ProjectDetailPage() {
     ? `https://www.google.com/maps?q=${encodeURIComponent(location.mapQuery)}&output=embed`
     : undefined;
 
+  // Same township walkthrough reel used on the landing "Now selling" card —
+  // shown in the hero here, with the still as its poster / reduced-motion fallback.
+  const heroVideo = reducedMotion ? undefined : townshipVideoFor(id);
+
   return (
     <>
       <Navbar onBookVisit={() => setSiteVisitOpen(true)} />
 
       <header className="relative flex min-h-[52svh] items-end overflow-hidden pt-24">
-        <img src={township.image.src} alt={township.image.alt} className="absolute inset-0 h-full w-full object-cover" />
+        {heroVideo ? (
+          <video
+            key={heroVideo}
+            className="absolute inset-0 h-full w-full object-cover"
+            src={heroVideo}
+            poster={township.image.src}
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="metadata"
+            aria-label={township.image.alt}
+          />
+        ) : (
+          <img src={township.image.src} alt={township.image.alt} className="absolute inset-0 h-full w-full object-cover" />
+        )}
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(44,62,80,0.35)_0%,rgba(44,62,80,0.2)_40%,rgba(44,62,80,0.86)_100%)]" />
         <div className="relative z-10 px-4 pb-10 sm:px-10 sm:pb-14">
           <div className="flex items-center justify-between gap-4">
