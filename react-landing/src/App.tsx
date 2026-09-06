@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { LandingPage } from './pages/LandingPage';
 import { AuthModal } from './components/AuthModal';
+import { BackButton } from './components/BackButton';
 import { ChatWidget } from './components/chat/ChatWidget';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AppCrashFallback } from './components/AppCrashFallback';
@@ -179,6 +180,7 @@ function App() {
       <AuthProvider>
         <BrowserRouter>
           <ScrollToRouteTop />
+          <BackButton />
           <AppRoutes />
           <AuthModal />
           {/* Isolated boundary: a bug in the (newer, less-tested) chat widget
