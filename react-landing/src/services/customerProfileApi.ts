@@ -47,8 +47,15 @@ export interface CustomerScheduleRow {
   /** ISO 8601 date, if the server resolves it against the booking date. */
   due_date?: string | null;
   amount?: number | null;
-  /** Free text from the backend, for example paid/due/overdue. */
+  /** Milestone state: `paid` | `due` | `overdue` | `upcoming` (free text — the
+   * UI also re-derives it from `due_date` so older values stay safe). */
   status?: string | null;
+  /** Stable id for this milestone. Sent back as `installment_no` context when the
+   * customer pays it. Optional — the UI falls back to the 1-based row position. */
+  id?: string | null;
+  /** ISO date the "Pay now" button unlocks (backend convention: due_date − 5
+   * days). Optional — the UI derives the same 5-day window itself. */
+  pay_enabled_from?: string | null;
 }
 
 /**
@@ -163,12 +170,14 @@ export function shouldFallbackToSavedProfile(err: unknown): boolean {
  *      "total_consideration": 1774305,
  *      "amount_received": 700000,
  *      "payment_schedule": [
- *        { "label": "On Booking",                "percent": 10, "due_days": 0,   "due_date": "2025-01-10", "amount": 177431, "status": "paid" },
- *        { "label": "Within 45 days of booking", "percent": 15, "due_days": 45,  "due_date": "2025-02-24", "amount": 266146, "status": "paid" },
- *        { "label": "Within 90 days of booking", "percent": 25, "due_days": 90,  "due_date": "2025-04-10", "amount": 443576, "status": "due"  },
- *        { "label": "Within 180 days of booking","percent": 25, "due_days": 180, "due_date": "2025-07-09", "amount": 443576, "status": "due"  },
- *        { "label": "Within 270 days of booking","percent": 25, "due_days": 270, "due_date": "2025-10-07", "amount": 443577, "status": "due"  }
+ *        { "id": "m1", "label": "On Booking",                "percent": 10, "due_days": 0,   "due_date": "2025-01-10", "amount": 177431, "status": "paid",    "pay_enabled_from": "2025-01-05" },
+ *        { "id": "m2", "label": "Within 45 days of booking", "percent": 15, "due_days": 45,  "due_date": "2025-02-24", "amount": 266146, "status": "paid",    "pay_enabled_from": "2025-02-19" },
+ *        { "id": "m3", "label": "Within 90 days of booking", "percent": 25, "due_days": 90,  "due_date": "2025-04-10", "amount": 443576, "status": "due",     "pay_enabled_from": "2025-04-05" },
+ *        { "id": "m4", "label": "Within 180 days of booking","percent": 25, "due_days": 180, "due_date": "2025-07-09", "amount": 443576, "status": "upcoming", "pay_enabled_from": "2025-07-04" },
+ *        { "id": "m5", "label": "Within 270 days of booking","percent": 25, "due_days": 270, "due_date": "2025-10-07", "amount": 443577, "status": "upcoming", "pay_enabled_from": "2025-10-02" }
  *      ]
+ *      // Instalment payments + the 20-day due reminder / email: see
+ *      // docs/plot-booking-inventory/BACKEND-payment-plan-reminders.md
  *    }
  *  }
  *

@@ -9,6 +9,7 @@ import { townshipPricing } from '../data/townshipPricing';
 import { loadSavedTownships, toggleSavedTownship } from '../services/savedTownships';
 import { loadPendingUnit, savePendingUnit } from '../services/pendingUnit';
 import type { InventoryUnit } from '../services/inventoryApi';
+import { PaymentDueBanner } from '../components/PaymentDueBanner';
 
 interface TownshipCardProps {
   savedIds: string[];
@@ -175,12 +176,15 @@ export function CustomerPage() {
         heading={<>Welcome back, {name}.</>}
         subheading="Your shortlist and site visits will live here as we build out the customer portal — documents are ready below."
         before={
-          pendingUnit && (
-            <p className="mt-6 truncate rounded-lg border border-terracotta/30 bg-terracotta/10 px-3 py-2 text-xs font-semibold text-terracotta">
-              Booking {pendingUnit.project_name}
-              {pendingUnit.unit_number ? ` · Plot ${pendingUnit.unit_number}` : ''} — complete Aadhaar, PAN &amp; photo uploads below to continue.
-            </p>
-          )
+          <>
+            {pendingUnit && (
+              <p className="mt-6 truncate rounded-lg border border-terracotta/30 bg-terracotta/10 px-3 py-2 text-xs font-semibold text-terracotta">
+                Booking {pendingUnit.project_name}
+                {pendingUnit.unit_number ? ` · Plot ${pendingUnit.unit_number}` : ''} — complete Aadhaar, PAN &amp; photo uploads below to continue.
+              </p>
+            )}
+            <PaymentDueBanner />
+          </>
         }
         after={<CustomerDocuments pendingUnit={pendingUnit} />}
       >

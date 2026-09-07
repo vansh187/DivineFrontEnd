@@ -57,6 +57,12 @@ function blobToFile(blob: Blob, fileName: string): File {
   return new File([blob], fileName, { type: 'application/pdf' });
 }
 
+/** Plot areas / rates are always positive — drop any minus sign that gets typed
+ * or pasted so a negative value can never enter the form. */
+function stripNegative(value: string): string {
+  return value.replace(/-/g, '');
+}
+
 function Field({
   label,
   value,
@@ -65,6 +71,7 @@ function Field({
   multiline = false,
   readOnly = false,
   hint,
+  min,
 }: {
   label: string;
   value: string;
@@ -73,6 +80,7 @@ function Field({
   multiline?: boolean;
   readOnly?: boolean;
   hint?: string;
+  min?: number;
 }) {
   const className = 'mt-1 rounded-lg border border-hairline bg-bg px-3 py-2.5 text-sm text-ink outline-none focus:border-green';
   return (
@@ -86,6 +94,7 @@ function Field({
           type={type}
           value={value}
           readOnly={readOnly}
+          min={min}
           onChange={(event) => onChange(event.target.value)}
           className={`${className} w-full${readOnly ? ' cursor-not-allowed text-ink-muted' : ''}`}
         />
@@ -344,22 +353,48 @@ export function CustomerApplicationPage() {
   // navigation state so the form opens pre-filled instead of asking the
   // customer to retype what they already picked. Runs once on arrival only —
   // it must not keep re-applying and clobber edits if the customer navigates
-  // back to this page later.
+  // back to this page later. The unit's inventory id is stashed into
+  // bookingApplication (persisted wizard state) here so the booking payment can
+  // lock the plot even after a reload — bookingApplication is itself persisted,
+  // so once captured it survives without needing the navigation state again.
   useEffect(() => {
     const unit = (location.state as { unit?: InventoryUnit } | null)?.unit;
     if (!unit) return;
-    if (!docs.bookingApplication.formData.projectId) {
+
+    const booking = docs.bookingApplication;
+    let nextFormData = booking.formData;
+    if (!booking.formData.projectId) {
       const matchedProject = applicationProjects.find(
         (project) => unit.project_name && project.label.toLowerCase().includes(unit.project_name.toLowerCase()),
       );
-      applyFormUpdates({
+      nextFormData = {
+        ...booking.formData,
         ...(matchedProject ? { projectId: matchedProject.id } : {}),
-        unitNo: unit.unit_number ?? docs.bookingApplication.formData.unitNo,
-        plotAreaSqYd: unit.area_sqyd != null ? String(unit.area_sqyd) : docs.bookingApplication.formData.plotAreaSqYd,
-        plotAreaSqMtr: unit.area_sqmt != null ? String(unit.area_sqmt) : docs.bookingApplication.formData.plotAreaSqMtr,
-        unitType: unit.unit_type ?? docs.bookingApplication.formData.unitType,
+        unitNo: unit.unit_number ?? booking.formData.unitNo,
+        plotAreaSqYd: unit.area_sqyd != null ? String(unit.area_sqyd) : booking.formData.plotAreaSqYd,
+        plotAreaSqMtr: unit.area_sqmt != null ? String(unit.area_sqmt) : booking.formData.plotAreaSqMtr,
+        unitType: unit.unit_type ?? booking.formData.unitType,
+      };
+    }
+    // Only bind the inventory id on a fresh application — never overwrite one the
+    // customer has already progressed with, and don't attach a stale unit to a
+    // booking that's already underway for a different plot.
+    const bindInventory = !booking.inventoryId && !booking.formData.projectId && !!unit.id;
+    const nextInventoryId = bindInventory ? unit.id : booking.inventoryId;
+
+    if (nextFormData !== booking.formData || nextInventoryId !== booking.inventoryId) {
+      persist({
+        ...docs,
+        bookingApplication: {
+          ...booking,
+          formData: nextFormData,
+          inventoryId: nextInventoryId,
+          inventoryUnitNumber: bindInventory ? unit.unit_number ?? null : booking.inventoryUnitNumber,
+          error: null,
+        },
       });
     }
+
     navigate(location.pathname, { replace: true, state: {} });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -479,7 +514,11 @@ export function CustomerApplicationPage() {
     setPaying(true);
     setPaymentError(null);
     try {
-      const order = await createPaymentOrder(session.token, amount);
+      const inventoryId = docs.bookingApplication.inventoryId;
+      const order = await createPaymentOrder(session.token, amount, {
+        purpose: inventoryId ? 'plot_booking' : 'other',
+        inventoryId,
+      });
       const result = await openRazorpayCheckout({
         keyId: order.razorpay_key_id,
         amountPaise: order.amount_paise,
@@ -509,6 +548,8 @@ export function CustomerApplicationPage() {
           razorpayOrderId: record.razorpay_order_id,
           razorpayPaymentId: record.razorpay_payment_id,
           paidAt: record.verified ? new Date().toISOString() : null,
+          inventoryStatus: record.inventory_status ?? null,
+          inventoryConflictReason: record.inventory_conflict_reason ?? null,
           error: record.verified ? null : 'Payment could not be verified. Please try again or contact support.',
         },
       });
@@ -529,7 +570,13 @@ export function CustomerApplicationPage() {
     setPayingCash(true);
     setPaymentError(null);
     try {
-      const record = await recordCashPayment(session.token, amount, 'Cash recorded from booking application final page.');
+      const inventoryId = docs.bookingApplication.inventoryId;
+      const record = await recordCashPayment(
+        session.token,
+        amount,
+        'Cash recorded from booking application final page.',
+        { purpose: inventoryId ? 'plot_booking' : 'other', inventoryId },
+      );
       if (isShortPayment(record.amount)) {
         setPaymentError('Please correct the amount.');
         return;
@@ -544,6 +591,8 @@ export function CustomerApplicationPage() {
           razorpayOrderId: record.razorpay_order_id,
           razorpayPaymentId: record.razorpay_payment_id,
           paidAt: new Date().toISOString(),
+          inventoryStatus: record.inventory_status ?? null,
+          inventoryConflictReason: record.inventory_conflict_reason ?? null,
           error: null,
         },
       });
@@ -738,6 +787,7 @@ export function CustomerApplicationPage() {
           file: pdfFile,
           projectId: docs.bookingApplication.formData.projectId,
           paymentId: docs.payment.paymentId,
+          inventoryId: docs.bookingApplication.inventoryId,
           razorpayOrderId: docs.payment.razorpayOrderId,
           razorpayPaymentId: docs.payment.razorpayPaymentId,
           formData: serializeFormData(docs.bookingApplication.formData, hasCoApplicant),
@@ -755,6 +805,11 @@ export function CustomerApplicationPage() {
             paymentPlan: backendDoc.payment_plan ?? docs.bookingApplication.paymentPlan,
             error: null,
           },
+          // The upload doubles as a safety-net for the plot lock; keep the
+          // customer-facing conflict banner in sync with whatever it reports.
+          payment: backendDoc.inventory_status
+            ? { ...docs.payment, inventoryStatus: backendDoc.inventory_status }
+            : docs.payment,
         });
         openPdfBlob(blob);
       } catch (err) {
@@ -1033,8 +1088,20 @@ export function CustomerApplicationPage() {
 
         <Section title="Details of residential plot">
           <Field label="Unit no." value={form.unitNo} onChange={(value) => updateForm('unitNo', value)} />
-          <Field label="In sq yd." type="number" value={form.plotAreaSqYd} onChange={(value) => updateForm('plotAreaSqYd', value)} />
-          <Field label="In sq mtr." type="number" value={form.plotAreaSqMtr} onChange={(value) => updateForm('plotAreaSqMtr', value)} />
+          <Field
+            label="In sq yd."
+            type="number"
+            min={0}
+            value={form.plotAreaSqYd}
+            onChange={(value) => updateForm('plotAreaSqYd', stripNegative(value))}
+          />
+          <Field
+            label="In sq mtr."
+            type="number"
+            min={0}
+            value={form.plotAreaSqMtr}
+            onChange={(value) => updateForm('plotAreaSqMtr', stripNegative(value))}
+          />
           <Field label="Unit type" value={form.unitType} onChange={(value) => updateForm('unitType', value)} />
         </Section>
 
@@ -1353,11 +1420,23 @@ export function CustomerApplicationPage() {
               </p>
             )}
             {paymentComplete ? (
-              <p className="mt-4 text-sm text-ink-muted">
-                <span className="font-semibold text-ink">Rs. {docs.payment.amount?.toLocaleString('en-IN')}</span> paid
-                {docs.payment.method === 'cash' ? ' in cash' : ' online'}
-                {docs.payment.paidAt ? ` on ${new Date(docs.payment.paidAt).toLocaleDateString('en-IN')}` : ''}.
-              </p>
+              <>
+                <p className="mt-4 text-sm text-ink-muted">
+                  <span className="font-semibold text-ink">Rs. {docs.payment.amount?.toLocaleString('en-IN')}</span> paid
+                  {docs.payment.method === 'cash' ? ' in cash' : ' online'}
+                  {docs.payment.paidAt ? ` on ${new Date(docs.payment.paidAt).toLocaleDateString('en-IN')}` : ''}.
+                </p>
+                {docs.payment.inventoryStatus === 'conflict' && (
+                  <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-900">
+                    <span className="font-semibold">Your payment went through.</span> Plot{' '}
+                    {docs.bookingApplication.inventoryUnitNumber
+                      ? `${docs.bookingApplication.inventoryUnitNumber} `
+                      : ''}
+                    was just booked by another customer, so it could not be locked to you. Our team will call you
+                    shortly to re-assign a plot or arrange a refund — you don&rsquo;t need to pay again.
+                  </p>
+                )}
+              </>
             ) : (
               <div className="mt-4">
                 {paymentNeedsReference && (
