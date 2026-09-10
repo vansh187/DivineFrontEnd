@@ -5,13 +5,13 @@ export function DeliveredSection() {
   return (
     <section id="record" className="px-6 pt-8 pb-20 sm:px-10 sm:pt-10 sm:pb-28">
       <Reveal>
-        <div className="eyebrow-label mb-3.5 text-terracotta">Handovers 2007 → 2017</div>
+        <div className="eyebrow-label mb-3.5 text-terracotta">Journey through projects</div>
         <h2 className="font-display text-balance text-4xl font-bold text-ink sm:text-6xl">
-          Five townships already lived in.
+          Delivered projects across the corridor.
         </h2>
       </Reveal>
 
-      <div className="mt-8 grid grid-cols-1 gap-px border border-hairline bg-hairline sm:grid-cols-2 lg:grid-cols-5">
+      <div className="mt-8 grid grid-cols-1 gap-px border border-hairline bg-hairline sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         {deliveredRecords.map((record) => (
           <Reveal
             key={`${record.name}-${record.location}`}
@@ -21,7 +21,8 @@ export function DeliveredSection() {
             <h4 className="mt-2.5 mb-1 text-[17px] font-semibold tracking-tight text-ink">
               {record.name}
             </h4>
-            <span className="text-[12.5px] text-ink-muted">{record.location}</span>
+            <span className="text-[12.5px] font-semibold text-ink-muted">{record.location}</span>
+            {record.detail && <p className="mt-2 text-[12.5px] leading-relaxed text-ink-muted">{record.detail}</p>}
           </Reveal>
         ))}
       </div>

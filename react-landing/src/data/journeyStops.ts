@@ -53,7 +53,7 @@ export const journeyStops: JourneyStop[] = [
     heading: 'Delivered,',
     headingEmphasis: 'every time.',
     description:
-      'Divine City Center, The Destination, Presidia Heights, Presidia Royal, the Integrated Township — five handovers between 2007 and 2017, and two townships selling now.',
+      'Divine City, Presidia Heights, The Destination, Divine City Center, Suraksha Enclave and OPS Divine Greens - a corridor record from 2006 to 2024.',
     bigNumber: { value: '20', unit: 'YRS' },
     chips: ['RERA approved', 'Registry ready', 'Est. 2005'],
     image: {

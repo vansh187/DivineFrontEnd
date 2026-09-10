@@ -28,4 +28,5 @@ export interface DeliveredRecord {
   year: string;
   name: string;
   location: string;
+  detail?: string;
 }

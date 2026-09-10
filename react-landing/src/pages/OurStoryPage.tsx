@@ -172,7 +172,7 @@ export function OurStoryPage() {
                 <div className="mt-4 grid gap-3">
                   {[
                     ['2005', 'Started with a long-term view of the NH-1 growth corridor.'],
-                    ['2007-17', 'Delivered communities across Kurukshetra and Karnal.'],
+                    ['2006-24', 'Delivered projects across Ganaur, Kurukshetra and Karnal.'],
                     ['Today', 'Active plotted townships shaped for premium family ownership.'],
                   ].map(([year, text]) => (
                     <div key={year} className="grid grid-cols-[64px_minmax(0,1fr)] gap-3 border-t border-hairline pt-3 first:border-t-0 first:pt-0">
@@ -292,6 +292,7 @@ export function OurStoryPage() {
                 <div>
                   <h2 className="text-lg font-bold text-ink">{record.name}</h2>
                   <p className="mt-1 text-sm text-ink-muted">{record.location}</p>
+                  {record.detail && <p className="mt-1 text-xs leading-relaxed text-ink-muted">{record.detail}</p>}
                 </div>
               </div>
             ))}
