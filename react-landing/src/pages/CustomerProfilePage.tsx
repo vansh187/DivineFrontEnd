@@ -157,6 +157,34 @@ function selectedBookingFrom(
   return bookings[0];
 }
 
+const PROFILE_BOOKINGS_CACHE_PREFIX = 'dvi_profile_bookings_';
+
+function profileBookingsCacheKey(email: string): string {
+  return `${PROFILE_BOOKINGS_CACHE_PREFIX}${email.trim().toLowerCase()}`;
+}
+
+function loadCachedProfileBookings(email: string | null): CustomerBookingInfo[] {
+  if (!email) return [];
+  try {
+    const raw = localStorage.getItem(profileBookingsCacheKey(email));
+    const parsed = raw ? (JSON.parse(raw) as unknown) : null;
+    return Array.isArray(parsed)
+      ? parsed.filter((booking): booking is CustomerBookingInfo => Boolean(booking) && typeof booking === 'object')
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCachedProfileBookings(email: string, bookings: CustomerBookingInfo[]): void {
+  if (!bookings.length) return;
+  try {
+    localStorage.setItem(profileBookingsCacheKey(email), JSON.stringify(bookings));
+  } catch {
+    /* Storage can be full/disabled; the live profile still renders normally. */
+  }
+}
+
 function firstPaidScheduleAmount(rows?: CustomerScheduleRow[] | null): number | null {
   const paid = (rows ?? []).find((row) => (row.status ?? '').toLowerCase() === 'paid' && typeof row.amount === 'number');
   return paid?.amount ?? null;
@@ -181,18 +209,29 @@ export function CustomerProfilePage() {
   const [remoteUnavailable, setRemoteUnavailable] = useState(false);
   const [remoteError, setRemoteError] = useState('');
   const remoteBookings = useMemo(() => profileBookings(remote), [remote]);
+  const [cachedBookings, setCachedBookings] = useState<CustomerBookingInfo[]>(() =>
+    loadCachedProfileBookings(session?.email ?? null),
+  );
+  const visibleBookings = remoteBookings.length ? remoteBookings : cachedBookings;
   const [selectedBookingKey, setSelectedBookingKey] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!remoteBookings.length) {
-      setSelectedBookingKey(null);
-      return;
-    }
+    setCachedBookings(loadCachedProfileBookings(session?.email ?? null));
+  }, [session?.email]);
+
+  useEffect(() => {
+    if (!session?.email || !remoteBookings.length) return;
+    saveCachedProfileBookings(session.email, remoteBookings);
+    setCachedBookings(remoteBookings);
+  }, [session?.email, remoteBookings]);
+
+  useEffect(() => {
+    if (!visibleBookings.length) return;
     setSelectedBookingKey((current) => {
-      if (current && remoteBookings.some((booking, index) => bookingKey(booking, index) === current)) return current;
-      return bookingKey(remoteBookings[0], 0);
+      if (current && visibleBookings.some((booking, index) => bookingKey(booking, index) === current)) return current;
+      return bookingKey(visibleBookings[0], 0);
     });
-  }, [remoteBookings]);
+  }, [visibleBookings]);
 
   // Construction-linked payment plan + the "pay this instalment now" gate.
   const schedule = usePaymentSchedule(selectedBookingKey);
@@ -275,7 +314,7 @@ export function CustomerProfilePage() {
     const form = docs.bookingApplication.formData;
     const aadhaar = docs.aadhar;
     const r = remote ?? {};
-    const bookings = profileBookings(remote);
+    const bookings = visibleBookings;
     const selectedBooking = selectedBookingFrom(bookings, selectedBookingKey);
     const legacyBooking = !Array.isArray(r.booking) ? r.booking : null;
     const rb = selectedBooking ?? legacyBooking ?? {};
@@ -439,7 +478,7 @@ export function CustomerProfilePage() {
       receiptPayment,
       pdfInput,
     };
-  }, [session, remote, selectedBookingKey, photoVersion]);
+  }, [session, remote, visibleBookings, selectedBookingKey, photoVersion]);
 
   if (!session || !profile) return null;
 
