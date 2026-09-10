@@ -19,6 +19,13 @@ export interface CustomerAddress {
 }
 
 export interface CustomerBookingInfo {
+  /** Stable booking/document reference, when the backend has one. */
+  id?: string | null;
+  booking_id?: string | null;
+  document_id?: string | null;
+  backend_document_id?: string | null;
+  /** Inventory unit id for this booked plot. */
+  inventory_id?: string | null;
   /** Whether this customer has a plot booked at all. */
   has_booking?: boolean;
   project_id?: string | null;
@@ -35,6 +42,14 @@ export interface CustomerBookingInfo {
   total_consideration?: number | null;
   /** Amount already received from the customer, in whole rupees. */
   amount_received?: number | null;
+  /** Booking-payment reference, used for receipt downloads when supplied. */
+  payment_id?: string | null;
+  booking_payment_id?: string | null;
+  booking_payment_amount?: number | null;
+  payment_method?: 'razorpay' | 'cash' | string | null;
+  razorpay_order_id?: string | null;
+  razorpay_payment_id?: string | null;
+  payment_created_date?: string | null;
   /** Optional server-computed schedule; the UI falls back to the default
    * 10/15/25/25/25 split against `total_consideration` when this is absent. */
   payment_schedule?: CustomerScheduleRow[] | null;
@@ -91,7 +106,47 @@ export interface CustomerProfile {
   address?: CustomerAddress | null;
   /** Optional single-line address; used verbatim when present. */
   address_text?: string | null;
+  /** One or more booked plots. Newer backends should send this when a customer
+   * has multiple plot bookings; older backends can keep sending `booking`. */
+  bookings?: CustomerBookingInfo[] | null;
+  /** Legacy / single-booking payload. */
   booking?: CustomerBookingInfo | null;
+}
+
+function firstNonEmpty(...values: Array<string | null | undefined>): string {
+  for (const value of values) {
+    const trimmed = (value ?? '').trim();
+    if (trimmed) return trimmed;
+  }
+  return '';
+}
+
+export function bookingKey(booking: CustomerBookingInfo, index = 0): string {
+  return firstNonEmpty(
+    booking.id,
+    booking.booking_id,
+    booking.document_id,
+    booking.backend_document_id,
+    booking.inventory_id,
+    [booking.project_id, booking.unit_number, booking.booking_date].filter(Boolean).join(':'),
+  ) || `booking-${index}`;
+}
+
+export function bookingDocumentId(booking: CustomerBookingInfo | null | undefined): string | null {
+  return firstNonEmpty(booking?.document_id, booking?.backend_document_id, booking?.id) || null;
+}
+
+export function bookingLabel(booking: CustomerBookingInfo, index = 0): string {
+  const project = firstNonEmpty(booking.township_label, booking.project_name, booking.project_id) || `Booking ${index + 1}`;
+  const unit = firstNonEmpty(booking.unit_number);
+  const date = firstNonEmpty(booking.booking_date);
+  return [project, unit ? `Plot ${unit}` : '', date ? `Booked ${date}` : ''].filter(Boolean).join(' · ');
+}
+
+export function profileBookings(profile: CustomerProfile | null | undefined): CustomerBookingInfo[] {
+  const many = Array.isArray(profile?.bookings) ? profile.bookings.filter(Boolean) : [];
+  if (many.length) return many;
+  return profile?.booking ? [profile.booking] : [];
 }
 
 function messageForProfileError(status: number, detail: unknown): string {

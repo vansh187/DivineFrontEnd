@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { useAuth, getDisplayName } from '../hooks/useAuth';
 import { DashboardLayout } from '../components/DashboardLayout';
 import { IconBadge, FileIcon, RupeeIcon } from '../components/DashboardIcons';
-import { loadCustomerDocs, markInstallmentPaidLocally, saveCustomerDocs } from '../services/documentStore';
+import { loadCustomerDocs, markInstallmentPaidLocally, saveCustomerDocs, type PaymentStatus } from '../services/documentStore';
 import { usePaymentSchedule } from '../hooks/usePaymentSchedule';
 import { formatCurrencyINR, formatIndianDate } from '../utils/currency';
 import { PAY_WINDOW_DAYS, type MilestoneStatus, type ScheduleMilestone } from '../services/paymentSchedule';
@@ -14,7 +14,12 @@ import {
   getCustomerProfileShared,
   isProfileEndpointMissing,
   shouldFallbackToSavedProfile,
+  bookingDocumentId,
+  bookingKey,
+  bookingLabel,
+  profileBookings,
   type CustomerAddress,
+  type CustomerBookingInfo,
   type CustomerProfile,
   type CustomerScheduleRow,
 } from '../services/customerProfileApi';
@@ -27,6 +32,7 @@ import {
   type ProfilePdfInput,
 } from '../services/customerProfilePdf';
 import { blobToDataUrl } from '../services/applicationPdf';
+import { downloadPdfBlob, generatePaymentReceiptPdf } from '../services/applicationPdf';
 import { fetchDemandLetterPdf, getLatestDocumentByType, uploadApplicantPhoto } from '../services/documentsApi';
 
 const formatINR = formatCurrencyINR;
@@ -139,22 +145,33 @@ function freshSignedUrl(url: string | null, expiresAt: number | null): string | 
   return url;
 }
 
+function selectedBookingFrom(
+  bookings: CustomerBookingInfo[],
+  selectedKey: string | null,
+): CustomerBookingInfo | null {
+  if (!bookings.length) return null;
+  if (selectedKey) {
+    const match = bookings.find((booking, index) => bookingKey(booking, index) === selectedKey);
+    if (match) return match;
+  }
+  return bookings[0];
+}
+
+function firstPaidScheduleAmount(rows?: CustomerScheduleRow[] | null): number | null {
+  const paid = (rows ?? []).find((row) => (row.status ?? '').toLowerCase() === 'paid' && typeof row.amount === 'number');
+  return paid?.amount ?? null;
+}
+
 export function CustomerProfilePage() {
   const { session, logout, openModal } = useAuth();
   const location = useLocation();
   const photoInputRef = useRef<HTMLInputElement>(null);
   const paymentsRef = useRef<HTMLElement>(null);
-  const [downloading, setDownloading] = useState<'allotment' | 'demand' | null>(null);
+  const [downloading, setDownloading] = useState<'allotment' | 'demand' | 'receipt' | null>(null);
   const [error, setError] = useState('');
   const [photoError, setPhotoError] = useState('');
   const [photoUploading, setPhotoUploading] = useState(false);
   const [photoVersion, setPhotoVersion] = useState(0);
-
-  // Construction-linked payment plan + the "pay this instalment now" gate.
-  const schedule = usePaymentSchedule();
-  const [payingNo, setPayingNo] = useState<number | null>(null);
-  const [payError, setPayError] = useState('');
-  const [paySuccess, setPaySuccess] = useState('');
 
   // Real profile data from the backend. Loosely coupled: the page renders from
   // locally-cached booking-form data immediately, then overlays whatever the API
@@ -163,6 +180,25 @@ export function CustomerProfilePage() {
   const [remoteLoading, setRemoteLoading] = useState(true);
   const [remoteUnavailable, setRemoteUnavailable] = useState(false);
   const [remoteError, setRemoteError] = useState('');
+  const remoteBookings = useMemo(() => profileBookings(remote), [remote]);
+  const [selectedBookingKey, setSelectedBookingKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!remoteBookings.length) {
+      setSelectedBookingKey(null);
+      return;
+    }
+    setSelectedBookingKey((current) => {
+      if (current && remoteBookings.some((booking, index) => bookingKey(booking, index) === current)) return current;
+      return bookingKey(remoteBookings[0], 0);
+    });
+  }, [remoteBookings]);
+
+  // Construction-linked payment plan + the "pay this instalment now" gate.
+  const schedule = usePaymentSchedule(selectedBookingKey);
+  const [payingNo, setPayingNo] = useState<number | null>(null);
+  const [payError, setPayError] = useState('');
+  const [paySuccess, setPaySuccess] = useState('');
 
   useEffect(() => {
     if (!session) return;
@@ -239,7 +275,9 @@ export function CustomerProfilePage() {
     const form = docs.bookingApplication.formData;
     const aadhaar = docs.aadhar;
     const r = remote ?? {};
-    const rb = r.booking ?? {};
+    const bookings = profileBookings(remote);
+    const selectedBooking = selectedBookingFrom(bookings, selectedBookingKey);
+    const rb = selectedBooking ?? r.booking ?? {};
     const hasRemote = remote !== null;
     const unknown = '-';
 
@@ -313,6 +351,47 @@ export function CustomerProfilePage() {
       : localScheduleRows(totalAmount);
 
     const photo = docs.applicantPhoto.dataUrl || freshSignedUrl(docs.applicantPhoto.signedUrl, docs.applicantPhoto.signedUrlExpiresAt);
+    const backendDocumentId = bookingDocumentId(selectedBooking) ?? docs.bookingApplication.backendDocumentId;
+    const receiptPaymentId = firstText(rb.booking_payment_id, rb.payment_id);
+    const receiptAmount =
+      typeof rb.booking_payment_amount === 'number'
+        ? rb.booking_payment_amount
+        : firstPaidScheduleAmount(serverSchedule) ?? (hasRemote ? null : docs.payment.amount);
+    const remoteProjectId = firstText(rb.project_id);
+    const receiptProjectId =
+      remoteProjectId && townshipPricing.some((township) => township.id === remoteProjectId)
+        ? remoteProjectId
+        : form.projectId;
+    const receiptFormData = {
+      ...form,
+      projectId: receiptProjectId as typeof form.projectId,
+      unitNo,
+      plotAreaSqYd,
+      unitType,
+      totalPlotAmount: totalAmount != null ? String(totalAmount) : form.totalPlotAmount,
+      totalAmount: totalAmount != null ? String(totalAmount) : form.totalAmount,
+      applicantName: name,
+      mobile: phone === unknown ? form.mobile : phone,
+      email,
+      applicationDate: bookingDate || form.applicationDate,
+    };
+    const receiptPayment: PaymentStatus | null =
+      receiptPaymentId && receiptAmount != null
+        ? {
+            paymentId: receiptPaymentId,
+            amount: receiptAmount,
+            status: 'paid',
+            method: rb.payment_method === 'cash' ? 'cash' : 'razorpay',
+            razorpayOrderId: rb.razorpay_order_id ?? null,
+            razorpayPaymentId: rb.razorpay_payment_id ?? null,
+            paidAt: rb.payment_created_date ?? rb.booking_date ?? null,
+            inventoryStatus: null,
+            inventoryConflictReason: null,
+            error: null,
+          }
+        : !hasRemote && docs.payment.status === 'paid'
+          ? docs.payment
+          : null;
 
     const pdfInput: ProfilePdfInput = {
       name,
@@ -348,10 +427,18 @@ export function CustomerProfilePage() {
       receivedAmount,
       paymentSchedule,
       usesServerSchedule: Boolean(letterScheduleRows?.length),
-      backendDocumentId: docs.bookingApplication.backendDocumentId,
+      bookingOptions: bookings.map((booking, index) => ({
+        key: bookingKey(booking, index),
+        label: bookingLabel(booking, index),
+      })),
+      selectedBooking,
+      selectedBookingKey: selectedBooking ? bookingKey(selectedBooking, bookings.indexOf(selectedBooking)) : null,
+      backendDocumentId,
+      receiptFormData,
+      receiptPayment,
       pdfInput,
     };
-  }, [session, remote, photoVersion]);
+  }, [session, remote, selectedBookingKey, photoVersion]);
 
   if (!session || !profile) return null;
 
@@ -473,6 +560,28 @@ export function CustomerProfilePage() {
     }
   };
 
+  const handleDownloadReceipt = async () => {
+    if (!profile.receiptPayment) {
+      setError('A payment receipt is not available for the selected booking yet.');
+      return;
+    }
+    setDownloading('receipt');
+    setError('');
+    try {
+      const blob = await generatePaymentReceiptPdf({
+        formData: profile.receiptFormData,
+        paymentInfo: profile.receiptPayment,
+      });
+      const projectId = profile.receiptFormData.projectId || 'project';
+      const paymentId = profile.receiptPayment.paymentId || Date.now();
+      downloadPdfBlob(blob, `${projectId}-payment-receipt-${paymentId}.pdf`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not download the payment receipt.');
+    } finally {
+      setDownloading(null);
+    }
+  };
+
   const handlePayInstallment = async (milestone: ScheduleMilestone) => {
     if (!session || milestone.amount == null || milestone.amount <= 0) return;
     setPayingNo(milestone.no);
@@ -481,6 +590,7 @@ export function CustomerProfilePage() {
     try {
       const order = await createPaymentOrder(session.token, milestone.amount, {
         purpose: 'installment',
+        inventoryId: profile.selectedBooking?.inventory_id ?? null,
         installmentNo: milestone.no,
         dueDate: milestone.dueDateISO,
       });
@@ -583,6 +693,31 @@ export function CustomerProfilePage() {
             ) : null}
           </div>
         </div>
+
+        {profile.bookingOptions.length > 1 && (
+          <div className="mt-8 max-w-xl">
+            <label htmlFor="profile-booking" className="block text-xs font-semibold uppercase tracking-[0.04em] text-ink-muted">
+              Selected plot booking
+            </label>
+            <select
+              id="profile-booking"
+              value={profile.selectedBookingKey ?? ''}
+              onChange={(event) => {
+                setSelectedBookingKey(event.target.value || null);
+                setPayError('');
+                setPaySuccess('');
+                setError('');
+              }}
+              className="mt-2 w-full rounded-lg border border-hairline bg-bg px-3 py-2.5 text-sm text-ink outline-none transition-colors focus:border-green"
+            >
+              {profile.bookingOptions.map((booking) => (
+                <option key={booking.key} value={booking.key}>
+                  {booking.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <dl className="mt-8 grid grid-cols-1 gap-x-10 gap-y-0 sm:grid-cols-2">
           {details.map(([label, value]) => (
@@ -716,7 +851,7 @@ export function CustomerProfilePage() {
 
       <p className="eyebrow-label mt-12 text-terracotta">Documents</p>
 
-      <div className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2">
+      <div className="mt-4 grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="group relative rounded-2xl border border-hairline bg-surface p-6 shadow-[0_16px_40px_-26px_rgba(6,31,45,0.24)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_26px_50px_-24px_rgba(6,31,45,0.28)]">
           <IconBadge icon={<FileIcon />} accent="green" interactive />
           <h3 className="mt-4 font-display text-lg font-bold text-ink">Allotment letter</h3>
@@ -746,6 +881,22 @@ export function CustomerProfilePage() {
             className="mt-4 rounded-full bg-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
           >
             {downloading === 'demand' ? 'Preparing…' : 'Download PDF'}
+          </button>
+        </div>
+
+        <div className="group relative rounded-2xl border border-hairline bg-surface p-6 shadow-[0_16px_40px_-26px_rgba(6,31,45,0.24)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_26px_50px_-24px_rgba(6,31,45,0.28)]">
+          <IconBadge icon={<RupeeIcon />} accent="green-soft" interactive />
+          <h3 className="mt-4 font-display text-lg font-bold text-ink">Payment receipt</h3>
+          <p className="mt-1.5 text-sm leading-[1.6] text-ink-muted">
+            Receipt for the booking payment recorded against the selected plot.
+          </p>
+          <button
+            type="button"
+            onClick={() => void handleDownloadReceipt()}
+            disabled={downloading !== null || !profile.receiptPayment}
+            className="mt-4 rounded-full bg-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {downloading === 'receipt' ? 'Preparing…' : 'Download PDF'}
           </button>
         </div>
       </div>
