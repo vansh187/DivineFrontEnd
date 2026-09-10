@@ -5,7 +5,10 @@ import { loadPendingUnit } from '../services/pendingUnit';
 import {
   clearCustomerProfileCache,
   getCustomerProfileShared,
+  profileBookings,
+  bookingKey,
   type CustomerScheduleRow,
+  type CustomerBookingInfo,
 } from '../services/customerProfileApi';
 import {
   deriveSchedule,
@@ -35,11 +38,35 @@ function maxDefined(...values: Array<number | null | undefined>): number | null 
 }
 
 interface RemoteMeta {
+  bookings: CustomerBookingInfo[];
   rows: CustomerScheduleRow[] | null;
   total: number | null;
   received: number | null;
   bookingDate: string | null;
   hasBooking: boolean | null;
+}
+
+function mostUrgentBooking(bookings: CustomerBookingInfo[]): CustomerBookingInfo | null {
+  let best: { booking: CustomerBookingInfo; rank: number; days: number } | null = null;
+
+  for (const booking of bookings) {
+    if (booking.has_booking === false) continue;
+    const milestones = deriveSchedule({
+      rows: Array.isArray(booking.payment_schedule) ? booking.payment_schedule : null,
+      totalAmount: typeof booking.total_consideration === 'number' ? booking.total_consideration : null,
+      bookingDate: booking.booking_date ?? null,
+      receivedAmount: typeof booking.amount_received === 'number' ? booking.amount_received : null,
+    });
+    const reminder = paymentReminder(milestones);
+    const next = milestones.find((milestone) => milestone.isNext && milestone.status !== 'paid');
+    const days = reminder?.daysUntilDue ?? next?.daysUntilDue ?? Number.POSITIVE_INFINITY;
+    const rank = reminder ? 0 : next ? 1 : 2;
+    if (!best || rank < best.rank || (rank === best.rank && days < best.days)) {
+      best = { booking, rank, days };
+    }
+  }
+
+  return best ? best.booking : null;
 }
 
 /**
@@ -49,7 +76,7 @@ interface RemoteMeta {
  * application upload, then to the hard-coded split — the UI always has something
  * to render.
  */
-export function usePaymentSchedule(): PaymentScheduleState {
+export function usePaymentSchedule(selectedBookingKey?: string | null): PaymentScheduleState {
   const { session } = useAuth();
   const [tick, setTick] = useState(0);
   const [remote, setRemote] = useState<RemoteMeta | null>(null);
@@ -70,13 +97,21 @@ export function usePaymentSchedule(): PaymentScheduleState {
     getCustomerProfileShared(session.token, tick > 0)
       .then((data) => {
         if (cancelled) return;
-        const booking = data.booking ?? {};
+        const bookings = profileBookings(data);
+        const booking =
+          (selectedBookingKey
+            ? bookings.find((entry, index) => bookingKey(entry, index) === selectedBookingKey)
+            : null) ??
+          mostUrgentBooking(bookings) ??
+          data.booking ??
+          {};
         setRemote({
+          bookings,
           rows: Array.isArray(booking.payment_schedule) ? booking.payment_schedule : null,
           total: typeof booking.total_consideration === 'number' ? booking.total_consideration : null,
           received: typeof booking.amount_received === 'number' ? booking.amount_received : null,
           bookingDate: booking.booking_date ?? null,
-          hasBooking: typeof booking.has_booking === 'boolean' ? booking.has_booking : null,
+          hasBooking: bookings.length > 0 ? bookings.some((entry) => entry.has_booking !== false) : typeof booking.has_booking === 'boolean' ? booking.has_booking : null,
         });
       })
       .catch(() => {
@@ -89,7 +124,7 @@ export function usePaymentSchedule(): PaymentScheduleState {
     return () => {
       cancelled = true;
     };
-  }, [session, tick]);
+  }, [session, tick, selectedBookingKey]);
 
   return useMemo<PaymentScheduleState>(() => {
     if (!session) {
