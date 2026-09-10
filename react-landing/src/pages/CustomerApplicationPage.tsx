@@ -7,7 +7,8 @@ import * as store from '../services/documentStore';
 import type { BookingApplicationFormData, CustomerDocState, SignatureStatus } from '../services/documentStore';
 import { applicationProjects } from '../data/applicationProjects';
 import type { InventoryUnit } from '../services/inventoryApi';
-import { uploadGeneratedApplicationPdf } from '../services/documentsApi';
+import { clearPendingUnit } from '../services/pendingUnit';
+import { getDocument, uploadGeneratedApplicationPdf } from '../services/documentsApi';
 import { ApiError } from '../services/authApi';
 import { blobToDataUrl, downloadPdfBlob, generateApplicationPdf, generatePaymentReceiptPdf, openDataUrl, openPdfBlob } from '../services/applicationPdf';
 import { createPaymentOrder, recordCashPayment, verifyPayment } from '../services/paymentsApi';
@@ -362,6 +363,47 @@ export function CustomerApplicationPage() {
     if (!unit) return;
 
     const booking = docs.bookingApplication;
+
+    // Is this the same plot the wizard already holds? Match on inventory id, and
+    // fall back to the unit number for bookings created before the id was bound.
+    const incomingUnitLabel = unit.unit_number ?? '';
+    const currentUnitLabel = booking.inventoryUnitNumber ?? booking.formData.unitNo ?? '';
+    const isSamePlot =
+      (!!unit.id && !!booking.inventoryId && unit.id === booking.inventoryId) ||
+      (!!incomingUnitLabel && incomingUnitLabel === currentUnitLabel);
+    const hasActiveBooking = !!booking.inventoryId || !!booking.formData.projectId;
+    // The wizard holds one booking at a time (single per-customer record). When
+    // the customer deliberately picks a *different* plot — whether the previous
+    // booking is finished (paid / packet generated) or was abandoned half-filled
+    // — start a clean booking for the new plot, carrying only the applicant /
+    // co-applicant identity forward. Without this, a second plot silently
+    // re-opened the first booking and could not be booked at all.
+    if (hasActiveBooking && !isSamePlot) {
+      const matchedProject = applicationProjects.find(
+        (project) => unit.project_name && project.label.toLowerCase().includes(unit.project_name.toLowerCase()),
+      );
+      persist({
+        ...docs,
+        bookingApplication: {
+          ...store.emptyBookingApplicationStatus(),
+          formData: {
+            ...store.startNextBookingApplication(booking.formData),
+            ...(matchedProject ? { projectId: matchedProject.id } : {}),
+            unitNo: unit.unit_number ?? '',
+            plotAreaSqYd: unit.area_sqyd != null ? String(unit.area_sqyd) : '',
+            plotAreaSqMtr: unit.area_sqmt != null ? String(unit.area_sqmt) : '',
+            unitType: unit.unit_type ?? '',
+          },
+          inventoryId: unit.id ?? null,
+          inventoryUnitNumber: unit.unit_number ?? null,
+        },
+        payment: store.emptyPaymentStatus(),
+      });
+      setCurrentPage(0);
+      navigate(location.pathname, { replace: true, state: {} });
+      return;
+    }
+
     let nextFormData = booking.formData;
     if (!booking.formData.projectId) {
       const matchedProject = applicationProjects.find(
@@ -398,6 +440,65 @@ export function CustomerApplicationPage() {
     navigate(location.pathname, { replace: true, state: {} });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Aadhaar / PAN / photos are uploaded once and reused for every plot booking.
+  // Their signed URLs expire, and the base64 copy is dropped from localStorage
+  // to save space — so on a *later* booking the generated PDF would embed a
+  // "please re-upload" placeholder instead of the real image. On entry, re-fetch
+  // a fresh signed URL for any identity doc that has a backend id but no usable
+  // source left, so "upload once, book many" keeps working.
+  useEffect(() => {
+    if (!session) return;
+    const { token, email } = session;
+    let cancelled = false;
+
+    const IDENTITY_KEYS = ['aadharFront', 'aadharBack', 'pan', 'applicantPhoto', 'coApplicantPhoto'] as const;
+    const isStale = (doc: {
+      documentId: string | null;
+      dataUrl: string | null;
+      signedUrl: string | null;
+      signedUrlExpiresAt: number | null;
+    }) =>
+      !!doc.documentId &&
+      !doc.dataUrl &&
+      (!doc.signedUrl || !doc.signedUrlExpiresAt || doc.signedUrlExpiresAt <= Date.now() + 60_000);
+
+    const stored = store.loadCustomerDocs(email);
+    const staleKeys = IDENTITY_KEYS.filter((key) => isStale(stored[key]));
+    if (!staleKeys.length) return;
+
+    void (async () => {
+      const refreshed = await Promise.all(
+        staleKeys.map(async (key) => {
+          try {
+            return [key, await getDocument(token, stored[key].documentId as string)] as const;
+          } catch {
+            return [key, null] as const;
+          }
+        }),
+      );
+      if (cancelled) return;
+      const latest = store.loadCustomerDocs(email);
+      let changed = false;
+      for (const [key, doc] of refreshed) {
+        if (!doc) continue;
+        const target = latest[key];
+        target.signedUrl = doc.signed_url;
+        target.signedUrlExpiresAt = Date.now() + doc.signed_url_expires_in * 1000;
+        target.error = null;
+        changed = true;
+      }
+      if (changed) {
+        store.saveCustomerDocs(email, latest);
+        setDocs({ ...latest });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session]);
 
   if (!session) return <Navigate to="/" replace />;
 
@@ -553,7 +654,13 @@ export function CustomerApplicationPage() {
           error: record.verified ? null : 'Payment could not be verified. Please try again or contact support.',
         },
       });
-      if (!record.verified) setPaymentError('Payment could not be verified. Please try again or contact support.');
+      if (record.verified) {
+        // The booking is on record now — drop the "pending unit" so it can't
+        // keep re-seeding this plot or driving a stale "payment due" banner.
+        clearPendingUnit(session.email);
+      } else {
+        setPaymentError('Payment could not be verified. Please try again or contact support.');
+      }
     } catch (err) {
       setPaymentError(describePaymentError(err));
     } finally {
@@ -596,6 +703,8 @@ export function CustomerApplicationPage() {
           error: null,
         },
       });
+      // Booking is on record — drop the "pending unit" (see handlePayNow).
+      clearPendingUnit(session.email);
     } catch (err) {
       setPaymentError(describePaymentError(err));
     } finally {

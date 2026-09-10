@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import type { InventoryUnit } from '../services/inventoryApi';
-import { createPaymentOrder, recordCashPayment, verifyPayment } from '../services/paymentsApi';
+import { createPaymentOrder, recordCashPayment, verifyPayment, type PaymentRecord } from '../services/paymentsApi';
 import { openRazorpayCheckout } from '../services/razorpayCheckout';
 import { ApiError } from '../services/authApi';
 import { amountToIndianWords, formatCurrencyINR } from '../utils/currency';
@@ -38,17 +38,24 @@ export function RecordBookingPaymentModal({ unit, onClose, onBooked }: RecordBoo
   const describeError = (err: unknown) =>
     err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Something went wrong. Please try again.';
 
-  const finish = (inventoryStatus: string | null | undefined, reason: string | null | undefined) => {
-    if (inventoryStatus === 'booked') {
-      onBooked(unit);
+  const finish = (record: PaymentRecord, requireVerified: boolean) => {
+    if (requireVerified && !record.verified) {
+      setError('Payment could not be verified. Please try again or contact the office.');
       return;
     }
-    // Payment settled but the plot could not be locked to this partner.
-    setError(
-      reason === 'unit_not_available'
-        ? 'This plot is no longer available. The payment is recorded and flagged for manual review — please contact the office.'
-        : 'The payment is recorded, but the plot could not be marked booked. It is flagged for manual review — please contact the office.',
-    );
+    // Payment settled but the backend says the plot was already taken.
+    if (record.inventory_status === 'conflict') {
+      setError(
+        record.inventory_conflict_reason === 'unit_not_available'
+          ? 'This plot is no longer available. The payment is recorded and flagged for manual review — please contact the office.'
+          : 'The payment is recorded, but the plot could not be marked booked. It is flagged for manual review — please contact the office.',
+      );
+      return;
+    }
+    // 'booked', or the backend doesn't report an inventory status yet (the
+    // reserved → booked flip may not be deployed). Either way the payment
+    // settled, so treat the lead as converted — same as the customer flow.
+    onBooked(unit);
   };
 
   const handleCash = async () => {
@@ -62,7 +69,8 @@ export function RecordBookingPaymentModal({ unit, onClose, onBooked }: RecordBoo
         `Booking amount for ${unit.project_name}${unit.unit_number ? ` Plot ${unit.unit_number}` : ''} (channel partner).`,
         { purpose: 'plot_booking', inventoryId: unit.id },
       );
-      finish(record.inventory_status, record.inventory_conflict_reason);
+      // Cash settles immediately on a successful response — no verification gate.
+      finish(record, false);
     } catch (err) {
       setError(describeError(err));
     } finally {
@@ -93,7 +101,7 @@ export function RecordBookingPaymentModal({ unit, onClose, onBooked }: RecordBoo
         razorpay_payment_id: result.razorpay_payment_id,
         razorpay_signature: result.razorpay_signature,
       });
-      finish(record.inventory_status, record.inventory_conflict_reason);
+      finish(record, true);
     } catch (err) {
       setError(describeError(err));
     } finally {

@@ -5,7 +5,19 @@ const inrFormatter = new Intl.NumberFormat('en-IN', {
 });
 
 export function formatCurrencyINR(amount: number): string {
-  return inrFormatter.format(amount);
+  return inrFormatter.format(Math.round(amount));
+}
+
+/**
+ * Render a date as `02 Apr 2025` (Indian locale). Accepts an ISO string, a
+ * timestamp, or a `Date`. Returns '' for nullish/empty input, and echoes an
+ * unparseable string back unchanged so half-formed form values still show.
+ */
+export function formatIndianDate(value: string | number | Date | null | undefined): string {
+  if (value == null || value === '') return '';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return typeof value === 'string' ? value : '';
+  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 const ONES = [

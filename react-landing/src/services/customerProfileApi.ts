@@ -117,6 +117,37 @@ export function getCustomerProfile(token: string): Promise<CustomerProfile> {
   return authedRequestBase<CustomerProfile>('/customer/profile', token, messageForProfileError);
 }
 
+/**
+ * The profile page and the `usePaymentSchedule` hook both need this payload on
+ * the same render. Firing two identical requests races the (cold-start / rate-
+ * limited) backend: one can 200 while the other errors, so the on-screen
+ * schedule table and the letter PDFs end up disagreeing about amounts and due
+ * dates. This de-dupes concurrent callers onto one in-flight request and serves
+ * a short-lived cached result to near-simultaneous mounts. Rejections are never
+ * cached, and {@link clearCustomerProfileCache} forces the next call to refetch.
+ */
+const PROFILE_CACHE_TTL_MS = 30_000;
+let profileCache: { token: string; at: number; promise: Promise<CustomerProfile> } | null = null;
+
+export function getCustomerProfileShared(token: string, force = false): Promise<CustomerProfile> {
+  const now = Date.now();
+  if (!force && profileCache && profileCache.token === token && now - profileCache.at < PROFILE_CACHE_TTL_MS) {
+    return profileCache.promise;
+  }
+  const promise = getCustomerProfile(token);
+  const entry = { token, at: now, promise };
+  profileCache = entry;
+  promise.catch(() => {
+    // Don't hold on to a rejected promise — let the next caller retry.
+    if (profileCache === entry) profileCache = null;
+  });
+  return promise;
+}
+
+export function clearCustomerProfileCache(): void {
+  profileCache = null;
+}
+
 /** True when the failure means "endpoint not built yet" rather than a real
  * error — lets the page fall back silently to locally-derived data. */
 export function isProfileEndpointMissing(err: unknown): boolean {

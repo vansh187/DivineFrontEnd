@@ -1,13 +1,6 @@
 import { Link } from 'react-router-dom';
 import { usePaymentSchedule } from '../hooks/usePaymentSchedule';
-
-function formatINR(amount: number): string {
-  return `₹ ${Math.round(amount).toLocaleString('en-IN')}`;
-}
-
-function formatDate(date: Date): string {
-  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-}
+import { formatCurrencyINR, formatIndianDate } from '../utils/currency';
 
 /**
  * Customer-home notice for the next construction-linked-plan instalment. Shows
@@ -19,8 +12,8 @@ export function PaymentDueBanner() {
   if (loading || !reminder) return null;
 
   const { milestone, daysUntilDue, overdue } = reminder;
-  const amount = milestone.amount != null ? formatINR(milestone.amount) : 'your next instalment';
-  const due = milestone.dueDate ? formatDate(milestone.dueDate) : 'soon';
+  const amount = milestone.amount != null ? formatCurrencyINR(milestone.amount) : 'your next instalment';
+  const due = milestone.dueDate ? formatIndianDate(milestone.dueDate) : 'soon';
 
   return (
     <div

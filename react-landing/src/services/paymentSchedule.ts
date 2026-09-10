@@ -84,27 +84,48 @@ export function deriveSchedule(input: DeriveScheduleInput): ScheduleMilestone[] 
   const total = input.totalAmount ?? input.storedPlan?.total_receivable ?? null;
   const received = input.receivedAmount ?? input.storedPlan?.total_received ?? 0;
 
+  const usingServerRows = Boolean(input.rows?.length);
   const sourceRows = input.rows?.length
     ? input.rows
     : input.storedPlan?.rows?.length
       ? input.storedPlan.rows
       : null;
 
+  const labelKey = (label: unknown): string => String(label ?? '').trim().toLowerCase();
+
+  // Milestones the customer has already paid according to the locally-cached
+  // plan (markInstallmentPaidLocally). Matched by label so a lagging server
+  // response — profile rows still "due" right after a successful payment —
+  // can't re-enable a "Pay now" button and invite a double payment.
+  const locallyPaidLabels = usingServerRows
+    ? new Set(
+        (input.storedPlan?.rows ?? [])
+          .filter((row) => (row.status ?? '').toLowerCase() === 'paid')
+          .map((row) => labelKey(row.label)),
+      )
+    : new Set<string>();
+
   const base = sourceRows
-    ? sourceRows.map((row) => ({
-        label: row.label,
-        percent: Number.isFinite(row.percent) ? row.percent : null,
-        amount:
-          typeof row.amount === 'number'
-            ? row.amount
-            : total != null && Number.isFinite(row.percent)
-              ? Math.round(total * (row.percent / 100))
-              : null,
-        dueDate:
-          parseISO(row.due_date) ??
-          (bookingDate && row.due_days != null ? addDays(bookingDate, row.due_days) : null),
-        rawStatus: (row.status ?? '').toLowerCase(),
-      }))
+    ? sourceRows.map((row) => {
+        const rawStatus = (row.status ?? '').toLowerCase();
+        return {
+          label: row.label,
+          percent: Number.isFinite(row.percent) ? row.percent : null,
+          amount:
+            typeof row.amount === 'number'
+              ? row.amount
+              : total != null && Number.isFinite(row.percent)
+                ? Math.round(total * (row.percent / 100))
+                : null,
+          dueDate:
+            parseISO(row.due_date) ??
+            (bookingDate && row.due_days != null ? addDays(bookingDate, row.due_days) : null),
+          rawStatus:
+            rawStatus === 'paid' || (locallyPaidLabels.size > 0 && locallyPaidLabels.has(labelKey(row.label)))
+              ? 'paid'
+              : rawStatus,
+        };
+      })
     : DEFAULT_SPLIT.map((row) => ({
         label: row.label,
         percent: Math.round(row.share * 100),

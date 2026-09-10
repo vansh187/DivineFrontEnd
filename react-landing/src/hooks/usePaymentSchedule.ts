@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from './useAuth';
 import { loadCustomerDocs } from '../services/documentStore';
+import { loadPendingUnit } from '../services/pendingUnit';
 import {
-  getCustomerProfile,
+  clearCustomerProfileCache,
+  getCustomerProfileShared,
   type CustomerScheduleRow,
 } from '../services/customerProfileApi';
 import {
@@ -26,6 +28,12 @@ export interface PaymentScheduleState {
   refresh: () => void;
 }
 
+/** Largest of the given values, ignoring null/undefined/NaN. `null` when none qualify. */
+function maxDefined(...values: Array<number | null | undefined>): number | null {
+  const nums = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  return nums.length ? Math.max(...nums) : null;
+}
+
 interface RemoteMeta {
   rows: CustomerScheduleRow[] | null;
   total: number | null;
@@ -47,7 +55,10 @@ export function usePaymentSchedule(): PaymentScheduleState {
   const [remote, setRemote] = useState<RemoteMeta | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const refresh = useCallback(() => setTick((value) => value + 1), []);
+  const refresh = useCallback(() => {
+    clearCustomerProfileCache();
+    setTick((value) => value + 1);
+  }, []);
 
   useEffect(() => {
     if (!session) {
@@ -56,7 +67,7 @@ export function usePaymentSchedule(): PaymentScheduleState {
     }
     let cancelled = false;
     setLoading(true);
-    getCustomerProfile(session.token)
+    getCustomerProfileShared(session.token, tick > 0)
       .then((data) => {
         if (cancelled) return;
         const booking = data.booking ?? {};
@@ -95,23 +106,49 @@ export function usePaymentSchedule(): PaymentScheduleState {
 
     const usingServer = Boolean(remote?.rows?.length);
     const totalAmount = remote?.total ?? storedPlan?.total_receivable ?? localTotal;
+    // Take the largest "received" across sources: the optimistic local mark
+    // (markInstallmentPaidLocally) bumps the cached plan the instant an
+    // instalment is paid, before `GET /customer/profile` catches up, so a plain
+    // server-first fallback would hide a payment the customer just made.
+    const receivedAmount = maxDefined(remote?.received, storedPlan?.total_received, localReceived);
+
+    // Strong local evidence a booking exists even when `GET /customer/profile`
+    // hasn't linked it to this customer yet (just booked / cash just recorded):
+    // a backend-derived plan, or a verified payment on file.
+    const strongLocalBooking = Boolean(
+      storedPlan?.rows?.length || (docs.payment.status === 'paid' && docs.payment.paymentId),
+    );
+    // Weak evidence — a plot picked or a half-filled wizard. Only trusted while
+    // the server hasn't answered; a pending unit is never cleared on abandon, so
+    // on its own it must not manufacture a permanent "payment due" banner.
+    const weakLocalBooking = Boolean(
+      loadPendingUnit(session.email) || form.unitNo.trim() || form.projectId || totalAmount != null,
+    );
+
+    // The server is authoritative when it explicitly answers has_booking.
+    // `null` = endpoint missing / errored / field absent → fall back to local.
+    const confirmedBooking = remote?.hasBooking === true || strongLocalBooking;
+    const hasBooking =
+      remote?.hasBooking === false ? strongLocalBooking : confirmedBooking || weakLocalBooking;
+
+    // Milestone due dates need an anchor. When neither the server nor the cached
+    // plan gives a booking date, assume the booking is dated today — the same
+    // fallback the letter PDFs use — so the table shows real due dates and
+    // "Pay now" windows instead of a column of dashes. Only anchor on a
+    // *confirmed* booking: a half-filled draft must never backdate milestone 1
+    // to "due today" and light up the home banner.
+    const knownBookingDate = remote?.bookingDate ?? storedPlan?.booking_date ?? null;
+    const bookingDate =
+      knownBookingDate ??
+      (confirmedBooking ? form.applicationDate || new Date().toISOString().slice(0, 10) : null);
 
     const milestones = deriveSchedule({
       rows: remote?.rows ?? null,
       storedPlan,
       totalAmount,
-      bookingDate: remote?.bookingDate ?? storedPlan?.booking_date ?? form.applicationDate ?? null,
-      receivedAmount: remote?.received ?? storedPlan?.total_received ?? localReceived,
+      bookingDate,
+      receivedAmount,
     });
-
-    const hasBooking =
-      remote?.hasBooking ??
-      Boolean(
-        storedPlan?.rows?.length ||
-          form.unitNo.trim() ||
-          form.projectId ||
-          milestones.some((m) => m.amount),
-      );
 
     return {
       milestones,

@@ -4,14 +4,14 @@ import { useAuth, getDisplayName } from '../hooks/useAuth';
 import { DashboardLayout } from '../components/DashboardLayout';
 import { IconBadge, FileIcon, RupeeIcon } from '../components/DashboardIcons';
 import { loadCustomerDocs, markInstallmentPaidLocally, saveCustomerDocs } from '../services/documentStore';
-import { loadPendingUnit } from '../services/pendingUnit';
 import { usePaymentSchedule } from '../hooks/usePaymentSchedule';
+import { formatCurrencyINR, formatIndianDate } from '../utils/currency';
 import { PAY_WINDOW_DAYS, type MilestoneStatus, type ScheduleMilestone } from '../services/paymentSchedule';
 import { createPaymentOrder, verifyPayment } from '../services/paymentsApi';
 import { openRazorpayCheckout } from '../services/razorpayCheckout';
 import { townshipPricing } from '../data/townshipPricing';
 import {
-  getCustomerProfile,
+  getCustomerProfileShared,
   isProfileEndpointMissing,
   shouldFallbackToSavedProfile,
   type CustomerAddress,
@@ -29,20 +29,9 @@ import {
 import { blobToDataUrl } from '../services/applicationPdf';
 import { fetchDemandLetterPdf, getLatestDocumentByType, uploadApplicantPhoto } from '../services/documentsApi';
 
-function formatINR(amount: number): string {
-  return `₹ ${Math.round(amount).toLocaleString('en-IN')}`;
-}
-
-function formatDate(value?: string | null): string {
-  if (!value) return '';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-}
-
-function formatDateObj(date: Date): string {
-  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-}
+const formatINR = formatCurrencyINR;
+const formatDate = formatIndianDate;
+const formatDateObj = formatIndianDate;
 
 const STATUS_LABEL: Record<MilestoneStatus, string> = {
   paid: 'Paid',
@@ -181,7 +170,7 @@ export function CustomerProfilePage() {
     setRemoteLoading(true);
     setRemoteUnavailable(false);
     setRemoteError('');
-    getCustomerProfile(session.token)
+    getCustomerProfileShared(session.token)
       .then((data) => {
         if (!cancelled) setRemote(data);
       })
@@ -324,10 +313,6 @@ export function CustomerProfilePage() {
       : localScheduleRows(totalAmount);
 
     const photo = docs.applicantPhoto.dataUrl || freshSignedUrl(docs.applicantPhoto.signedUrl, docs.applicantPhoto.signedUrlExpiresAt);
-    const hasBooking =
-      typeof rb.has_booking === 'boolean'
-        ? rb.has_booking
-        : Boolean(loadPendingUnit(session.email) || form.unitNo.trim() || form.projectId || totalAmount);
 
     const pdfInput: ProfilePdfInput = {
       name,
@@ -359,7 +344,6 @@ export function CustomerProfilePage() {
       photo,
       customerId,
       township,
-      hasBooking,
       totalAmount,
       receivedAmount,
       paymentSchedule,
@@ -612,7 +596,7 @@ export function CustomerProfilePage() {
         </dl>
       </section>
 
-      {(schedule.hasBooking || profile.hasBooking) && (
+      {schedule.hasBooking && (
         <section ref={paymentsRef} id="payments" className="mt-12 scroll-mt-24">
           <p className="eyebrow-label text-terracotta">Payment schedule</p>
           <h2 className="mt-2 font-display text-2xl font-bold text-ink">What you pay, and when</h2>
@@ -675,21 +659,29 @@ export function CustomerProfilePage() {
                       <td className="px-5 py-3.5 text-right">
                         {milestone.status === 'paid' ? (
                           <span className="text-xs font-semibold text-green">Paid</span>
-                        ) : milestone.payable ? (
-                          <button
-                            type="button"
-                            onClick={() => void handlePayInstallment(milestone)}
-                            disabled={payingNo !== null}
-                            className="rounded-full bg-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {payingNo === milestone.no
-                              ? 'Processing…'
-                              : `Pay ${milestone.amount != null ? formatINR(milestone.amount) : 'now'}`}
-                          </button>
-                        ) : opensOn ? (
-                          <span className="text-[11px] text-ink-muted">Opens {formatDateObj(opensOn)}</span>
                         ) : (
-                          <span className="text-ink-muted">—</span>
+                          <div className="flex flex-col items-end gap-1">
+                            <button
+                              type="button"
+                              onClick={() => void handlePayInstallment(milestone)}
+                              disabled={!milestone.payable || payingNo !== null}
+                              title={
+                                milestone.payable
+                                  ? undefined
+                                  : opensOn
+                                    ? `Opens ${formatDateObj(opensOn)}`
+                                    : 'Available closer to the due date'
+                              }
+                              className="rounded-full bg-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {payingNo === milestone.no
+                                ? 'Processing…'
+                                : `Pay ${milestone.amount != null ? formatINR(milestone.amount) : 'now'}`}
+                            </button>
+                            {!milestone.payable && opensOn && (
+                              <span className="text-[11px] text-ink-muted">Opens {formatDateObj(opensOn)}</span>
+                            )}
+                          </div>
                         )}
                       </td>
                     </tr>

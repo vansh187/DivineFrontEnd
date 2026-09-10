@@ -323,6 +323,56 @@ export function emptyBookingApplicationFormData(): BookingApplicationFormData {
   };
 }
 
+/** Personal details that stay the same no matter which plot is being booked -
+ * applicant and co-applicant identity, contact, and address. Carried over when a
+ * customer starts a second booking so they don't retype what the backend already
+ * has from the first one. Plot-, pricing-, payment-, and consent-specific fields
+ * are deliberately left blank. */
+const CARRY_OVER_FORM_FIELDS: readonly (keyof BookingApplicationFormData)[] = [
+  'applicantName',
+  'guardianName',
+  'dob',
+  'gender',
+  'pan',
+  'email',
+  'aadhaar',
+  'phone',
+  'mobile',
+  'residentialStatus',
+  'permanentAddress',
+  'correspondenceAddress',
+  'correspondenceSameAsPermanent',
+  'coApplicantName',
+  'coApplicantGuardianName',
+  'coApplicantDob',
+  'coApplicantGender',
+  'coApplicantPan',
+  'coApplicantAadhaar',
+  'coApplicantPhone',
+  'coApplicantMobile',
+  'coApplicantEmail',
+  'coApplicantResidentialStatus',
+  'coApplicantPermanentAddress',
+  'coApplicantCorrespondenceAddress',
+  'coApplicantCorrespondenceSameAsPermanent',
+  'place',
+];
+
+/**
+ * A fresh booking application for a customer who already completed one. Every
+ * plot-, pricing-, payment-, and consent-specific field is reset (a new plot has
+ * its own price, its own booking payment, its own signed consents); only the
+ * applicant/co-applicant identity carried in `previous` is preserved.
+ */
+export function startNextBookingApplication(
+  previous: BookingApplicationFormData,
+): BookingApplicationFormData {
+  const carried = Object.fromEntries(
+    CARRY_OVER_FORM_FIELDS.map((field) => [field, previous[field]]),
+  ) as Partial<BookingApplicationFormData>;
+  return { ...emptyBookingApplicationFormData(), ...carried };
+}
+
 export function emptyBookingApplicationStatus(): BookingApplicationStatus {
   return {
     formData: emptyBookingApplicationFormData(),
