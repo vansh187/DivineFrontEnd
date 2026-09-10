@@ -109,8 +109,22 @@ export interface CustomerProfile {
   /** One or more booked plots. Newer backends should send this when a customer
    * has multiple plot bookings; older backends can keep sending `booking`. */
   bookings?: CustomerBookingInfo[] | null;
+  customer_bookings?: CustomerBookingInfo[] | null;
+  booked_plots?: CustomerBookingInfo[] | null;
+  plots?: CustomerBookingInfo[] | null;
+  booked_units?: CustomerBookingInfo[] | null;
+  units?: CustomerBookingInfo[] | null;
+  data?: {
+    bookings?: CustomerBookingInfo[] | null;
+    customer_bookings?: CustomerBookingInfo[] | null;
+    booked_plots?: CustomerBookingInfo[] | null;
+    plots?: CustomerBookingInfo[] | null;
+    booked_units?: CustomerBookingInfo[] | null;
+    units?: CustomerBookingInfo[] | null;
+    booking?: CustomerBookingInfo | CustomerBookingInfo[] | null;
+  } | null;
   /** Legacy / single-booking payload. */
-  booking?: CustomerBookingInfo | null;
+  booking?: CustomerBookingInfo | CustomerBookingInfo[] | null;
 }
 
 function firstNonEmpty(...values: Array<string | null | undefined>): string {
@@ -122,14 +136,15 @@ function firstNonEmpty(...values: Array<string | null | undefined>): string {
 }
 
 export function bookingKey(booking: CustomerBookingInfo, index = 0): string {
-  return firstNonEmpty(
+  const stableKey = firstNonEmpty(
     booking.id,
     booking.booking_id,
     booking.document_id,
     booking.backend_document_id,
     booking.inventory_id,
     [booking.project_id, booking.unit_number, booking.booking_date].filter(Boolean).join(':'),
-  ) || `booking-${index}`;
+  );
+  return stableKey ? `${stableKey}:${index}` : `booking-${index}`;
 }
 
 export function bookingDocumentId(booking: CustomerBookingInfo | null | undefined): string | null {
@@ -144,9 +159,49 @@ export function bookingLabel(booking: CustomerBookingInfo, index = 0): string {
 }
 
 export function profileBookings(profile: CustomerProfile | null | undefined): CustomerBookingInfo[] {
-  const many = Array.isArray(profile?.bookings) ? profile.bookings.filter(Boolean) : [];
-  if (many.length) return many;
-  return profile?.booking ? [profile.booking] : [];
+  const rawProfile = profile as Record<string, unknown> | null | undefined;
+  const rawBooking = rawProfile?.booking;
+  const rawData = rawProfile?.data && typeof rawProfile.data === 'object' ? (rawProfile.data as Record<string, unknown>) : null;
+  const candidates = [
+    profile?.bookings,
+    profile?.customer_bookings,
+    profile?.booked_plots,
+    profile?.plots,
+    profile?.booked_units,
+    profile?.units,
+    rawData?.bookings,
+    rawData?.customer_bookings,
+    rawData?.booked_plots,
+    rawData?.plots,
+    rawData?.booked_units,
+    rawData?.units,
+    Array.isArray(rawBooking) ? rawBooking : null,
+    Array.isArray(rawData?.booking) ? rawData.booking : null,
+    nestedBookingArray(profile?.booking, 'bookings'),
+    nestedBookingArray(profile?.booking, 'customer_bookings'),
+    nestedBookingArray(profile?.booking, 'booked_plots'),
+    nestedBookingArray(profile?.booking, 'plots'),
+    nestedBookingArray(profile?.booking, 'booked_units'),
+    nestedBookingArray(profile?.booking, 'units'),
+  ];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate) && candidate.length) {
+      return candidate.filter((booking): booking is CustomerBookingInfo => Boolean(booking) && typeof booking === 'object');
+    }
+  }
+  if (rawData?.booking && !Array.isArray(rawData.booking) && typeof rawData.booking === 'object') {
+    return [rawData.booking as CustomerBookingInfo];
+  }
+  return profile?.booking && !Array.isArray(profile.booking) ? [profile.booking] : [];
+}
+
+function nestedBookingArray(
+  value: CustomerBookingInfo | CustomerBookingInfo[] | null | undefined,
+  key: string,
+): CustomerBookingInfo[] | null {
+  if (!value || Array.isArray(value) || typeof value !== 'object') return null;
+  const maybe = (value as Record<string, unknown>)[key];
+  return Array.isArray(maybe) ? (maybe as CustomerBookingInfo[]) : null;
 }
 
 function messageForProfileError(status: number, detail: unknown): string {
