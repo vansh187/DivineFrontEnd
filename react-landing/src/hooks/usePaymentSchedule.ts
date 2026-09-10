@@ -103,7 +103,7 @@ export function usePaymentSchedule(selectedBookingKey?: string | null): PaymentS
             ? bookings.find((entry, index) => bookingKey(entry, index) === selectedBookingKey)
             : null) ??
           mostUrgentBooking(bookings) ??
-          data.booking ??
+          (!Array.isArray(data.booking) ? data.booking : null) ??
           {};
         setRemote({
           bookings,

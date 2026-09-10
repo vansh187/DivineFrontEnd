@@ -277,7 +277,8 @@ export function CustomerProfilePage() {
     const r = remote ?? {};
     const bookings = profileBookings(remote);
     const selectedBooking = selectedBookingFrom(bookings, selectedBookingKey);
-    const rb = selectedBooking ?? r.booking ?? {};
+    const legacyBooking = !Array.isArray(r.booking) ? r.booking : null;
+    const rb = selectedBooking ?? legacyBooking ?? {};
     const hasRemote = remote !== null;
     const unknown = '-';
 
@@ -443,6 +444,32 @@ export function CustomerProfilePage() {
   if (!session || !profile) return null;
 
   const initial = profile.name.charAt(0).toUpperCase();
+  const handleBookingChange = (value: string) => {
+    setSelectedBookingKey(value || null);
+    setPayError('');
+    setPaySuccess('');
+    setError('');
+  };
+  const renderBookingSelector = (id: string) =>
+    profile.bookingOptions.length > 1 ? (
+      <div className="max-w-xl">
+        <label htmlFor={id} className="block text-xs font-semibold uppercase tracking-[0.04em] text-ink-muted">
+          Selected plot booking
+        </label>
+        <select
+          id={id}
+          value={profile.selectedBookingKey ?? ''}
+          onChange={(event) => handleBookingChange(event.target.value)}
+          className="mt-2 w-full rounded-lg border border-hairline bg-bg px-3 py-2.5 text-sm text-ink outline-none transition-colors focus:border-green"
+        >
+          {profile.bookingOptions.map((booking) => (
+            <option key={booking.key} value={booking.key}>
+              {booking.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    ) : null;
 
   const handlePhotoUpload = async (file: File | null) => {
     if (!session || !file) return;
@@ -694,30 +721,7 @@ export function CustomerProfilePage() {
           </div>
         </div>
 
-        {profile.bookingOptions.length > 1 && (
-          <div className="mt-8 max-w-xl">
-            <label htmlFor="profile-booking" className="block text-xs font-semibold uppercase tracking-[0.04em] text-ink-muted">
-              Selected plot booking
-            </label>
-            <select
-              id="profile-booking"
-              value={profile.selectedBookingKey ?? ''}
-              onChange={(event) => {
-                setSelectedBookingKey(event.target.value || null);
-                setPayError('');
-                setPaySuccess('');
-                setError('');
-              }}
-              className="mt-2 w-full rounded-lg border border-hairline bg-bg px-3 py-2.5 text-sm text-ink outline-none transition-colors focus:border-green"
-            >
-              {profile.bookingOptions.map((booking) => (
-                <option key={booking.key} value={booking.key}>
-                  {booking.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+        {profile.bookingOptions.length > 1 && <div className="mt-8">{renderBookingSelector('profile-booking-summary')}</div>}
 
         <dl className="mt-8 grid grid-cols-1 gap-x-10 gap-y-0 sm:grid-cols-2">
           {details.map(([label, value]) => (
@@ -739,6 +743,7 @@ export function CustomerProfilePage() {
             Your plot cost is split across these milestones. The <span className="font-semibold text-ink">Pay now</span>{' '}
             button for the next instalment opens {PAY_WINDOW_DAYS} days before its due date.
           </p>
+          {profile.bookingOptions.length > 1 && <div className="mt-5">{renderBookingSelector('profile-booking-payments')}</div>}
 
           {(payError || paySuccess) && (
             <p
@@ -850,6 +855,7 @@ export function CustomerProfilePage() {
       )}
 
       <p className="eyebrow-label mt-12 text-terracotta">Documents</p>
+      {profile.bookingOptions.length > 1 && <div className="mt-4">{renderBookingSelector('profile-booking-documents')}</div>}
 
       <div className="mt-4 grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="group relative rounded-2xl border border-hairline bg-surface p-6 shadow-[0_16px_40px_-26px_rgba(6,31,45,0.24)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_26px_50px_-24px_rgba(6,31,45,0.28)]">
