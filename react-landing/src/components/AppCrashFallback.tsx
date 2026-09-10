@@ -9,8 +9,8 @@ export function AppCrashFallback({ onRetry }: AppCrashFallbackProps) {
       <h1 className="font-display text-2xl font-bold text-ink sm:text-3xl">We hit a snag loading this page</h1>
       <p className="max-w-[42ch] text-sm text-ink-muted">
         Please try reloading. If the problem continues, reach us at{' '}
-        <a href="tel:+919310543796" className="font-semibold text-chrome hover:underline">
-          +91 93105 43796
+        <a href="tel:+917428291303" className="font-semibold text-chrome hover:underline">
+          +91 74282 91303
         </a>
         .
       </p>

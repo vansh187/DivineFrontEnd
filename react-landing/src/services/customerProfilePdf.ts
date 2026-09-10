@@ -309,7 +309,7 @@ const COMPANY = {
   bankBranch: 'Sector-7, Karnal',
   ifsc: 'ICIC0003703',
   footerEmail: 'crm2@divinevisioninfra.com',
-  footerMob: 'Mob : +91- 92549 72701, +91-74282 91303',
+  footerMob: 'Mob : +91-74282 91303',
   footerAddress: 'OPS Divine Greens - Sec-16, Taraori Karnal, Haryana 132116',
 };
 
