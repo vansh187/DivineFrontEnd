@@ -7,7 +7,8 @@ import * as store from '../services/documentStore';
 import type { BookingApplicationFormData, CustomerDocState, SignatureStatus } from '../services/documentStore';
 import { applicationProjects } from '../data/applicationProjects';
 import type { InventoryUnit } from '../services/inventoryApi';
-import { uploadGeneratedApplicationPdf } from '../services/documentsApi';
+import { clearPendingUnit } from '../services/pendingUnit';
+import { getDocument, uploadGeneratedApplicationPdf } from '../services/documentsApi';
 import { ApiError } from '../services/authApi';
 import { blobToDataUrl, downloadPdfBlob, generateApplicationPdf, generatePaymentReceiptPdf, openDataUrl, openPdfBlob } from '../services/applicationPdf';
 import { createPaymentOrder, recordCashPayment, verifyPayment } from '../services/paymentsApi';
@@ -57,6 +58,12 @@ function blobToFile(blob: Blob, fileName: string): File {
   return new File([blob], fileName, { type: 'application/pdf' });
 }
 
+/** Plot areas / rates are always positive — drop any minus sign that gets typed
+ * or pasted so a negative value can never enter the form. */
+function stripNegative(value: string): string {
+  return value.replace(/-/g, '');
+}
+
 function Field({
   label,
   value,
@@ -65,6 +72,7 @@ function Field({
   multiline = false,
   readOnly = false,
   hint,
+  min,
 }: {
   label: string;
   value: string;
@@ -73,6 +81,7 @@ function Field({
   multiline?: boolean;
   readOnly?: boolean;
   hint?: string;
+  min?: number;
 }) {
   const className = 'mt-1 rounded-lg border border-hairline bg-bg px-3 py-2.5 text-sm text-ink outline-none focus:border-green';
   return (
@@ -86,6 +95,7 @@ function Field({
           type={type}
           value={value}
           readOnly={readOnly}
+          min={min}
           onChange={(event) => onChange(event.target.value)}
           className={`${className} w-full${readOnly ? ' cursor-not-allowed text-ink-muted' : ''}`}
         />
@@ -344,25 +354,151 @@ export function CustomerApplicationPage() {
   // navigation state so the form opens pre-filled instead of asking the
   // customer to retype what they already picked. Runs once on arrival only —
   // it must not keep re-applying and clobber edits if the customer navigates
-  // back to this page later.
+  // back to this page later. The unit's inventory id is stashed into
+  // bookingApplication (persisted wizard state) here so the booking payment can
+  // lock the plot even after a reload — bookingApplication is itself persisted,
+  // so once captured it survives without needing the navigation state again.
   useEffect(() => {
     const unit = (location.state as { unit?: InventoryUnit } | null)?.unit;
     if (!unit) return;
-    if (!docs.bookingApplication.formData.projectId) {
+
+    const booking = docs.bookingApplication;
+
+    // Is this the same plot the wizard already holds? Match on inventory id, and
+    // fall back to the unit number for bookings created before the id was bound.
+    const incomingUnitLabel = unit.unit_number ?? '';
+    const currentUnitLabel = booking.inventoryUnitNumber ?? booking.formData.unitNo ?? '';
+    const isSamePlot =
+      (!!unit.id && !!booking.inventoryId && unit.id === booking.inventoryId) ||
+      (!!incomingUnitLabel && incomingUnitLabel === currentUnitLabel);
+    const hasActiveBooking = !!booking.inventoryId || !!booking.formData.projectId;
+    // The wizard holds one booking at a time (single per-customer record). When
+    // the customer deliberately picks a *different* plot — whether the previous
+    // booking is finished (paid / packet generated) or was abandoned half-filled
+    // — start a clean booking for the new plot, carrying only the applicant /
+    // co-applicant identity forward. Without this, a second plot silently
+    // re-opened the first booking and could not be booked at all.
+    if (hasActiveBooking && !isSamePlot) {
       const matchedProject = applicationProjects.find(
         (project) => unit.project_name && project.label.toLowerCase().includes(unit.project_name.toLowerCase()),
       );
-      applyFormUpdates({
+      persist({
+        ...docs,
+        bookingApplication: {
+          ...store.emptyBookingApplicationStatus(),
+          formData: {
+            ...store.startNextBookingApplication(booking.formData),
+            ...(matchedProject ? { projectId: matchedProject.id } : {}),
+            unitNo: unit.unit_number ?? '',
+            plotAreaSqYd: unit.area_sqyd != null ? String(unit.area_sqyd) : '',
+            plotAreaSqMtr: unit.area_sqmt != null ? String(unit.area_sqmt) : '',
+            unitType: unit.unit_type ?? '',
+          },
+          inventoryId: unit.id ?? null,
+          inventoryUnitNumber: unit.unit_number ?? null,
+        },
+        payment: store.emptyPaymentStatus(),
+      });
+      setCurrentPage(0);
+      navigate(location.pathname, { replace: true, state: {} });
+      return;
+    }
+
+    let nextFormData = booking.formData;
+    if (!booking.formData.projectId) {
+      const matchedProject = applicationProjects.find(
+        (project) => unit.project_name && project.label.toLowerCase().includes(unit.project_name.toLowerCase()),
+      );
+      nextFormData = {
+        ...booking.formData,
         ...(matchedProject ? { projectId: matchedProject.id } : {}),
-        unitNo: unit.unit_number ?? docs.bookingApplication.formData.unitNo,
-        plotAreaSqYd: unit.area_sqyd != null ? String(unit.area_sqyd) : docs.bookingApplication.formData.plotAreaSqYd,
-        plotAreaSqMtr: unit.area_sqmt != null ? String(unit.area_sqmt) : docs.bookingApplication.formData.plotAreaSqMtr,
-        unitType: unit.unit_type ?? docs.bookingApplication.formData.unitType,
+        unitNo: unit.unit_number ?? booking.formData.unitNo,
+        plotAreaSqYd: unit.area_sqyd != null ? String(unit.area_sqyd) : booking.formData.plotAreaSqYd,
+        plotAreaSqMtr: unit.area_sqmt != null ? String(unit.area_sqmt) : booking.formData.plotAreaSqMtr,
+        unitType: unit.unit_type ?? booking.formData.unitType,
+      };
+    }
+    // Only bind the inventory id on a fresh application — never overwrite one the
+    // customer has already progressed with, and don't attach a stale unit to a
+    // booking that's already underway for a different plot.
+    const bindInventory = !booking.inventoryId && !booking.formData.projectId && !!unit.id;
+    const nextInventoryId = bindInventory ? unit.id : booking.inventoryId;
+
+    if (nextFormData !== booking.formData || nextInventoryId !== booking.inventoryId) {
+      persist({
+        ...docs,
+        bookingApplication: {
+          ...booking,
+          formData: nextFormData,
+          inventoryId: nextInventoryId,
+          inventoryUnitNumber: bindInventory ? unit.unit_number ?? null : booking.inventoryUnitNumber,
+          error: null,
+        },
       });
     }
+
     navigate(location.pathname, { replace: true, state: {} });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Aadhaar / PAN / photos are uploaded once and reused for every plot booking.
+  // Their signed URLs expire, and the base64 copy is dropped from localStorage
+  // to save space — so on a *later* booking the generated PDF would embed a
+  // "please re-upload" placeholder instead of the real image. On entry, re-fetch
+  // a fresh signed URL for any identity doc that has a backend id but no usable
+  // source left, so "upload once, book many" keeps working.
+  useEffect(() => {
+    if (!session) return;
+    const { token, email } = session;
+    let cancelled = false;
+
+    const IDENTITY_KEYS = ['aadharFront', 'aadharBack', 'pan', 'applicantPhoto', 'coApplicantPhoto'] as const;
+    const isStale = (doc: {
+      documentId: string | null;
+      dataUrl: string | null;
+      signedUrl: string | null;
+      signedUrlExpiresAt: number | null;
+    }) =>
+      !!doc.documentId &&
+      !doc.dataUrl &&
+      (!doc.signedUrl || !doc.signedUrlExpiresAt || doc.signedUrlExpiresAt <= Date.now() + 60_000);
+
+    const stored = store.loadCustomerDocs(email);
+    const staleKeys = IDENTITY_KEYS.filter((key) => isStale(stored[key]));
+    if (!staleKeys.length) return;
+
+    void (async () => {
+      const refreshed = await Promise.all(
+        staleKeys.map(async (key) => {
+          try {
+            return [key, await getDocument(token, stored[key].documentId as string)] as const;
+          } catch {
+            return [key, null] as const;
+          }
+        }),
+      );
+      if (cancelled) return;
+      const latest = store.loadCustomerDocs(email);
+      let changed = false;
+      for (const [key, doc] of refreshed) {
+        if (!doc) continue;
+        const target = latest[key];
+        target.signedUrl = doc.signed_url;
+        target.signedUrlExpiresAt = Date.now() + doc.signed_url_expires_in * 1000;
+        target.error = null;
+        changed = true;
+      }
+      if (changed) {
+        store.saveCustomerDocs(email, latest);
+        setDocs({ ...latest });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session]);
 
   if (!session) return <Navigate to="/" replace />;
 
@@ -479,7 +615,11 @@ export function CustomerApplicationPage() {
     setPaying(true);
     setPaymentError(null);
     try {
-      const order = await createPaymentOrder(session.token, amount);
+      const inventoryId = docs.bookingApplication.inventoryId;
+      const order = await createPaymentOrder(session.token, amount, {
+        purpose: inventoryId ? 'plot_booking' : 'other',
+        inventoryId,
+      });
       const result = await openRazorpayCheckout({
         keyId: order.razorpay_key_id,
         amountPaise: order.amount_paise,
@@ -509,10 +649,18 @@ export function CustomerApplicationPage() {
           razorpayOrderId: record.razorpay_order_id,
           razorpayPaymentId: record.razorpay_payment_id,
           paidAt: record.verified ? new Date().toISOString() : null,
+          inventoryStatus: record.inventory_status ?? null,
+          inventoryConflictReason: record.inventory_conflict_reason ?? null,
           error: record.verified ? null : 'Payment could not be verified. Please try again or contact support.',
         },
       });
-      if (!record.verified) setPaymentError('Payment could not be verified. Please try again or contact support.');
+      if (record.verified) {
+        // The booking is on record now — drop the "pending unit" so it can't
+        // keep re-seeding this plot or driving a stale "payment due" banner.
+        clearPendingUnit(session.email);
+      } else {
+        setPaymentError('Payment could not be verified. Please try again or contact support.');
+      }
     } catch (err) {
       setPaymentError(describePaymentError(err));
     } finally {
@@ -529,7 +677,13 @@ export function CustomerApplicationPage() {
     setPayingCash(true);
     setPaymentError(null);
     try {
-      const record = await recordCashPayment(session.token, amount, 'Cash recorded from booking application final page.');
+      const inventoryId = docs.bookingApplication.inventoryId;
+      const record = await recordCashPayment(
+        session.token,
+        amount,
+        'Cash recorded from booking application final page.',
+        { purpose: inventoryId ? 'plot_booking' : 'other', inventoryId },
+      );
       if (isShortPayment(record.amount)) {
         setPaymentError('Please correct the amount.');
         return;
@@ -544,9 +698,13 @@ export function CustomerApplicationPage() {
           razorpayOrderId: record.razorpay_order_id,
           razorpayPaymentId: record.razorpay_payment_id,
           paidAt: new Date().toISOString(),
+          inventoryStatus: record.inventory_status ?? null,
+          inventoryConflictReason: record.inventory_conflict_reason ?? null,
           error: null,
         },
       });
+      // Booking is on record — drop the "pending unit" (see handlePayNow).
+      clearPendingUnit(session.email);
     } catch (err) {
       setPaymentError(describePaymentError(err));
     } finally {
@@ -738,6 +896,7 @@ export function CustomerApplicationPage() {
           file: pdfFile,
           projectId: docs.bookingApplication.formData.projectId,
           paymentId: docs.payment.paymentId,
+          inventoryId: docs.bookingApplication.inventoryId,
           razorpayOrderId: docs.payment.razorpayOrderId,
           razorpayPaymentId: docs.payment.razorpayPaymentId,
           formData: serializeFormData(docs.bookingApplication.formData, hasCoApplicant),
@@ -755,6 +914,11 @@ export function CustomerApplicationPage() {
             paymentPlan: backendDoc.payment_plan ?? docs.bookingApplication.paymentPlan,
             error: null,
           },
+          // The upload doubles as a safety-net for the plot lock; keep the
+          // customer-facing conflict banner in sync with whatever it reports.
+          payment: backendDoc.inventory_status
+            ? { ...docs.payment, inventoryStatus: backendDoc.inventory_status }
+            : docs.payment,
         });
         openPdfBlob(blob);
       } catch (err) {
@@ -1033,8 +1197,20 @@ export function CustomerApplicationPage() {
 
         <Section title="Details of residential plot">
           <Field label="Unit no." value={form.unitNo} onChange={(value) => updateForm('unitNo', value)} />
-          <Field label="In sq yd." type="number" value={form.plotAreaSqYd} onChange={(value) => updateForm('plotAreaSqYd', value)} />
-          <Field label="In sq mtr." type="number" value={form.plotAreaSqMtr} onChange={(value) => updateForm('plotAreaSqMtr', value)} />
+          <Field
+            label="In sq yd."
+            type="number"
+            min={0}
+            value={form.plotAreaSqYd}
+            onChange={(value) => updateForm('plotAreaSqYd', stripNegative(value))}
+          />
+          <Field
+            label="In sq mtr."
+            type="number"
+            min={0}
+            value={form.plotAreaSqMtr}
+            onChange={(value) => updateForm('plotAreaSqMtr', stripNegative(value))}
+          />
           <Field label="Unit type" value={form.unitType} onChange={(value) => updateForm('unitType', value)} />
         </Section>
 
@@ -1353,11 +1529,23 @@ export function CustomerApplicationPage() {
               </p>
             )}
             {paymentComplete ? (
-              <p className="mt-4 text-sm text-ink-muted">
-                <span className="font-semibold text-ink">Rs. {docs.payment.amount?.toLocaleString('en-IN')}</span> paid
-                {docs.payment.method === 'cash' ? ' in cash' : ' online'}
-                {docs.payment.paidAt ? ` on ${new Date(docs.payment.paidAt).toLocaleDateString('en-IN')}` : ''}.
-              </p>
+              <>
+                <p className="mt-4 text-sm text-ink-muted">
+                  <span className="font-semibold text-ink">Rs. {docs.payment.amount?.toLocaleString('en-IN')}</span> paid
+                  {docs.payment.method === 'cash' ? ' in cash' : ' online'}
+                  {docs.payment.paidAt ? ` on ${new Date(docs.payment.paidAt).toLocaleDateString('en-IN')}` : ''}.
+                </p>
+                {docs.payment.inventoryStatus === 'conflict' && (
+                  <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-900">
+                    <span className="font-semibold">Your payment went through.</span> Plot{' '}
+                    {docs.bookingApplication.inventoryUnitNumber
+                      ? `${docs.bookingApplication.inventoryUnitNumber} `
+                      : ''}
+                    was just booked by another customer, so it could not be locked to you. Our team will call you
+                    shortly to re-assign a plot or arrange a refund — you don&rsquo;t need to pay again.
+                  </p>
+                )}
+              </>
             ) : (
               <div className="mt-4">
                 {paymentNeedsReference && (

@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuth, getDisplayName } from '../hooks/useAuth';
 import { DashboardLayout } from '../components/DashboardLayout';
 import { IconBadge, FileIcon, RupeeIcon } from '../components/DashboardIcons';
-import { loadCustomerDocs, saveCustomerDocs } from '../services/documentStore';
-import { loadPendingUnit } from '../services/pendingUnit';
+import { loadCustomerDocs, markInstallmentPaidLocally, saveCustomerDocs } from '../services/documentStore';
+import { usePaymentSchedule } from '../hooks/usePaymentSchedule';
+import { formatCurrencyINR, formatIndianDate } from '../utils/currency';
+import { PAY_WINDOW_DAYS, type MilestoneStatus, type ScheduleMilestone } from '../services/paymentSchedule';
+import { createPaymentOrder, verifyPayment } from '../services/paymentsApi';
+import { openRazorpayCheckout } from '../services/razorpayCheckout';
 import { townshipPricing } from '../data/townshipPricing';
 import {
-  getCustomerProfile,
+  getCustomerProfileShared,
   isProfileEndpointMissing,
   shouldFallbackToSavedProfile,
   type CustomerAddress,
@@ -24,15 +29,30 @@ import {
 import { blobToDataUrl } from '../services/applicationPdf';
 import { fetchDemandLetterPdf, getLatestDocumentByType, uploadApplicantPhoto } from '../services/documentsApi';
 
-function formatINR(amount: number): string {
-  return `₹ ${Math.round(amount).toLocaleString('en-IN')}`;
-}
+const formatINR = formatCurrencyINR;
+const formatDate = formatIndianDate;
+const formatDateObj = formatIndianDate;
 
-function formatDate(value?: string | null): string {
-  if (!value) return '';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+const STATUS_LABEL: Record<MilestoneStatus, string> = {
+  paid: 'Paid',
+  overdue: 'Overdue',
+  'due-soon': 'Due soon',
+  upcoming: 'Upcoming',
+};
+
+const STATUS_CLASS: Record<MilestoneStatus, string> = {
+  paid: 'bg-green/10 text-green',
+  overdue: 'bg-red-50 text-red-700',
+  'due-soon': 'bg-amber-50 text-amber-800',
+  upcoming: 'bg-bg text-ink-muted',
+};
+
+function MilestoneStatusPill({ status }: { status: MilestoneStatus }) {
+  return (
+    <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.04em] ${STATUS_CLASS[status]}`}>
+      {STATUS_LABEL[status]}
+    </span>
+  );
 }
 
 /** First non-empty trimmed string, or '' when none. */
@@ -121,12 +141,20 @@ function freshSignedUrl(url: string | null, expiresAt: number | null): string | 
 
 export function CustomerProfilePage() {
   const { session, logout, openModal } = useAuth();
+  const location = useLocation();
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const paymentsRef = useRef<HTMLElement>(null);
   const [downloading, setDownloading] = useState<'allotment' | 'demand' | null>(null);
   const [error, setError] = useState('');
   const [photoError, setPhotoError] = useState('');
   const [photoUploading, setPhotoUploading] = useState(false);
   const [photoVersion, setPhotoVersion] = useState(0);
+
+  // Construction-linked payment plan + the "pay this instalment now" gate.
+  const schedule = usePaymentSchedule();
+  const [payingNo, setPayingNo] = useState<number | null>(null);
+  const [payError, setPayError] = useState('');
+  const [paySuccess, setPaySuccess] = useState('');
 
   // Real profile data from the backend. Loosely coupled: the page renders from
   // locally-cached booking-form data immediately, then overlays whatever the API
@@ -142,7 +170,7 @@ export function CustomerProfilePage() {
     setRemoteLoading(true);
     setRemoteUnavailable(false);
     setRemoteError('');
-    getCustomerProfile(session.token)
+    getCustomerProfileShared(session.token)
       .then((data) => {
         if (!cancelled) setRemote(data);
       })
@@ -198,6 +226,12 @@ export function CustomerProfilePage() {
       cancelled = true;
     };
   }, [session]);
+
+  // Deep-link from the home "payment due" banner (/customer/profile#payments).
+  useEffect(() => {
+    if (location.hash !== '#payments' || schedule.loading) return;
+    paymentsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [location.hash, schedule.loading]);
 
   const profile = useMemo(() => {
     if (!session) return null;
@@ -279,10 +313,6 @@ export function CustomerProfilePage() {
       : localScheduleRows(totalAmount);
 
     const photo = docs.applicantPhoto.dataUrl || freshSignedUrl(docs.applicantPhoto.signedUrl, docs.applicantPhoto.signedUrlExpiresAt);
-    const hasBooking =
-      typeof rb.has_booking === 'boolean'
-        ? rb.has_booking
-        : Boolean(loadPendingUnit(session.email) || form.unitNo.trim() || form.projectId || totalAmount);
 
     const pdfInput: ProfilePdfInput = {
       name,
@@ -314,7 +344,6 @@ export function CustomerProfilePage() {
       photo,
       customerId,
       township,
-      hasBooking,
       totalAmount,
       receivedAmount,
       paymentSchedule,
@@ -444,6 +473,51 @@ export function CustomerProfilePage() {
     }
   };
 
+  const handlePayInstallment = async (milestone: ScheduleMilestone) => {
+    if (!session || milestone.amount == null || milestone.amount <= 0) return;
+    setPayingNo(milestone.no);
+    setPayError('');
+    setPaySuccess('');
+    try {
+      const order = await createPaymentOrder(session.token, milestone.amount, {
+        purpose: 'installment',
+        installmentNo: milestone.no,
+        dueDate: milestone.dueDateISO,
+      });
+      const result = await openRazorpayCheckout({
+        keyId: order.razorpay_key_id,
+        amountPaise: order.amount_paise,
+        currency: order.currency,
+        orderId: order.razorpay_order_id,
+        name: 'Divine Vision Infratech',
+        description: `Instalment ${milestone.no} · ${milestone.label}`,
+        prefillEmail: session.email,
+        prefillName: profile.name,
+      });
+      const record = await verifyPayment(session.token, {
+        razorpay_order_id: result.razorpay_order_id,
+        razorpay_payment_id: result.razorpay_payment_id,
+        razorpay_signature: result.razorpay_signature,
+      });
+      if (!record.verified) {
+        setPayError('Payment could not be verified. Please try again or contact support.');
+        return;
+      }
+      markInstallmentPaidLocally(session.email, milestone.no, record.amount);
+      setPaySuccess(`Instalment ${milestone.no} paid — ${formatINR(record.amount)} received.`);
+      schedule.refresh();
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        logout();
+        openModal('signin', 'customer');
+        return;
+      }
+      setPayError(err instanceof Error ? err.message : 'Payment failed. Please try again.');
+    } finally {
+      setPayingNo(null);
+    }
+  };
+
   const details: Array<[string, string]> = [
     ['Name', profile.name],
     ['Age', profile.age],
@@ -522,60 +596,119 @@ export function CustomerProfilePage() {
         </dl>
       </section>
 
-      {profile.hasBooking && (
-        <section className="mt-12">
+      {schedule.hasBooking && (
+        <section ref={paymentsRef} id="payments" className="mt-12 scroll-mt-24">
           <p className="eyebrow-label text-terracotta">Payment schedule</p>
           <h2 className="mt-2 font-display text-2xl font-bold text-ink">What you pay, and when</h2>
           <p className="mt-2 max-w-[60ch] text-sm leading-[1.65] text-ink-muted">
-            Your plot cost is split across these milestones. Each instalment is a share of the total
-            consideration, due within the days shown from your booking date.
+            Your plot cost is split across these milestones. The <span className="font-semibold text-ink">Pay now</span>{' '}
+            button for the next instalment opens {PAY_WINDOW_DAYS} days before its due date.
           </p>
 
+          {(payError || paySuccess) && (
+            <p
+              role="alert"
+              className={`mt-4 rounded-lg border px-3 py-2 text-xs ${
+                payError ? 'border-red-200 bg-red-50 text-red-700' : 'border-green/30 bg-green/10 text-green'
+              }`}
+            >
+              {payError || paySuccess}
+            </p>
+          )}
+
           <div className="mt-5 overflow-x-auto rounded-2xl border border-hairline bg-surface shadow-[0_16px_40px_-26px_rgba(6,31,45,0.24)]">
-            <table className="w-full min-w-[420px] text-sm">
+            <table className="w-full min-w-[560px] text-sm">
               <thead>
                 <tr className="border-b border-hairline bg-bg text-left text-xs uppercase tracking-[0.04em] text-ink-muted">
-                  <th className="px-5 py-3 font-semibold">Bifurcation</th>
-                  <th className="px-5 py-3 font-semibold">Timeline</th>
+                  <th className="px-5 py-3 font-semibold">Share</th>
+                  <th className="px-5 py-3 font-semibold">Milestone</th>
+                  <th className="px-5 py-3 font-semibold">Due date</th>
                   <th className="px-5 py-3 text-right font-semibold">Amount</th>
-                  {profile.usesServerSchedule && <th className="px-5 py-3 font-semibold">Status</th>}
+                  <th className="px-5 py-3 font-semibold">Status</th>
+                  <th className="px-5 py-3 text-right font-semibold">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {profile.paymentSchedule.map((row) => (
-                  <tr key={row.key} className="border-b border-hairline">
-                    <td className="px-5 py-3.5 font-display text-base font-bold text-ink">
-                      {row.percent != null ? `${row.percent}%` : '-'}
-                    </td>
-                    <td className="px-5 py-3.5 text-ink-muted">
-                      <span className="block text-ink">{row.label}</span>
-                      {row.timeline && <span className="mt-0.5 block text-xs text-ink-muted">{row.timeline}</span>}
-                    </td>
-                    <td className="px-5 py-3.5 text-right font-semibold text-ink">
-                      {row.amount}
-                    </td>
-                    {profile.usesServerSchedule && (
-                      <td className="px-5 py-3.5 text-xs font-semibold uppercase tracking-[0.04em] text-ink-muted">
-                        {row.status || '-'}
+                {schedule.milestones.map((milestone) => {
+                  const opensOn =
+                    milestone.dueDate && !milestone.payable && milestone.isNext && milestone.status !== 'paid'
+                      ? new Date(milestone.dueDate.getTime() - PAY_WINDOW_DAYS * 24 * 60 * 60 * 1000)
+                      : null;
+                  return (
+                    <tr key={`${milestone.no}-${milestone.label}`} className="border-b border-hairline align-top">
+                      <td className="px-5 py-3.5 font-display text-base font-bold text-ink">
+                        {milestone.percent != null ? `${milestone.percent}%` : '-'}
                       </td>
-                    )}
-                  </tr>
-                ))}
+                      <td className="px-5 py-3.5">
+                        <span className="block text-ink">{milestone.label}</span>
+                        {milestone.isNext && milestone.status !== 'paid' && (
+                          <span className="mt-0.5 block text-[11px] font-semibold uppercase tracking-[0.04em] text-terracotta">
+                            Next payment
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5 text-ink-muted">
+                        {milestone.dueDate ? formatDateObj(milestone.dueDate) : '-'}
+                      </td>
+                      <td className="px-5 py-3.5 text-right font-semibold text-ink">
+                        {milestone.amount != null ? formatINR(milestone.amount) : '-'}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <MilestoneStatusPill status={milestone.status} />
+                      </td>
+                      <td className="px-5 py-3.5 text-right">
+                        {milestone.status === 'paid' ? (
+                          <span className="text-xs font-semibold text-green">Paid</span>
+                        ) : (
+                          <div className="flex flex-col items-end gap-1">
+                            <button
+                              type="button"
+                              onClick={() => void handlePayInstallment(milestone)}
+                              disabled={!milestone.payable || payingNo !== null}
+                              title={
+                                milestone.payable
+                                  ? undefined
+                                  : opensOn
+                                    ? `Opens ${formatDateObj(opensOn)}`
+                                    : 'Available closer to the due date'
+                              }
+                              className="rounded-full bg-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {payingNo === milestone.no
+                                ? 'Processing…'
+                                : `Pay ${milestone.amount != null ? formatINR(milestone.amount) : 'now'}`}
+                            </button>
+                            {!milestone.payable && opensOn && (
+                              <span className="text-[11px] text-ink-muted">Opens {formatDateObj(opensOn)}</span>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
                 <tr className="bg-bg">
                   <td className="px-5 py-3.5 font-display text-base font-bold text-ink">100%</td>
-                  <td className="px-5 py-3.5 font-semibold text-ink">Total consideration</td>
-                  <td className="px-5 py-3.5 text-right font-display text-base font-bold text-ink">
-                    {profile.totalAmount ? formatINR(profile.totalAmount) : '-'}
+                  <td className="px-5 py-3.5 font-semibold text-ink" colSpan={2}>
+                    Total consideration
                   </td>
-                  {profile.usesServerSchedule && <td className="px-5 py-3.5" />}
+                  <td className="px-5 py-3.5 text-right font-display text-base font-bold text-ink">
+                    {schedule.totalAmount ? formatINR(schedule.totalAmount) : '-'}
+                  </td>
+                  <td className="px-5 py-3.5" colSpan={2} />
                 </tr>
               </tbody>
             </table>
           </div>
 
-          {!profile.totalAmount && (
+          {!schedule.totalAmount && (
             <p className="mt-2 text-xs text-ink-muted">
               Instalment amounts appear once your plot price is on record.
+            </p>
+          )}
+          {schedule.source === 'local' && (
+            <p className="mt-2 text-xs text-ink-muted">
+              Showing your saved plan. Live status updates once the booking is confirmed on the server.
             </p>
           )}
         </section>

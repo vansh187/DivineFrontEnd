@@ -6,6 +6,7 @@ import { listMyReservedUnits, markInventoryUnitSold, releaseInventoryUnit } from
 import type { InventoryUnit } from '../services/inventoryApi';
 import { ApiError } from '../services/authApi';
 import { getReservationVisitor, pruneReservationVisitors } from '../services/reservationVisitors';
+import { RecordBookingPaymentModal } from '../components/RecordBookingPaymentModal';
 
 function formatCountdown(reservedUntil: string | null | undefined): string {
   if (!reservedUntil) return 'Locked';
@@ -25,6 +26,7 @@ export function BrokerLeadsPage() {
   const [isLoading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [actioningId, setActioningId] = useState<string | null>(null);
+  const [payingUnit, setPayingUnit] = useState<InventoryUnit | null>(null);
 
   // formatCountdown() reads Date.now() at render time - without this tick, a card
   // opened at 10:00 would keep showing "1h left" forever instead of counting down.
@@ -61,6 +63,11 @@ export function BrokerLeadsPage() {
     } finally {
       setActioningId(null);
     }
+  };
+
+  const handleBooked = (unit: InventoryUnit) => {
+    setPayingUnit(null);
+    setUnits((current) => current.filter((item) => item.id !== unit.id));
   };
 
   const handleRelease = async (unit: InventoryUnit) => {
@@ -124,12 +131,20 @@ export function BrokerLeadsPage() {
                   </div>
                 )}
 
-                <div className="mt-4 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPayingUnit(unit)}
+                  disabled={actioningId === unit.id}
+                  className="mt-4 w-full rounded-full bg-green px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Record booking payment
+                </button>
+                <div className="mt-2 flex gap-2">
                   <button
                     type="button"
                     onClick={() => handleMarkSold(unit)}
                     disabled={actioningId === unit.id}
-                    className="flex-1 rounded-full bg-green px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
+                    className="flex-1 rounded-full border border-hairline px-3 py-2 text-xs font-semibold text-ink-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Mark sold
                   </button>
@@ -146,6 +161,13 @@ export function BrokerLeadsPage() {
             );
           })}
         </div>
+      )}
+      {payingUnit && (
+        <RecordBookingPaymentModal
+          unit={payingUnit}
+          onClose={() => setPayingUnit(null)}
+          onBooked={handleBooked}
+        />
       )}
     </DashboardLayout>
   );

@@ -106,11 +106,30 @@ export interface PaymentStatus {
   razorpayOrderId: string | null;
   razorpayPaymentId: string | null;
   paidAt: string | null;
+  /** Inventory lock outcome the backend returned on this booking payment:
+   *  - `booked`   — the plot is now locked to this customer
+   *  - `conflict` — payment succeeded but the plot was already taken; the money
+   *                 is safe and under manual review server-side
+   *  - `null`     — not a plot-booking payment (or an older record) */
+  inventoryStatus?: 'booked' | 'conflict' | null;
+  /** Set only when `inventoryStatus === 'conflict'`. */
+  inventoryConflictReason?: 'unit_not_available' | 'inventory_update_failed' | null;
   error: string | null;
 }
 
 export function emptyPaymentStatus(): PaymentStatus {
-  return { paymentId: null, amount: null, status: null, method: null, razorpayOrderId: null, razorpayPaymentId: null, paidAt: null, error: null };
+  return {
+    paymentId: null,
+    amount: null,
+    status: null,
+    method: null,
+    razorpayOrderId: null,
+    razorpayPaymentId: null,
+    paidAt: null,
+    inventoryStatus: null,
+    inventoryConflictReason: null,
+    error: null,
+  };
 }
 
 export interface SignatureStatus {
@@ -207,6 +226,12 @@ export interface BookingApplicationFormData {
 
 export interface BookingApplicationStatus {
   formData: BookingApplicationFormData;
+  /** Inventory unit id of the plot being booked. Carried from "Available plots"
+   * so the booking payment can lock the plot even after reloads mid-wizard.
+   * Null for drafts started before a unit was picked. */
+  inventoryId: string | null;
+  /** Unit number of that plot, kept only for "Plot A-12 was just booked…" copy. */
+  inventoryUnitNumber: string | null;
   generatedAt: string | null;
   pdfFileName: string | null;
   pdfDataUrl: string | null;
@@ -298,9 +323,61 @@ export function emptyBookingApplicationFormData(): BookingApplicationFormData {
   };
 }
 
+/** Personal details that stay the same no matter which plot is being booked -
+ * applicant and co-applicant identity, contact, and address. Carried over when a
+ * customer starts a second booking so they don't retype what the backend already
+ * has from the first one. Plot-, pricing-, payment-, and consent-specific fields
+ * are deliberately left blank. */
+const CARRY_OVER_FORM_FIELDS: readonly (keyof BookingApplicationFormData)[] = [
+  'applicantName',
+  'guardianName',
+  'dob',
+  'gender',
+  'pan',
+  'email',
+  'aadhaar',
+  'phone',
+  'mobile',
+  'residentialStatus',
+  'permanentAddress',
+  'correspondenceAddress',
+  'correspondenceSameAsPermanent',
+  'coApplicantName',
+  'coApplicantGuardianName',
+  'coApplicantDob',
+  'coApplicantGender',
+  'coApplicantPan',
+  'coApplicantAadhaar',
+  'coApplicantPhone',
+  'coApplicantMobile',
+  'coApplicantEmail',
+  'coApplicantResidentialStatus',
+  'coApplicantPermanentAddress',
+  'coApplicantCorrespondenceAddress',
+  'coApplicantCorrespondenceSameAsPermanent',
+  'place',
+];
+
+/**
+ * A fresh booking application for a customer who already completed one. Every
+ * plot-, pricing-, payment-, and consent-specific field is reset (a new plot has
+ * its own price, its own booking payment, its own signed consents); only the
+ * applicant/co-applicant identity carried in `previous` is preserved.
+ */
+export function startNextBookingApplication(
+  previous: BookingApplicationFormData,
+): BookingApplicationFormData {
+  const carried = Object.fromEntries(
+    CARRY_OVER_FORM_FIELDS.map((field) => [field, previous[field]]),
+  ) as Partial<BookingApplicationFormData>;
+  return { ...emptyBookingApplicationFormData(), ...carried };
+}
+
 export function emptyBookingApplicationStatus(): BookingApplicationStatus {
   return {
     formData: emptyBookingApplicationFormData(),
+    inventoryId: null,
+    inventoryUnitNumber: null,
     generatedAt: null,
     pdfFileName: null,
     pdfDataUrl: null,
@@ -524,6 +601,37 @@ function persistDocs(key: string, state: unknown) {
 
 export function saveCustomerDocs(email: string, state: CustomerDocState) {
   persistDocs(storageKey('customer', email), state);
+}
+
+/**
+ * Optimistically mark one construction-linked-plan milestone paid in the locally
+ * cached plan so the payment schedule updates immediately after a successful
+ * instalment payment, before `GET /customer/profile` re-confirms it. `installmentNo`
+ * is 1-based. No-op when there is no stored plan or the row is already paid.
+ */
+export function markInstallmentPaidLocally(email: string, installmentNo: number, amountPaid: number): void {
+  const docs = loadCustomerDocs(email);
+  const plan = docs.bookingApplication.paymentPlan;
+  if (!plan || !Array.isArray(plan.rows) || installmentNo < 1 || installmentNo > plan.rows.length) return;
+  const idx = installmentNo - 1;
+  if ((plan.rows[idx].status ?? '').toLowerCase() === 'paid') return;
+
+  const rows = plan.rows.map((row, i) => (i === idx ? { ...row, status: 'paid' } : row));
+  const received = (typeof plan.total_received === 'number' ? plan.total_received : 0) + Math.round(amountPaid);
+  const receivable = typeof plan.total_receivable === 'number' ? plan.total_receivable : null;
+
+  saveCustomerDocs(email, {
+    ...docs,
+    bookingApplication: {
+      ...docs.bookingApplication,
+      paymentPlan: {
+        ...plan,
+        rows,
+        total_received: received,
+        total_outstanding: receivable != null ? Math.max(0, receivable - received) : plan.total_outstanding ?? null,
+      },
+    },
+  });
 }
 
 export function loadBrokerDocs(email: string): BrokerDocState {

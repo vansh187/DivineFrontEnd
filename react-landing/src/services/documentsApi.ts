@@ -13,6 +13,11 @@ export interface GeneratedDocument {
   /** Present on a booking-application upload: the derived payment plan
    * (On Booking + 45/90/180/270-day milestones). */
   payment_plan?: PaymentPlan | null;
+  /** Booking-application upload only: the inventory unit this booking locked, and
+   * the outcome of that lock. `conflict` means the plot was already taken - the
+   * document is still saved and the payment is under manual review server-side. */
+  inventory_id?: string | null;
+  inventory_status?: 'booked' | 'conflict' | null;
 }
 
 export interface GenerateDocumentInput {
@@ -24,6 +29,9 @@ export interface UploadGeneratedApplicationPdfInput {
   file: File;
   projectId: string;
   paymentId: string;
+  /** Inventory unit id of the booked plot. Safety-net for the booked lock - a
+   * no-op when the booking payment already locked the plot. */
+  inventoryId?: string | null;
   razorpayOrderId?: string | null;
   razorpayPaymentId?: string | null;
   formData: Record<string, string | number>;
@@ -195,6 +203,7 @@ export function uploadGeneratedApplicationPdf(token: string, input: UploadGenera
   formData.append('document_type', 'project_booking_application');
   formData.append('project_id', input.projectId);
   formData.append('payment_id', input.paymentId);
+  if (input.inventoryId) formData.append('inventory_id', input.inventoryId);
   formData.append('form_data', JSON.stringify(input.formData));
   if (input.razorpayOrderId) formData.append('razorpay_order_id', input.razorpayOrderId);
   if (input.razorpayPaymentId) formData.append('razorpay_payment_id', input.razorpayPaymentId);
