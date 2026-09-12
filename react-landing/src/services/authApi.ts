@@ -62,7 +62,9 @@ function firstValidationMessage(detail: unknown): string | null {
   return null;
 }
 
-function messageForError(status: number, detail: unknown, kind: 'signup' | 'login'): string {
+type RequestKind = 'signup' | 'login' | 'forgot' | 'reset';
+
+function messageForError(status: number, detail: unknown, kind: RequestKind): string {
   if (status === 429) return 'Too many attempts. Please wait a minute and try again.';
   if (status === 500) return "Something went wrong on our end. Please try again shortly.";
 
@@ -70,15 +72,22 @@ function messageForError(status: number, detail: unknown, kind: 'signup' | 'logi
     if (status === 400 && detail === 'username_taken') return 'That email is already registered.';
     if (status === 409) return 'That account could not be created. Please try again.';
     if (status === 422) return firstValidationMessage(detail) ?? 'Please check the details you entered.';
-  } else {
+  } else if (kind === 'login') {
     if (status === 401) return 'Incorrect email or password.';
+    if (status === 422) return firstValidationMessage(detail) ?? 'Please check the details you entered.';
+  } else if (kind === 'forgot') {
+    if (status === 422) return firstValidationMessage(detail) ?? 'Please check the details you entered.';
+  } else {
+    if (status === 400 && detail === 'otp_not_requested') return 'Send yourself an OTP first.';
+    if (status === 400 && detail === 'invalid_otp') return 'That code is incorrect. Please check and try again.';
+    if (status === 400 && detail === 'otp_expired') return 'That code has expired. Send a new one and try again.';
     if (status === 422) return firstValidationMessage(detail) ?? 'Please check the details you entered.';
   }
 
   return 'Something went wrong. Please try again.';
 }
 
-async function postJson<T>(path: string, body: unknown, kind: 'signup' | 'login'): Promise<T> {
+async function postJson<T>(path: string, body: unknown, kind: RequestKind): Promise<T> {
   let res: Response;
   try {
     res = await fetch(`${API_BASE_URL}${path}`, {
@@ -128,17 +137,16 @@ export interface ResetPasswordInput {
   newPassword: string;
 }
 
-// TODO(backend): the forgot-password endpoints aren't live yet — swap these
-// for real postJson(`/${role}/forgot-password`, ...) / postJson(`/${role}/reset-password`, ...)
-// calls once the team shares the contract. Simulated for now so the UI is
-// fully clickable end to end; both already throw ApiError-compatible errors
-// once wired up, so AuthModal's error handling needs no changes.
-export function requestPasswordReset(_role: Role, _input: ForgotPasswordInput): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, 900));
+export function requestPasswordReset(role: Role, input: ForgotPasswordInput): Promise<void> {
+  return postJson<void>(`/${role}/forgot-password`, { email: input.email }, 'forgot');
 }
 
-export function resetPassword(_role: Role, _input: ResetPasswordInput): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, 900));
+export function resetPassword(role: Role, input: ResetPasswordInput): Promise<void> {
+  return postJson<void>(`/${role}/reset-password`, {
+    email: input.email,
+    otp: input.otp,
+    new_password: input.newPassword,
+  }, 'reset');
 }
 
 // Shared by the other service modules (documentsApi, commissionsApi, paymentsApi,
