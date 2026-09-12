@@ -138,7 +138,6 @@ export function AuthModal() {
   const [forgotOpen, setForgotOpen] = useState(false);
   const [otp, setOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [sendingOtp, setSendingOtp] = useState(false);
@@ -181,7 +180,6 @@ export function AuthModal() {
       setForgotOpen(false);
       setOtp('');
       setNewPassword('');
-      setConfirmPassword('');
       setShowNewPassword(false);
       setOtpSent(false);
       setSendingOtp(false);
@@ -265,11 +263,6 @@ export function AuthModal() {
       setForgotError('Password must be at least 8 characters.');
       return;
     }
-    if (newPassword !== confirmPassword) {
-      setForgotError('Passwords do not match.');
-      return;
-    }
-
     setResetting(true);
     setForgotError(null);
     try {
@@ -278,7 +271,6 @@ export function AuthModal() {
       setModalMode('signin');
       setOtp('');
       setNewPassword('');
-      setConfirmPassword('');
       setOtpSent(false);
       setPassword('');
       setSuccessMessage('Password reset. Sign in with your new password.');
@@ -482,17 +474,6 @@ export function AuthModal() {
                       <span className="block h-4 w-4">{showNewPassword ? <EyeOffIcon /> : <EyeIcon />}</span>
                     </button>
                   }
-                />
-
-                <Field
-                  label="Confirm new password"
-                  type={showNewPassword ? 'text' : 'password'}
-                  value={confirmPassword}
-                  onChange={setConfirmPassword}
-                  icon={<LockIcon />}
-                  autoComplete="new-password"
-                  required
-                  minLength={8}
                 />
 
                 {forgotSuccess && (
