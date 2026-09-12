@@ -27,6 +27,76 @@ function SpeakerOnIcon() {
   );
 }
 
+function StandardIcon({ path }: { path: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+      <path d={path} />
+    </svg>
+  );
+}
+
+const pinPath = 'M12 21s-7-6.1-7-11.5A7 7 0 0 1 19 9.5C19 14.9 12 21 12 21Zm0-8.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z';
+const shieldPath = 'M12 3l7 3v5.5c0 4.7-3 8.9-7 10-4-1.1-7-5.3-7-10V6l7-3Zm-1.1 10.6L8.5 11l-1.2 1.2 3.6 3.6 6-6-1.2-1.2-4.8 4.8Z';
+const buildingPath = 'M5 21V6l7-3 7 3v15M9 21v-5h6v5M9 10h.01M9 13h.01M15 10h.01M15 13h.01';
+const compassPath = 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm3.5-12.5-2 5-5 2 2-5 5-2Z';
+
+/** Standing plotted-township standard, told the way a founder would say it to
+ *  a buyer's face — not as a service menu. */
+const standards = [
+  {
+    icon: pinPath,
+    title: 'Location discipline',
+    text: 'Every township sits on the NH-1 growth corridor itself, not two districts from an announced expressway — plots you can drive to today.',
+  },
+  {
+    icon: shieldPath,
+    title: 'Approval clarity',
+    text: 'RERA compliance, plot documentation and buyer paperwork are settled before launch, not fixed after a booking is made.',
+  },
+  {
+    icon: buildingPath,
+    title: 'Refined handover',
+    text: 'Landscape, internal roads and common areas are planned to still look considered five years after the last plot sells.',
+  },
+];
+
+const goals = [
+  {
+    title: 'Approval-led, always',
+    text: 'No township is announced before its compliance is settled — buyer confidence starts before the brochure does.',
+  },
+  {
+    title: 'Site-first, not brochure-first',
+    text: 'Progress is meant to be walked and photographed on ground, so a buyer never has to take a rendering on faith.',
+  },
+  {
+    title: 'Built to mature',
+    text: 'Infrastructure and landscape are planned for the fifth year of a neighbourhood, not just the ribbon-cutting.',
+  },
+];
+
+/** Founder-first narrative, in the order the family actually lived it —
+ *  Jawahar Luthra's first venture, Himashu Luthra taking Divine Vision
+ *  forward from 2005, and the corridor record that followed. Facts pulled
+ *  from the group's own brochure so this reads as history, not marketing. */
+const timeline = [
+  {
+    eyebrow: 'How it started',
+    title: "A father's belief that ordinary land deserved better",
+    text: 'In 1985, Jawahar Luthra left Indri for Delhi to trade electronic parts in Lajpat Rai Market. Two decades later, in 2004, that same discipline turned toward real estate with Divine City on NH-1 — one plotted township that has since grown into 5 million+ sq. ft. delivered.',
+  },
+  {
+    eyebrow: 'How we are growing',
+    title: 'A second generation, trained on trust rather than scale',
+    text: 'Himashu Luthra joined Divine Vision Infratech in 2005 after years in global electronics trade across five countries, choosing to build value the slower way: through approvals, plot planning and a name families in Ganaur, Karnal and Kurukshetra were willing to bet on.',
+  },
+  {
+    eyebrow: 'Where we are headed',
+    title: 'A corridor legacy, handed to the next family in line',
+    text: 'Suraksha Enclave and OPS Divine Greens carry that same standard forward — RERA-approved, club-amenitied, and planned for people who intend to actually live there, not just hold the paperwork.',
+  },
+];
+
 export function OurStoryPage() {
   const [siteVisitOpen, setSiteVisitOpen] = useState(false);
   const [muted, setMuted] = useState(true);
@@ -42,260 +112,271 @@ export function OurStoryPage() {
     if (!nextMuted) video.play().catch(() => {});
   };
 
-  const pillars = [
-    {
-      label: 'Vision',
-      title: 'To shape landmark communities with lasting pride.',
-      text:
-        'Divine Vision is built around a simple belief: a township should feel considered from the entrance gate to the evening walk home. Our vision is to create plotted communities that carry elegance, order and everyday comfort without losing the warmth of a real neighbourhood.',
-    },
-    {
-      label: 'Goal',
-      title: 'To make premium land ownership transparent and reachable.',
-      text:
-        'Our goal is to keep every decision clear for families and investors: connected locations, approval-led development, practical plot sizes and a site experience that shows exactly what is being built. Luxury, for us, begins with confidence.',
-    },
-    {
-      label: 'Promise',
-      title: 'To deliver places that mature beautifully over time.',
-      text:
-        'We measure success by handovers, habitability and long-term value. Every new community continues the standard set across our delivered record: thoughtful planning, dependable infrastructure and environments people are proud to call their own.',
-    },
-  ];
-
   return (
     <>
       <Navbar onBookVisit={() => setSiteVisitOpen(true)} />
-      <main className="bg-bg pb-20">
-        <section className="relative overflow-hidden border-b border-hairline bg-bg px-4 pb-10 pt-24 text-ink sm:px-10 sm:pb-12 sm:pt-28">
-          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,#ffffff_0%,#f5f2ea_58%,#ece7d9_100%)]" />
-          <div className="pointer-events-none absolute inset-0 opacity-[0.45] [background-image:linear-gradient(rgba(6,31,45,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(6,31,45,0.06)_1px,transparent_1px)] [background-size:88px_88px]" />
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-chrome" />
-
-          <div className="relative z-10 mx-auto grid max-w-7xl gap-6 lg:grid-cols-[minmax(340px,0.9fr)_minmax(260px,360px)_minmax(340px,0.95fr)] lg:items-start">
-            <div className="flex max-w-xl flex-col pt-2">
-              <p className="eyebrow-label text-terracotta">Founder's Page</p>
-              <h1 className="mt-4 max-w-[12ch] font-display text-balance text-4xl font-bold leading-tight text-ink sm:text-5xl xl:text-6xl">
-                The founder's blueprint for better communities.
+      <main className="bg-bg">
+        {/* Hero — full-bleed dark, founder portrait carrying the weight the
+            copy alone can't: this is a name behind the brand, not a logo. */}
+        <section className="relative overflow-hidden bg-chrome px-4 pb-16 pt-28 sm:px-10 sm:pb-24 sm:pt-32">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_60%_at_18%_10%,rgba(230,126,34,0.14),transparent_58%)]" />
+          <div className="relative z-10 mx-auto grid max-w-6xl gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+            <div>
+              <span className="eyebrow-label text-terracotta-light">Our story</span>
+              <h1 className="mt-4 max-w-[14ch] font-display text-balance text-4xl font-bold leading-[1.08] text-white sm:text-6xl">
+                We don&rsquo;t sell plots. We deliver on a director&rsquo;s word.
               </h1>
-              <p className="mt-5 max-w-[48ch] text-[15px] leading-[1.78] text-ink-muted sm:text-[16px]">
-                A clear founder message on building refined, approval-led townships with
-                disciplined planning, trusted delivery and long-term value for families who want
-                confidence before they invest, comfort when they visit and pride when the
-                community begins to mature.
+              <p className="mt-6 max-w-[54ch] text-[15px] leading-[1.85] text-white/72 sm:text-[16px]">
+                Divine Vision Infratech has spent {new Date().getFullYear() - company.foundedYear}+ years turning
+                NH-1 corridor land into {company.compliance.join(' & ')}-approved townships families actually
+                live in — Ganaur to Karnal to Kurukshetra, five delivered, two more taking shape.
               </p>
-              <div className="mt-7 h-px w-24 bg-terracotta" />
-              <p className="mt-5 max-w-[48ch] text-sm leading-[1.85] text-ink-muted">
-                The page reflects the leadership standard behind the brand: measured growth,
-                transparent approvals and communities that should feel complete, calm and
-                premium from the first visit. Every project is presented with the same focus:
-                clear land planning, thoughtful amenities, dependable infrastructure and a
-                neighbourhood experience that can support real everyday life, not only a promise
-                on paper.
-              </p>
-              <div className="mt-7 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-hairline bg-hairline shadow-[0_22px_54px_-38px_rgba(6,31,45,0.34)]">
-                {[
-                  ['20+', 'years'],
-                  ['5', 'delivered'],
-                  ['2', 'active'],
-                ].map(([value, label]) => (
-                  <div key={label} className="bg-surface px-3 py-4 text-center">
-                    <p className="font-display text-2xl font-bold text-chrome">{value}</p>
-                    <p className="eyebrow-label mt-1 text-[9px] text-terracotta">{label}</p>
-                  </div>
-                ))}
-              </div>
-              <figure className="mt-5 rounded-xl bg-chrome p-6 text-white shadow-[0_30px_82px_-48px_rgba(6,31,45,0.62)]">
-                <figcaption className="eyebrow-label text-terracotta-light">Signature Goal</figcaption>
-                <blockquote className="mt-3 font-display text-3xl font-bold leading-tight">
-                  Clear on paper. Confident on site. Valuable over time.
-                </blockquote>
-                <div className="mt-5 h-px w-20 bg-terracotta" />
-                <p className="mt-4 text-sm leading-[1.75] text-white/72">
-                  A founder-led standard for every buyer conversation, every township plan and every delivery milestone.
-                </p>
-              </figure>
-              <div className="mt-7 rounded-xl border border-hairline bg-white/72 p-5 shadow-[0_22px_58px_-42px_rgba(6,31,45,0.34)] backdrop-blur-sm">
-                <p className="eyebrow-label text-chrome">Founder's Principles</p>
-                <div className="mt-4 grid gap-3">
-                  {[
-                    ['Approval-led', 'Every township begins with clear compliance and buyer confidence.'],
-                    ['Site-first', 'Progress should be visible on ground before it becomes a promise.'],
-                    ['Built to mature', 'Planning, landscape and infrastructure must hold value over time.'],
-                  ].map(([title, text]) => (
-                    <div key={title} className="border-t border-hairline pt-3 first:border-t-0 first:pt-0">
-                      <p className="font-display text-lg font-bold leading-tight text-ink">{title}</p>
-                      <p className="mt-1 text-sm leading-[1.65] text-ink-muted">{text}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="mx-auto grid w-full max-w-[360px] gap-5">
-              <div className="relative overflow-hidden rounded-xl border border-white/20 bg-black shadow-[0_34px_90px_-44px_rgba(6,31,45,0.72)]">
-                <video
-                  ref={videoRef}
-                  className="block aspect-[9/16] w-full object-cover"
-                  src="/our-story/founders-desk.mp4"
-                  autoPlay
-                  muted={muted}
-                  loop
-                  playsInline
-                  aria-label="Founder desk message about the Divine Vision story with optional sound"
-                />
-                <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/16" />
-                <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[linear-gradient(180deg,rgba(6,31,45,0.45),transparent)]" />
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-[linear-gradient(0deg,rgba(6,31,45,0.34),transparent)]" />
-                <button
-                  type="button"
-                  onClick={toggleMute}
-                  aria-pressed={!muted}
-                  aria-label={muted ? 'Turn on story video sound' : 'Mute story video sound'}
-                  className="absolute right-4 top-4 z-20 flex h-11 w-11 items-center justify-center rounded-full border border-white/35 bg-black/52 text-white backdrop-blur-sm transition-colors duration-200 hover:bg-black/72"
-                >
-                  {muted ? <SpeakerMutedIcon /> : <SpeakerOnIcon />}
-                </button>
-              </div>
-              <div className="rounded-xl border border-hairline bg-white/82 p-5 text-center shadow-[0_20px_58px_-42px_rgba(6,31,45,0.42)]">
-                <p className="eyebrow-label text-terracotta">Founder's Desk</p>
-                <p className="mt-3 font-display text-2xl font-bold leading-tight text-ink">
-                  Leadership you can hear. Delivery you can verify.
-                </p>
-                <div className="mx-auto mt-4 h-px w-20 bg-terracotta" />
-                <p className="mt-4 text-sm leading-[1.7] text-ink-muted">
-                  A direct message on the discipline behind every Divine Vision township.
-                </p>
-              </div>
-              <div className="rounded-xl border border-hairline bg-[linear-gradient(180deg,#ffffff_0%,#f2efe6_100%)] p-5 shadow-[0_20px_58px_-42px_rgba(6,31,45,0.34)]">
-                <p className="eyebrow-label text-chrome">Corridor Legacy</p>
-                <div className="mt-4 grid gap-3">
-                  {[
-                    ['2005', 'Started with a long-term view of the NH-1 growth corridor.'],
-                    ['2006-24', 'Delivered projects across Ganaur, Kurukshetra and Karnal.'],
-                    ['Today', 'Active plotted townships shaped for premium family ownership.'],
-                  ].map(([year, text]) => (
-                    <div key={year} className="grid grid-cols-[64px_minmax(0,1fr)] gap-3 border-t border-hairline pt-3 first:border-t-0 first:pt-0">
-                      <span className="font-display text-xl font-bold text-terracotta">{year}</span>
-                      <p className="text-sm leading-[1.65] text-ink-muted">{text}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-5 lg:pt-2">
-              <div className="flex min-h-[332px] flex-col justify-between rounded-xl border border-hairline bg-[linear-gradient(135deg,#ffffff_0%,#f7f2e8_58%,#eef4ef_100%)] p-5 shadow-[0_28px_74px_-48px_rgba(6,31,45,0.36)] lg:p-7">
-                <div>
-                  <span className="eyebrow-label text-chrome">Leadership Message</span>
-                  <h2 className="mt-4 max-w-[12ch] font-display text-4xl font-bold leading-tight text-ink xl:text-5xl">
-                    Disciplined leadership. Delivered communities.
-                  </h2>
-                  <div className="mt-6 h-px w-20 bg-terracotta" />
-                </div>
-                <div className="mt-8">
-                  <p className="max-w-3xl text-sm leading-[1.85] text-ink-muted">
-                    The founder's message sets the tone for how Divine Vision wants every buyer
-                    to experience the brand: with clarity, respect for timelines and a premium
-                    township environment that feels practical, composed and future-ready.
-                  </p>
-                  <div className="mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-hairline bg-hairline text-center">
-                    {['Approval-led', 'Site-first', 'Premium planning', 'Long-term value'].map((item) => (
-                      <span key={item} className="bg-white/82 px-3 py-4 text-xs font-semibold uppercase tracking-[0.08em] text-chrome">
-                        {item}
-                      </span>
-                    ))}
-                  </div>
-                  <span className="mt-6 block text-right text-xs font-semibold text-ink-muted">
-                    Divine Vision Infratech Pvt. Ltd.
-                  </span>
-                </div>
-              </div>
-              <div className="rounded-xl border border-hairline bg-surface p-5 shadow-[0_18px_48px_-36px_rgba(6,31,45,0.28)] lg:p-7">
-                <p className="eyebrow-label text-terracotta">Today</p>
-                <h2 className="mt-2 font-display text-2xl font-bold leading-tight text-ink">
-                  The next chapter is more refined, more connected and more deliberate.
-                </h2>
-                <p className="mt-3 text-sm leading-[1.75] text-ink-muted">
-                  Suraksha Enclave and OPS Divine Greens carry the brand forward with a
-                  premium township experience: reachable locations, clear approvals, landscape-led
-                  planning, club amenities and community infrastructure designed around graceful daily life.
-                </p>
+              <div className="mt-8 flex flex-wrap items-center gap-4">
                 <button
                   type="button"
                   onClick={() => setSiteVisitOpen(true)}
-                  className="mt-5 rounded-full bg-green px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-green-soft"
+                  className="rounded-none border border-terracotta bg-terracotta px-6 py-3.5 text-sm font-semibold uppercase tracking-[0.04em] text-white transition-colors hover:border-white hover:bg-white hover:text-chrome"
                 >
                   Book a site visit
                 </button>
+                <a
+                  href="/residences"
+                  className="rounded-none border border-white/40 px-6 py-3.5 text-sm font-semibold uppercase tracking-[0.04em] text-white transition-colors hover:border-white"
+                >
+                  Explore residences
+                </a>
               </div>
-              <div className="overflow-hidden rounded-xl border border-hairline bg-white/78 shadow-[0_18px_54px_-40px_rgba(6,31,45,0.28)]">
-                <div className="border-b border-hairline px-5 py-4 sm:px-6">
-                  <p className="eyebrow-label text-terracotta">The Divine Standard</p>
+
+              <div className="mt-10 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-white/12 bg-white/12 max-w-md">
+                {[
+                  [`${new Date().getFullYear() - company.foundedYear}+`, 'years'],
+                  ['5', 'delivered'],
+                  ['2', 'active'],
+                ].map(([value, label]) => (
+                  <div key={label} className="bg-white/6 px-3 py-4 text-center">
+                    <p className="font-display text-2xl font-bold text-white">{value}</p>
+                    <p className="eyebrow-label mt-1 text-[9px] text-terracotta-light">{label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mx-auto w-full max-w-[380px]">
+              <div className="overflow-hidden rounded-2xl border border-white/18 bg-white/[0.04] shadow-[0_50px_120px_-40px_rgba(0,0,0,0.7)]">
+                <div className="relative aspect-square w-full overflow-hidden bg-black">
+                  <img
+                    src="/founder/himashu-luthra.jpg"
+                    alt="Himashu Luthra, Director of Divine Vision Infratech"
+                    className="h-full w-full object-cover"
+                  />
+                  <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(6,31,45,0.05)_0%,transparent_30%,rgba(6,31,45,0.25)_100%)]" />
                 </div>
-                <div className="grid gap-px bg-hairline">
-                  {[
-                    ['Location discipline', 'Projects chosen around real access, daily movement and visible corridor value.'],
-                    ['Approval clarity', 'Compliance, plot planning and buyer documentation kept central from the start.'],
-                    ['Refined handover', 'Infrastructure, landscape and common spaces planned to feel complete over time.'],
-                  ].map(([title, text]) => (
-                    <div key={title} className="bg-white/78 p-5 sm:p-6">
-                      <h3 className="font-display text-xl font-bold leading-tight text-ink">{title}</h3>
-                      <p className="mt-3 text-sm leading-[1.7] text-ink-muted">{text}</p>
-                    </div>
-                  ))}
+                <div className="flex items-center justify-between gap-3 border-t border-white/12 bg-white/[0.06] px-5 py-4">
+                  <div>
+                    <p className="text-sm font-bold text-white">Himashu Luthra</p>
+                    <p className="mt-0.5 text-xs text-white/62">Director, Divine Vision Infratech</p>
+                  </div>
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-terracotta text-xs font-bold text-white">
+                    HL
+                  </span>
                 </div>
               </div>
             </div>
           </div>
         </section>
 
-        <section className="mx-auto mt-10 grid max-w-6xl gap-px overflow-hidden rounded-lg border border-hairline bg-hairline px-0 sm:grid-cols-3">
-          {pillars.map((pillar) => (
-            <article key={pillar.label} className="bg-surface p-6 sm:p-7">
-              <p className="eyebrow-label text-terracotta">{pillar.label}</p>
-              <h2 className="mt-3 font-display text-2xl font-bold leading-tight text-ink">{pillar.title}</h2>
-              <p className="mt-4 text-sm leading-[1.75] text-ink-muted">{pillar.text}</p>
-            </article>
-          ))}
+        {/* Founder vision — quote + video on the left, the family's own
+            three-beat history on the right, in the order it actually happened. */}
+        <section className="border-b border-hairline bg-surface px-4 py-16 sm:px-10 sm:py-24">
+          <div className="mx-auto max-w-6xl">
+            <div className="max-w-2xl">
+              <span className="eyebrow-label text-terracotta">Director&rsquo;s vision</span>
+              <h2 className="mt-4 max-w-[20ch] font-display text-balance text-3xl font-bold leading-[1.12] text-ink sm:text-5xl">
+                A township should feel complete before a family ever moves in.
+              </h2>
+            </div>
+
+            <div className="mt-12 grid gap-10 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
+              <div className="flex flex-col gap-6">
+                <div className="border-l-4 border-terracotta pl-5">
+                  <p className="text-[15px] leading-[1.85] text-ink-muted">
+                    Divine Vision is built around a simple belief: land ownership should feel as solid as the
+                    family behind it. Every decision — location, approvals, plot size, amenities — is made so a
+                    buyer can verify it, not just trust it.
+                  </p>
+                  <p className="mt-4 text-xs font-semibold uppercase tracking-[0.08em] text-chrome">
+                    Himashu Luthra, Director
+                  </p>
+                </div>
+
+                <div className="relative mx-auto w-full max-w-[220px] overflow-hidden rounded-2xl border border-hairline-dark bg-black shadow-[0_34px_90px_-44px_rgba(6,31,45,0.55)] sm:mx-0">
+                  <video
+                    ref={videoRef}
+                    className="block aspect-[9/16] w-full object-cover"
+                    src="/our-story/founders-desk.mp4"
+                    autoPlay
+                    muted={muted}
+                    loop
+                    playsInline
+                    aria-label="Director's desk message about the Divine Vision story with optional sound"
+                  />
+                  <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/12" />
+                  <button
+                    type="button"
+                    onClick={toggleMute}
+                    aria-pressed={!muted}
+                    aria-label={muted ? 'Turn on story video sound' : 'Mute story video sound'}
+                    className="absolute right-3 top-3 z-20 flex h-10 w-10 items-center justify-center rounded-full border border-white/35 bg-black/52 text-white backdrop-blur-sm transition-colors duration-200 hover:bg-black/72"
+                  >
+                    {muted ? <SpeakerMutedIcon /> : <SpeakerOnIcon />}
+                  </button>
+                  <span className="absolute left-3 top-3 z-20 rounded-full border border-white/25 bg-black/45 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-white backdrop-blur-sm">
+                    Director&rsquo;s desk
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid gap-px overflow-hidden rounded-xl border border-hairline bg-hairline">
+                {timeline.map((stop) => (
+                  <div key={stop.eyebrow} className="bg-surface p-6 sm:p-7">
+                    <p className="eyebrow-label text-terracotta">{stop.eyebrow}</p>
+                    <h3 className="mt-2.5 font-display text-xl font-bold leading-tight text-ink sm:text-2xl">
+                      {stop.title}
+                    </h3>
+                    <p className="mt-3 text-sm leading-[1.75] text-ink-muted">{stop.text}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </section>
 
-        <section className="mx-auto mt-10 grid max-w-6xl gap-5 px-4 sm:px-10 lg:grid-cols-[0.9fr_1.1fr]">
-          <div className="rounded-lg bg-chrome p-6 text-white sm:p-8">
-            <p className="eyebrow-label text-terracotta-light">The record</p>
-            <p className="mt-4 font-display text-5xl font-bold">20+</p>
-            <p className="mt-2 text-sm leading-[1.7] text-white/72">
-              Years on the NH-1 corridor, guided by a clear goal: deliver refined plotted
-              communities with credible approvals, visible progress and long-term value.
-            </p>
-            <div className="mt-6 grid grid-cols-2 gap-3">
-              {company.locations.map((location) => (
-                <span key={location} className="rounded-lg border border-white/12 bg-white/8 px-3 py-3 text-sm font-semibold">
-                  {location}
-                </span>
+        {/* The Divine standard — the same three commitments the old page
+            listed, now given room and an icon each. */}
+        <section className="bg-bg px-4 py-16 sm:px-10 sm:py-24">
+          <div className="mx-auto max-w-6xl">
+            <div className="max-w-2xl">
+              <span className="eyebrow-label text-terracotta">The Divine standard</span>
+              <h2 className="mt-4 max-w-[18ch] font-display text-balance text-3xl font-bold leading-[1.12] text-ink sm:text-5xl">
+                What every township is built to deliver.
+              </h2>
+            </div>
+            <div className="mt-10 grid gap-5 sm:grid-cols-3">
+              {standards.map((item) => (
+                <div
+                  key={item.title}
+                  className="rounded-xl border border-hairline bg-surface p-6 shadow-[0_22px_58px_-46px_rgba(6,31,45,0.34)] sm:p-7"
+                >
+                  <span className="flex h-11 w-11 items-center justify-center rounded-full bg-terracotta/12 text-terracotta">
+                    <StandardIcon path={item.icon} />
+                  </span>
+                  <h3 className="mt-5 font-display text-xl font-bold leading-tight text-ink">{item.title}</h3>
+                  <p className="mt-3 text-sm leading-[1.75] text-ink-muted">{item.text}</p>
+                </div>
               ))}
-              <span className="rounded-lg border border-white/12 bg-white/8 px-3 py-3 text-sm font-semibold">
-                {company.compliance.join(' & ')}
-              </span>
             </div>
           </div>
+        </section>
 
-          <div className="overflow-hidden rounded-lg border border-hairline bg-surface">
-            {deliveredRecords.map((record, index) => (
-              <div
-                key={`${record.name}-${record.location}`}
-                className={`grid gap-2 px-5 py-5 sm:grid-cols-[96px_minmax(0,1fr)] sm:items-center ${
-                  index > 0 ? 'border-t border-hairline' : ''
-                }`}
-              >
-                <span className="eyebrow-label text-terracotta">{record.year}</span>
-                <div>
-                  <h2 className="text-lg font-bold text-ink">{record.name}</h2>
-                  <p className="mt-1 text-sm text-ink-muted">{record.location}</p>
-                  {record.detail && <p className="mt-1 text-xs leading-relaxed text-ink-muted">{record.detail}</p>}
+        {/* Our goals — numbered, the way a promise reads better than a
+            service list. */}
+        <section className="border-y border-hairline bg-surface px-4 py-16 sm:px-10 sm:py-24">
+          <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[0.75fr_1.25fr] lg:items-start">
+            <div>
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-chrome/8 text-chrome">
+                <StandardIcon path={compassPath} />
+              </span>
+              <span className="eyebrow-label mt-5 block text-terracotta">Our goals</span>
+              <h2 className="mt-3 max-w-[14ch] font-display text-balance text-3xl font-bold leading-[1.12] text-ink sm:text-4xl">
+                Growth measured in handovers, not headlines.
+              </h2>
+            </div>
+            <div className="grid gap-0">
+              {goals.map((goal, index) => (
+                <div
+                  key={goal.title}
+                  className="grid grid-cols-[56px_minmax(0,1fr)] gap-4 border-t border-hairline py-6 first:border-t-0 first:pt-0 sm:grid-cols-[72px_minmax(0,1fr)]"
+                >
+                  <span className="font-display text-2xl font-bold text-terracotta sm:text-3xl">
+                    0{index + 1}
+                  </span>
+                  <div>
+                    <h3 className="font-display text-lg font-bold leading-tight text-ink sm:text-xl">{goal.title}</h3>
+                    <p className="mt-2 text-sm leading-[1.75] text-ink-muted">{goal.text}</p>
+                  </div>
                 </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Corridor legacy + delivered record — the receipts. */}
+        <section className="mx-auto max-w-6xl px-4 py-16 sm:px-10 sm:py-24">
+          <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+            <div className="rounded-xl bg-chrome p-6 text-white sm:p-8">
+              <p className="eyebrow-label text-terracotta-light">The record</p>
+              <p className="mt-4 font-display text-5xl font-bold">
+                {new Date().getFullYear() - company.foundedYear}+
+              </p>
+              <p className="mt-2 text-sm leading-[1.7] text-white/72">
+                Years on the NH-1 corridor, guided by a clear goal: deliver refined plotted communities with
+                credible approvals, visible progress and long-term value.
+              </p>
+              <div className="mt-6 grid grid-cols-2 gap-3">
+                {company.locations.map((location) => (
+                  <span key={location} className="rounded-lg border border-white/12 bg-white/8 px-3 py-3 text-sm font-semibold">
+                    {location}
+                  </span>
+                ))}
+                <span className="rounded-lg border border-white/12 bg-white/8 px-3 py-3 text-sm font-semibold">
+                  {company.compliance.join(' & ')}-approved
+                </span>
               </div>
-            ))}
+            </div>
+
+            <div className="overflow-hidden rounded-xl border border-hairline bg-surface">
+              {deliveredRecords.map((record, index) => (
+                <div
+                  key={`${record.name}-${record.location}`}
+                  className={`grid gap-2 px-5 py-5 sm:grid-cols-[96px_minmax(0,1fr)] sm:items-center ${
+                    index > 0 ? 'border-t border-hairline' : ''
+                  }`}
+                >
+                  <span className="eyebrow-label text-terracotta">{record.year}</span>
+                  <div>
+                    <h2 className="text-lg font-bold text-ink">{record.name}</h2>
+                    <p className="mt-1 text-sm text-ink-muted">{record.location}</p>
+                    {record.detail && <p className="mt-1 text-xs leading-relaxed text-ink-muted">{record.detail}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Closing manifesto — full-bleed dark, the line the whole page has
+            been building toward. */}
+        <section className="relative overflow-hidden bg-chrome px-4 py-20 text-center sm:px-10 sm:py-28">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_55%_at_50%_40%,rgba(230,126,34,0.12),transparent_65%)]" />
+          <div className="relative z-10 mx-auto flex max-w-2xl flex-col items-center">
+            <span className="flex h-12 w-12 items-center justify-center rounded-full border border-terracotta-light/50 text-terracotta-light">
+              <StandardIcon path={compassPath} />
+            </span>
+            <span className="eyebrow-label mt-5 text-terracotta-light">Our vision</span>
+            <h2 className="mt-4 font-display text-balance text-3xl font-bold leading-[1.15] text-white sm:text-5xl">
+              To make land ownership along NH-1 something a family is proud to inherit.
+            </h2>
+            <p className="mt-5 max-w-[52ch] text-[15px] leading-[1.8] text-white/70">
+              Not a plot number on a certificate — a place the next generation points to and says their family
+              built it, on purpose, on this road.
+            </p>
+            <button
+              type="button"
+              onClick={() => setSiteVisitOpen(true)}
+              className="mt-8 rounded-none border border-terracotta-light bg-terracotta-light px-7 py-3.5 text-sm font-semibold uppercase tracking-[0.04em] text-chrome transition-colors hover:border-white hover:bg-white"
+            >
+              Book a site visit
+            </button>
           </div>
         </section>
       </main>
