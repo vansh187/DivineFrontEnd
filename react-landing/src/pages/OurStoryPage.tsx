@@ -248,24 +248,48 @@ export function OurStoryPage() {
         {/* Corridor legacy + delivered record — the receipts. */}
         <section className="mx-auto max-w-6xl px-4 py-16 sm:px-10 sm:py-24">
           <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
-            <div className="rounded-xl bg-chrome p-6 text-white sm:p-8">
-              <p className="eyebrow-label text-terracotta-light">The record</p>
-              <p className="mt-4 font-display text-5xl font-bold">
-                {new Date().getFullYear() - company.foundedYear}+
-              </p>
-              <p className="mt-2 text-sm leading-[1.7] text-white/72">
-                Years on the NH-1 corridor, guided by a clear goal: deliver refined plotted communities with
-                credible approvals, visible progress and long-term value.
-              </p>
-              <div className="mt-6 grid grid-cols-2 gap-3">
-                {company.locations.map((location) => (
-                  <span key={location} className="rounded-lg border border-white/12 bg-white/8 px-3 py-3 text-sm font-semibold">
-                    {location}
+            <div className="relative overflow-hidden rounded-xl bg-chrome p-6 text-white sm:p-8">
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_55%_at_50%_0%,rgba(230,126,34,0.14),transparent_65%)]" />
+              <div className="relative">
+                <p className="eyebrow-label text-terracotta-light">The record</p>
+                <p className="mt-4 font-display text-5xl font-bold">
+                  {new Date().getFullYear() - company.foundedYear}+
+                </p>
+                <p className="mt-2 text-sm leading-[1.7] text-white/72">
+                  Years on the NH-1 corridor, guided by a clear goal: deliver refined plotted communities with
+                  credible approvals, visible progress and long-term value.
+                </p>
+                <div className="mt-6 grid grid-cols-2 gap-3">
+                  {company.locations.map((location) => (
+                    <span key={location} className="rounded-lg border border-white/12 bg-white/8 px-3 py-3 text-sm font-semibold">
+                      {location}
+                    </span>
+                  ))}
+                  <span className="rounded-lg border border-white/12 bg-white/8 px-3 py-3 text-sm font-semibold">
+                    {company.compliance.join(' & ')}-approved
                   </span>
-                ))}
-                <span className="rounded-lg border border-white/12 bg-white/8 px-3 py-3 text-sm font-semibold">
-                  {company.compliance.join(' & ')}-approved
-                </span>
+                </div>
+
+                <div className="mt-8 border-t border-white/12 pt-8">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-full border border-terracotta-light/50 text-terracotta-light">
+                    <StandardIcon path={compassPath} />
+                  </span>
+                  <p className="eyebrow-label mt-4 text-terracotta-light">Our vision</p>
+                  <h2 className="mt-3 font-display text-balance text-2xl font-bold leading-[1.2] sm:text-3xl">
+                    To make land ownership along NH-1 something a family is proud to inherit.
+                  </h2>
+                  <p className="mt-3 text-sm leading-[1.75] text-white/70">
+                    Not a plot number on a certificate — a place the next generation points to and says their
+                    family built it, on purpose, on this road.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setSiteVisitOpen(true)}
+                    className="mt-6 rounded-none border border-terracotta-light bg-terracotta-light px-6 py-3 text-sm font-semibold uppercase tracking-[0.04em] text-chrome transition-colors hover:border-white hover:bg-white"
+                  >
+                    Book a site visit
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -289,31 +313,6 @@ export function OurStoryPage() {
           </div>
         </section>
 
-        {/* Closing manifesto — full-bleed dark, the line the whole page has
-            been building toward. */}
-        <section className="relative overflow-hidden bg-chrome px-4 py-20 text-center sm:px-10 sm:py-28">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_55%_at_50%_40%,rgba(230,126,34,0.12),transparent_65%)]" />
-          <div className="relative z-10 mx-auto flex max-w-2xl flex-col items-center">
-            <span className="flex h-12 w-12 items-center justify-center rounded-full border border-terracotta-light/50 text-terracotta-light">
-              <StandardIcon path={compassPath} />
-            </span>
-            <span className="eyebrow-label mt-5 text-terracotta-light">Our vision</span>
-            <h2 className="mt-4 font-display text-balance text-3xl font-bold leading-[1.15] text-white sm:text-5xl">
-              To make land ownership along NH-1 something a family is proud to inherit.
-            </h2>
-            <p className="mt-5 max-w-[52ch] text-[15px] leading-[1.8] text-white/70">
-              Not a plot number on a certificate — a place the next generation points to and says their family
-              built it, on purpose, on this road.
-            </p>
-            <button
-              type="button"
-              onClick={() => setSiteVisitOpen(true)}
-              className="mt-8 rounded-none border border-terracotta-light bg-terracotta-light px-7 py-3.5 text-sm font-semibold uppercase tracking-[0.04em] text-chrome transition-colors hover:border-white hover:bg-white"
-            >
-              Book a site visit
-            </button>
-          </div>
-        </section>
       </main>
       <Footer />
       <SiteVisitDrawer open={siteVisitOpen} onClose={() => setSiteVisitOpen(false)} />
