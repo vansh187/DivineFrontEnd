@@ -10,6 +10,7 @@ import { getProjectDetail } from '../data/projectDetails';
 import { townshipVideoFor } from '../data/townshipVideos';
 import { siteProgressGallery } from '../data/siteProgressGallery';
 import { contact } from '../data/contact';
+import { brochureByTownshipId } from '../data/brochures';
 import { useAuth } from '../hooks/useAuth';
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 import { loadSavedTownships, toggleSavedTownship } from '../services/savedTownships';
@@ -50,6 +51,7 @@ export function ProjectDetailPage() {
   // Same township walkthrough reel used on the landing "Now selling" card.
   const detailVideo = reducedMotion ? undefined : townshipVideoFor(id);
   const [featuredProgressPhoto, ...progressPhotos] = siteProgressGallery;
+  const brochure = brochureByTownshipId[detail.id];
 
   return (
     <>
@@ -179,6 +181,21 @@ export function ProjectDetailPage() {
                 {contact.phone}
               </a>
             </div>
+
+            {brochure && (
+              <div className="rounded-2xl border border-hairline bg-surface p-6 shadow-[0_30px_80px_-40px_rgba(44,62,80,0.2)] sm:p-7">
+                <p className="font-display text-xl font-bold text-ink">{brochure.label}</p>
+                <p className="mt-2 text-sm text-ink-muted">{brochure.meta}</p>
+                <a
+                  href={brochure.href}
+                  download={brochure.fileName}
+                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-none border border-chrome bg-chrome px-5 py-3 text-sm font-semibold tracking-[0.04em] text-white uppercase transition-colors hover:border-terracotta hover:bg-terracotta"
+                >
+                  Download brochure
+                  <span aria-hidden>↓</span>
+                </a>
+              </div>
+            )}
           </div>
         </div>
 

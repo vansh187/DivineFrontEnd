@@ -1,30 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { contact } from '../data/contact';
-
-type BrochureOption = {
-  id: string;
-  label: string;
-  meta: string;
-  href: string;
-  fileName: string;
-};
-
-const brochureOptions: BrochureOption[] = [
-  {
-    id: 'suraksha-enclave',
-    label: 'Suraksha Enclave',
-    meta: 'Sector 15, Ganaur — plotted township brochure',
-    href: '/brochures/suraksha-enclave-brochure.pdf',
-    fileName: 'Suraksha-Enclave-Brochure.pdf',
-  },
-  {
-    id: 'divine-vision',
-    label: 'Divine Vision Portfolio',
-    meta: 'The complete group brochure — every township',
-    href: '/brochures/divine-vision-portfolio.pdf',
-    fileName: 'Divine-Vision-Group-Portfolio.pdf',
-  },
-];
+import { brochureList } from '../data/brochures';
 
 /** Full-bleed prompt that sits directly above the delivered-record section,
  *  colour-matched to the footer so the page closes on a consistent dark note. */
@@ -88,7 +64,7 @@ export function VisitCtaSection() {
                 aria-label="Choose a brochure to download"
                 className="absolute left-1/2 top-full z-20 mt-3 w-[min(90vw,23rem)] -translate-x-1/2 rounded-2xl border border-hairline bg-white p-2 text-left shadow-[0_40px_100px_-40px_rgba(6,31,45,0.55)]"
               >
-                {brochureOptions.map((option) => (
+                {brochureList.map((option) => (
                   <a
                     key={option.id}
                     role="menuitem"
