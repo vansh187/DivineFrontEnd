@@ -377,7 +377,7 @@ export function AuthModal() {
                 <span className="text-xs">
                   <strong className="font-display font-bold text-white">5</strong> townships delivered
                 </span>
-                <span className="text-xs">RERA &amp; DDJAY approved</span>
+                <span className="text-xs">RERA approved</span>
               </div>
             </div>
           </div>
