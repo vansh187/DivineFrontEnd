@@ -118,9 +118,9 @@ export function OurStoryPage() {
       <main className="bg-bg">
         {/* Hero — full-bleed dark, founder portrait carrying the weight the
             copy alone can't: this is a name behind the brand, not a logo. */}
-        <section className="relative overflow-hidden bg-chrome px-4 pb-16 pt-28 sm:px-10 sm:pb-24 sm:pt-32">
+        <section className="relative overflow-hidden bg-chrome px-4 pb-16 pt-24 sm:px-10 sm:pb-24 sm:pt-28">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_60%_at_18%_10%,rgba(230,126,34,0.14),transparent_58%)]" />
-          <div className="relative z-10 mx-auto grid max-w-6xl gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+          <div className="relative z-10 mx-auto grid max-w-6xl gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
             <div>
               <span className="eyebrow-label text-terracotta-light">Our story</span>
               <h1 className="mt-4 max-w-[14ch] font-display text-balance text-4xl font-bold leading-[1.08] text-white sm:text-6xl">
@@ -161,7 +161,7 @@ export function OurStoryPage() {
               </div>
             </div>
 
-            <div className="mx-auto w-full max-w-[380px]">
+            <div className="mx-auto w-full max-w-[400px]">
               <div className="overflow-hidden rounded-2xl border border-white/18 bg-white/[0.04] shadow-[0_50px_120px_-40px_rgba(0,0,0,0.7)]">
                 <div className="relative aspect-square w-full overflow-hidden bg-black">
                   <img
