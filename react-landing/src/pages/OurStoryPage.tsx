@@ -1,31 +1,9 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { SiteVisitDrawer } from '../components/SiteVisitDrawer';
 import { deliveredRecords } from '../data/deliveredRecords';
 import { company } from '../data/company';
-
-function SpeakerMutedIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4.5 w-4.5">
-      <path
-        fill="currentColor"
-        d="M4 9v6h4l5 5V4L8 9H4Zm12.7-.3 1.4 1.4-2.9 2.9 2.9 2.9-1.4 1.4-2.9-2.9-2.9 2.9-1.4-1.4 2.9-2.9-2.9-2.9 1.4-1.4 2.9 2.9 2.9-2.9Z"
-      />
-    </svg>
-  );
-}
-
-function SpeakerOnIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4.5 w-4.5">
-      <path
-        fill="currentColor"
-        d="M4 9v6h4l5 5V4L8 9H4Zm12.5 3a4.5 4.5 0 0 0-2.5-4.03v8.06A4.5 4.5 0 0 0 16.5 12ZM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77Z"
-      />
-    </svg>
-  );
-}
 
 function StandardIcon({ path }: { path: string }) {
   return (
@@ -99,18 +77,6 @@ const timeline = [
 
 export function OurStoryPage() {
   const [siteVisitOpen, setSiteVisitOpen] = useState(false);
-  const [muted, setMuted] = useState(true);
-  const videoRef = useRef<HTMLVideoElement>(null);
-
-  const toggleMute = () => {
-    const video = videoRef.current;
-    if (!video) return;
-    const nextMuted = !video.muted;
-    video.volume = 1;
-    video.muted = nextMuted;
-    setMuted(nextMuted);
-    if (!nextMuted) video.play().catch(() => {});
-  };
 
   return (
     <>
@@ -118,7 +84,7 @@ export function OurStoryPage() {
       <main className="bg-bg">
         {/* Hero — full-bleed dark, founder portrait carrying the weight the
             copy alone can't: this is a name behind the brand, not a logo. */}
-        <section className="relative overflow-hidden bg-chrome px-4 pb-16 pt-24 sm:px-10 sm:pb-24 sm:pt-28">
+        <section className="relative overflow-hidden bg-chrome px-4 pb-10 pt-24 sm:px-10 sm:pb-14 sm:pt-28">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_60%_at_18%_10%,rgba(230,126,34,0.14),transparent_58%)]" />
           <div className="relative z-10 mx-auto grid max-w-6xl gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
             <div>
@@ -185,58 +151,28 @@ export function OurStoryPage() {
           </div>
         </section>
 
-        {/* Founder vision — quote + video on the left, the family's own
+        {/* Director's vision — quote on the left, the family's own
             three-beat history on the right, in the order it actually happened. */}
-        <section className="border-b border-hairline bg-surface px-4 py-16 sm:px-10 sm:py-24">
-          <div className="mx-auto max-w-6xl">
-            <div className="max-w-2xl">
+        <section className="border-b border-hairline bg-surface px-4 pb-16 pt-10 sm:px-10 sm:pb-24 sm:pt-14">
+          <div className="mx-auto max-w-6xl grid gap-10 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
+            <div>
               <span className="eyebrow-label text-terracotta">Director&rsquo;s vision</span>
-              <h2 className="mt-4 max-w-[20ch] font-display text-balance text-3xl font-bold leading-[1.12] text-ink sm:text-5xl">
+              <h2 className="mt-4 max-w-[20ch] font-display text-balance text-3xl font-bold leading-[1.12] text-ink sm:text-4xl">
                 A township should feel complete before a family ever moves in.
               </h2>
+              <div className="mt-8 border-l-4 border-terracotta pl-5">
+                <p className="text-[15px] leading-[1.85] text-ink-muted">
+                  Divine Vision is built around a simple belief: land ownership should feel as solid as the
+                  family behind it. Every decision — location, approvals, plot size, amenities — is made so a
+                  buyer can verify it, not just trust it.
+                </p>
+                <p className="mt-4 text-xs font-semibold uppercase tracking-[0.08em] text-chrome">
+                  Himashu Luthra, Director
+                </p>
+              </div>
             </div>
 
-            <div className="mt-12 grid gap-10 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
-              <div className="flex flex-col gap-6">
-                <div className="border-l-4 border-terracotta pl-5">
-                  <p className="text-[15px] leading-[1.85] text-ink-muted">
-                    Divine Vision is built around a simple belief: land ownership should feel as solid as the
-                    family behind it. Every decision — location, approvals, plot size, amenities — is made so a
-                    buyer can verify it, not just trust it.
-                  </p>
-                  <p className="mt-4 text-xs font-semibold uppercase tracking-[0.08em] text-chrome">
-                    Himashu Luthra, Director
-                  </p>
-                </div>
-
-                <div className="relative mx-auto w-full max-w-[220px] overflow-hidden rounded-2xl border border-hairline-dark bg-black shadow-[0_34px_90px_-44px_rgba(6,31,45,0.55)] sm:mx-0">
-                  <video
-                    ref={videoRef}
-                    className="block aspect-[9/16] w-full object-cover"
-                    src="/our-story/founders-desk.mp4"
-                    autoPlay
-                    muted={muted}
-                    loop
-                    playsInline
-                    aria-label="Director's desk message about the Divine Vision story with optional sound"
-                  />
-                  <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/12" />
-                  <button
-                    type="button"
-                    onClick={toggleMute}
-                    aria-pressed={!muted}
-                    aria-label={muted ? 'Turn on story video sound' : 'Mute story video sound'}
-                    className="absolute right-3 top-3 z-20 flex h-10 w-10 items-center justify-center rounded-full border border-white/35 bg-black/52 text-white backdrop-blur-sm transition-colors duration-200 hover:bg-black/72"
-                  >
-                    {muted ? <SpeakerMutedIcon /> : <SpeakerOnIcon />}
-                  </button>
-                  <span className="absolute left-3 top-3 z-20 rounded-full border border-white/25 bg-black/45 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-white backdrop-blur-sm">
-                    Director&rsquo;s desk
-                  </span>
-                </div>
-              </div>
-
-              <div className="grid gap-px overflow-hidden rounded-xl border border-hairline bg-hairline">
+            <div className="grid gap-px overflow-hidden rounded-xl border border-hairline bg-hairline">
                 {timeline.map((stop) => (
                   <div key={stop.eyebrow} className="bg-surface p-6 sm:p-7">
                     <p className="eyebrow-label text-terracotta">{stop.eyebrow}</p>
@@ -248,7 +184,6 @@ export function OurStoryPage() {
                 ))}
               </div>
             </div>
-          </div>
         </section>
 
         {/* The Divine standard — the same three commitments the old page
