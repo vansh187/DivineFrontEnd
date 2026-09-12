@@ -18,7 +18,7 @@ export function LandingPage() {
       <HeroSection onBookVisit={() => setSiteVisitOpen(true)} />
       <LiveProjectsSection />
       <LocationSection />
-      <VisitCtaSection onRequestPlan={() => setSiteVisitOpen(true)} />
+      <VisitCtaSection />
       <DeliveredSection />
       <Footer />
       <SiteVisitDrawer open={siteVisitOpen} onClose={() => setSiteVisitOpen(false)} />

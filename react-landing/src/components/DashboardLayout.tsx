@@ -52,15 +52,27 @@ interface PlaceholderCardProps {
   accent?: IconAccent;
   actionLabel?: string;
   onAction?: () => void;
+  /** Renders the action as a disabled button instead of hiding the card —
+   *  used to keep a card visible as context (e.g. broker workspace showing
+   *  what customers get) without letting the channel partner actually open it. */
+  disabled?: boolean;
 }
 
-export function PlaceholderCard({ icon, title, description, accent = 'chrome', actionLabel, onAction }: PlaceholderCardProps) {
+export function PlaceholderCard({ icon, title, description, accent = 'chrome', actionLabel, onAction, disabled = false }: PlaceholderCardProps) {
   return (
     <div className="group relative rounded-2xl border border-hairline bg-surface p-6 shadow-[0_16px_40px_-26px_rgba(6,31,45,0.24)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_26px_50px_-24px_rgba(6,31,45,0.28)]">
       <IconBadge icon={icon} accent={accent} interactive />
       <h3 className="mt-4 font-display text-lg font-bold text-ink">{title}</h3>
       <p className="mt-1.5 text-sm leading-[1.6] text-ink-muted">{description}</p>
-      {onAction ? (
+      {disabled ? (
+        <button
+          type="button"
+          disabled
+          className="mt-4 cursor-not-allowed rounded-full bg-hairline px-4 py-2 text-xs font-semibold text-ink-muted"
+        >
+          {actionLabel ?? 'Open'}
+        </button>
+      ) : onAction ? (
         <button
           type="button"
           onClick={onAction}

@@ -41,7 +41,7 @@ export const projectDetails: ProjectDetail[] = [
     ],
     specs: [
       { label: 'Plot sizes', value: '120–180 sq yd' },
-      { label: 'Approval', value: 'DDJAY' },
+      { label: 'Approval', value: 'RERA' },
       { label: 'From NH-1', value: '250 metres' },
     ],
   },

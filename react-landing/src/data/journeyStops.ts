@@ -21,10 +21,10 @@ export const journeyStops: JourneyStop[] = [
     heading: 'Suraksha',
     headingEmphasis: 'Enclave',
     description:
-      'DDJAY-approved, 250 metres off the highway. Phase 1 is already occupied — largely by paramilitary families — so the neighbourhood exists before you book.',
+      'RERA-approved, 250 metres off the highway. Phase 1 is already occupied — largely by paramilitary families — so the neighbourhood exists before you book.',
     reraId: 'RERA-PKL-890-2020',
     heroSrc: '/townships/suraksha-hero.jpg',
-    chips: ['120–180 sq yd', 'DDJAY', '24-hr security', 'Yoga podium', 'Community centre'],
+    chips: ['120–180 sq yd', 'RERA approved', '24-hr security', 'Yoga podium', 'Community centre'],
     image: {
       src: '/townships/suraksha-entrance.jpg',
       alt: 'Suraksha Enclave entrance gate',

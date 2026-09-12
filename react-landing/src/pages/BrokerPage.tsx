@@ -28,9 +28,9 @@ export function BrokerPage() {
         icon={<TagIcon />}
         accent="terracotta"
         title="Available plots"
-        description="Browse plots currently available to sell and schedule a site visit."
+        description="Plot inventory is managed by the sales team — talk to us for current availability."
         actionLabel="View plots"
-        onAction={() => navigate('/broker/plots')}
+        disabled
       />
       <PlaceholderCard
         icon={<ChartIcon />}

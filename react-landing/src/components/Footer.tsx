@@ -1,9 +1,10 @@
 import { navLinks } from '../data/navigation';
-import { contact } from '../data/contact';
+import { contact, socialLinks } from '../data/contact';
 import { company } from '../data/company';
 import { getGoogleMapsSearchHref, siteMapLocations } from '../data/mapLocations';
 import { useAuth, getDisplayName } from '../hooks/useAuth';
 import { DivineVisionLogo } from './DivineVisionLogo';
+import { socialIconById } from './SocialIcons';
 
 const whatsappHref = `https://wa.me/${contact.phone.replace(/\D/g, '')}?text=${encodeURIComponent(
   'Hi Divine Vision, I need help with property details.',
@@ -28,6 +29,24 @@ export function Footer() {
             <DivineVisionLogo variant="footer" />
           </a>
           <p className="mt-3.5 max-w-[28ch] text-sm text-white/70">{company.tagline}</p>
+
+          <div className="mt-5 flex items-center gap-2.5">
+            {socialLinks.map((social) => {
+              const Icon = socialIconById[social.id];
+              return (
+                <a
+                  key={social.id}
+                  href={social.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={social.label}
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-white/22 text-white/75 transition-colors hover:border-terracotta-light hover:text-terracotta-light"
+                >
+                  {Icon && <Icon className="h-4 w-4" />}
+                </a>
+              );
+            })}
+          </div>
         </div>
 
         <div className="sm:border-l sm:border-white/10 sm:pl-6 lg:pl-8">
