@@ -6,6 +6,8 @@ import { useAuth } from '../hooks/useAuth';
 import * as store from '../services/documentStore';
 import type { BookingApplicationFormData, CustomerDocState, SignatureStatus } from '../services/documentStore';
 import { applicationProjects } from '../data/applicationProjects';
+import { contact } from '../data/contact';
+import { townshipVideoByProject } from '../data/townshipVideos';
 import type { InventoryUnit } from '../services/inventoryApi';
 import { clearPendingUnit } from '../services/pendingUnit';
 import { getDocument, uploadGeneratedApplicationPdf } from '../services/documentsApi';
@@ -150,6 +152,95 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
       <h2 className="font-display text-xl font-bold text-ink">{title}</h2>
       <div className="mt-4 grid gap-4 sm:grid-cols-2">{children}</div>
     </section>
+  );
+}
+
+function PhoneIcon() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+      <path d="M4.5 3.5h2.4l1 3.2-1.6 1.3a9 9 0 0 0 4.2 4.2l1.3-1.6 3.2 1v2.4a1.5 1.5 0 0 1-1.6 1.5A12.5 12.5 0 0 1 3 4.5a1.5 1.5 0 0 1 1.5-1Z" />
+    </svg>
+  );
+}
+
+function MailIconOutline() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+      <rect x="3" y="4.5" width="14" height="11" rx="1.6" />
+      <path d="m3.5 5.5 6.5 5 6.5-5" />
+    </svg>
+  );
+}
+
+/** Shown in place of the application form once OPS Divine Greens is picked.
+ *  Every plot there is sold, but the copy never says so — framing it as
+ *  by-invitation / high-demand keeps the customer engaged and pushes them
+ *  to call or email instead of bouncing off a dead end, which is what
+ *  actually captures the lead. */
+function SoldOutProjectCard() {
+  const videoSrc = townshipVideoByProject['ops-divine-greens'];
+
+  return (
+    <div className="sm:col-span-2 overflow-hidden rounded-2xl border border-hairline-dark bg-chrome shadow-[0_50px_120px_-40px_rgba(6,31,45,0.6)]">
+      <div className="relative min-h-[420px] w-full overflow-hidden sm:min-h-[480px]">
+        {videoSrc && (
+          <video
+            key={videoSrc}
+            className="absolute inset-0 h-full w-full object-cover"
+            src={videoSrc}
+            poster="/townships/ops-entrance.jpg"
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="metadata"
+            aria-hidden="true"
+          />
+        )}
+        {/* Darker, more even scrim than the hero video uses — this footage has
+            its own on-screen signage burned in, and a lighter wash let that
+            text fight with ours. Going darker mutes it to atmosphere. */}
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(6,20,30,0.72)_0%,rgba(6,20,30,0.6)_45%,rgba(6,20,30,0.94)_100%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_65%_55%_at_50%_45%,rgba(6,20,30,0.28),rgba(6,20,30,0.72)_100%)]" />
+
+        <div className="relative z-10 flex h-full min-h-[420px] flex-col items-center justify-center gap-5 px-6 py-12 text-center sm:min-h-[480px] sm:px-16">
+          <span className="eyebrow-label text-white/60">OPS Divine Greens · Karnal</span>
+
+          <span className="rounded-full border border-terracotta-light/60 bg-white/5 px-5 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-terracotta-light backdrop-blur-sm">
+            By invitation only
+          </span>
+
+          <h3 className="max-w-[18ch] font-display text-balance text-3xl font-bold leading-[1.1] text-white [text-shadow:0_4px_30px_rgba(0,0,0,0.55)] sm:text-[42px]">
+            Now offered by private release.
+          </h3>
+
+          <span className="h-px w-14 bg-terracotta-light/70" />
+
+          <p className="max-w-[50ch] text-[15px] leading-[1.8] text-white/80">
+            Demand at OPS Divine Greens has outpaced the open inventory. Remaining plots are handled
+            directly by our sales desk, not the online form — speak with a consultant to check
+            availability and what&rsquo;s still open.
+          </p>
+
+          <div className="mt-3 flex w-full flex-col items-stretch justify-center gap-3 sm:w-auto sm:flex-row sm:items-center sm:gap-4">
+            <a
+              href={contact.phoneHref}
+              className="inline-flex items-center justify-center gap-2 rounded-none border border-terracotta-light bg-terracotta-light px-7 py-3.5 text-sm font-semibold uppercase tracking-[0.06em] text-chrome transition-all duration-200 hover:-translate-y-0.5 hover:border-white hover:bg-white sm:px-9"
+            >
+              <PhoneIcon />
+              Call {contact.phone}
+            </a>
+            <a
+              href={contact.emailHref}
+              className="inline-flex items-center justify-center gap-2 rounded-none border border-white/45 px-7 py-3.5 text-sm font-semibold uppercase tracking-[0.06em] text-white transition-all duration-200 hover:-translate-y-0.5 hover:border-white hover:bg-white/10 sm:px-9"
+            >
+              <MailIconOutline />
+              Email us
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -959,6 +1050,15 @@ export function CustomerApplicationPage() {
     parseAmount(form.bookingAmount) > 0;
   const canGeneratePdf = paymentComplete || offlinePaymentEntered;
   const selectedProject = applicationProjects.find((project) => project.id === form.projectId);
+  // OPS Divine Greens is fully sold — block the form past project selection
+  // and surface the sold-out card instead, rather than let a signed-in
+  // customer fill out an application for a plot that no longer exists.
+  const isSoldOut = form.projectId === 'ops-divine-greens';
+  useEffect(() => {
+    if (isSoldOut && currentPage !== 0) {
+      setCurrentPage(0);
+    }
+  }, [isSoldOut, currentPage]);
   const pageLabels = [
     'Project',
     'Fill application form',
@@ -991,10 +1091,29 @@ export function CustomerApplicationPage() {
     >
       <div className="mb-5 rounded-lg border border-hairline bg-surface p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <span className="eyebrow-label text-terracotta">
-            Page {currentPage + 1} of {pageLabels.length}
-          </span>
-          <span className="text-sm font-semibold text-ink">{pageLabels[currentPage]}</span>
+          <button
+            type="button"
+            onClick={() => goToPage(currentPage - 1)}
+            disabled={currentPage === 0}
+            className="rounded-full border border-hairline px-4 py-2 text-xs font-semibold text-ink transition-colors hover:border-green hover:text-green disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            ← Previous
+          </button>
+          <div className="text-center">
+            <span className="eyebrow-label block text-terracotta">
+              Page {currentPage + 1} of {pageLabels.length}
+            </span>
+            <span className="text-sm font-semibold text-ink">{pageLabels[currentPage]}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => goToPage(currentPage + 1)}
+            disabled={currentPage === lastPage || isSoldOut}
+            title={isSoldOut ? 'OPS Divine Greens is on private release — call or email our sales desk to continue.' : undefined}
+            className="rounded-full bg-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            Next →
+          </button>
         </div>
         <div className="mt-3 h-2 overflow-hidden rounded-full bg-bg">
           <div
@@ -1021,6 +1140,7 @@ export function CustomerApplicationPage() {
               ))}
             </select>
           </label>
+          {isSoldOut && <SoldOutProjectCard />}
         </Section>
 
         <Section title="Fill application form">
@@ -1663,15 +1783,17 @@ export function CustomerApplicationPage() {
               key={label}
               type="button"
               onClick={() => goToPage(index)}
+              disabled={isSoldOut && index !== 0}
               aria-label={`Go to ${label}`}
-              className={`h-2.5 w-8 rounded-full transition-colors ${index === currentPage ? 'bg-green' : 'bg-hairline hover:bg-terracotta-light'}`}
+              className={`h-2.5 w-8 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${index === currentPage ? 'bg-green' : 'bg-hairline hover:bg-terracotta-light'}`}
             />
           ))}
         </div>
         <button
           type="button"
           onClick={() => goToPage(currentPage + 1)}
-          disabled={currentPage === lastPage}
+          disabled={currentPage === lastPage || isSoldOut}
+          title={isSoldOut ? 'OPS Divine Greens is on private release — call or email our sales desk to continue.' : undefined}
           className="rounded-full bg-green px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-45"
         >
           Next
