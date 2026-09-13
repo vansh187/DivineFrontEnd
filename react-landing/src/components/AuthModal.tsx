@@ -6,6 +6,7 @@ import { useAuth } from '../hooks/useAuth';
 import { DivineVisionLogo } from './DivineVisionLogo';
 import { ApiError, requestPasswordReset, resetPassword } from '../services/authApi';
 import type { Role } from '../services/authApi';
+import { applicationProjects } from '../data/applicationProjects';
 
 function IconWrap({ children }: { children: ReactNode }) {
   return (
@@ -129,6 +130,7 @@ export function AuthModal() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
+  const [project, setProject] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -173,6 +175,7 @@ export function AuthModal() {
       setFirstName('');
       setLastName('');
       setPhone('');
+      setProject('');
       setShowPassword(false);
       setError(null);
       setSuccessMessage(null);
@@ -212,6 +215,7 @@ export function AuthModal() {
     setModalRole(role);
     setError(null);
     setSuccessMessage(null);
+    if (role !== 'broker') setProject('');
   };
 
   const openForgotView = () => {
@@ -289,6 +293,14 @@ export function AuthModal() {
       setError('Password must be at least 8 characters.');
       return;
     }
+    if (isSignup && !phone.trim()) {
+      setError('Phone number is required.');
+      return;
+    }
+    if (isSignup && modalRole === 'broker' && !project) {
+      setError('Select the project you work with.');
+      return;
+    }
 
     setSubmitting(true);
     setError(null);
@@ -301,7 +313,8 @@ export function AuthModal() {
           password,
           first_name: firstName || undefined,
           last_name: lastName || undefined,
-          phone: phone || undefined,
+          phone,
+          project: modalRole === 'broker' ? project : undefined,
         });
         // Account created, but not signed in — send them to the sign-in screen
         // instead of straight to the dashboard, with the email carried over.
@@ -541,7 +554,31 @@ export function AuthModal() {
                 </label>
 
                 {isSignup && (
-                  <Field label="Phone" type="tel" value={phone} onChange={setPhone} icon={<PhoneIcon />} autoComplete="tel" optional />
+                  <Field label="Phone" type="tel" value={phone} onChange={setPhone} icon={<PhoneIcon />} autoComplete="tel" required />
+                )}
+
+                {isSignup && modalRole === 'broker' && (
+                  <label className="flex flex-col gap-1.5 text-sm text-ink">
+                    Project you work with
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted">
+                        <BriefcaseIcon />
+                      </span>
+                      <select
+                        required
+                        value={project}
+                        onChange={(event) => setProject(event.target.value)}
+                        className="w-full appearance-none rounded-xl border border-hairline bg-bg py-2.5 pl-10 pr-3.5 text-sm text-ink outline-none transition-all focus:border-green focus:ring-4 focus:ring-green/10"
+                      >
+                        <option value="">Select project</option>
+                        {applicationProjects.map((proj) => (
+                          <option key={proj.id} value={proj.id}>
+                            {proj.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </label>
                 )}
 
                 <Field
