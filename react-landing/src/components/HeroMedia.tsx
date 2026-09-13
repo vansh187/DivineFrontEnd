@@ -77,7 +77,7 @@ export function HeroMedia() {
         autoPlay
         loop
         playsInline
-        preload="auto"
+        preload="metadata"
         poster="/hero/hero-loop-poster.jpg"
         aria-label="Cinematic fly-through of OPS Divine Greens and Suraksha Enclave, with background score — entrance gates, aerial township views, amenities and clubhouses"
       >
