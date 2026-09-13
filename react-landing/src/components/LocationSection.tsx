@@ -3,13 +3,12 @@ import { Link } from 'react-router-dom';
 import { townshipLocations } from '../data/locationConnectivity';
 import { ConnectivityList } from './ConnectivityList';
 
-const mapSrc = `https://www.google.com/maps?saddr=${encodeURIComponent(
-  townshipLocations[0].mapQuery,
-)}&daddr=${encodeURIComponent(townshipLocations[1].mapQuery)}&output=embed`;
-
 export function LocationSection() {
   const [activeId, setActiveId] = useState(townshipLocations[0].id);
   const active = townshipLocations.find((t) => t.id === activeId) ?? townshipLocations[0];
+  // A pinpoint on the selected township only — a route between the two
+  // properties isn't relevant to a buyer looking at just one of them.
+  const mapSrc = `https://www.google.com/maps?q=${encodeURIComponent(active.mapQuery)}&output=embed`;
 
   return (
     <section id="location" className="px-6 pt-10 pb-20 sm:px-10 sm:pt-14 sm:pb-28">
