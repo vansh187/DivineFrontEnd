@@ -8,7 +8,7 @@ import { townshipLocations } from '../data/locationConnectivity';
 import { ConnectivityList } from '../components/ConnectivityList';
 import { getProjectDetail } from '../data/projectDetails';
 import { townshipVideoFor } from '../data/townshipVideos';
-import { siteProgressGallery } from '../data/siteProgressGallery';
+import { siteProgressGalleryFor } from '../data/siteProgressGallery';
 import { contact } from '../data/contact';
 import { brochureByTownshipId } from '../data/brochures';
 import { useAuth } from '../hooks/useAuth';
@@ -50,7 +50,7 @@ export function ProjectDetailPage() {
 
   // Same township walkthrough reel used on the landing "Now selling" card.
   const detailVideo = reducedMotion ? undefined : townshipVideoFor(id);
-  const [featuredProgressPhoto, ...progressPhotos] = siteProgressGallery;
+  const [featuredProgressPhoto, ...progressPhotos] = siteProgressGalleryFor(detail.id);
   const brochure = brochureByTownshipId[detail.id];
 
   return (
@@ -199,130 +199,105 @@ export function ProjectDetailPage() {
           </div>
         </div>
 
-        <section className="mx-auto mt-16 max-w-6xl border-t border-hairline pt-12 sm:mt-20 sm:pt-16">
-          <div className="grid gap-8 lg:grid-cols-[0.82fr_1.18fr] lg:items-end">
-            <div>
-              <div className="flex items-center gap-3">
-                <span className="h-px w-12 bg-terracotta" />
-                <p className="eyebrow-label text-terracotta">Actual site progress</p>
-              </div>
-              <h2 className="mt-4 max-w-[11ch] font-display text-5xl font-bold leading-[0.95] text-ink sm:text-6xl">
-                Built proof, captured on ground.
-              </h2>
-            </div>
-            <div className="max-w-3xl border-l border-hairline pl-5">
-              <p className="font-display text-2xl font-bold leading-tight text-ink">
-                A curated look at real residences taking shape inside the township.
-              </p>
-              <p className="mt-4 text-sm leading-[1.85] text-ink-muted sm:text-[15px]">
-                From structure and brickwork to facade finishing, green frontages and lived-in
-                internal roads, these actual site photographs turn progress into something buyers
-                can see before they visit.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-8 grid gap-5 lg:grid-cols-[minmax(300px,0.82fr)_minmax(0,1.18fr)]">
-            {featuredProgressPhoto && (
-              <div className="grid self-start gap-5">
-                <article className="group overflow-hidden rounded-2xl border border-hairline bg-chrome text-white shadow-[0_34px_100px_-54px_rgba(6,31,45,0.62)]">
-                  <div className="relative aspect-[9/16] overflow-hidden bg-black">
-                    <img
-                      src={featuredProgressPhoto.src}
-                      alt={featuredProgressPhoto.alt}
-                      className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
-                      loading="lazy"
-                    />
-                    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-[linear-gradient(0deg,rgba(6,31,45,0.86),transparent)]" />
-                    <div className="absolute bottom-5 left-5 right-5">
-                      <p className="eyebrow-label text-terracotta-light">{featuredProgressPhoto.label}</p>
-                      <h3 className="mt-2 font-display text-3xl font-bold leading-tight">{featuredProgressPhoto.title}</h3>
-                    </div>
-                  </div>
-                  <div className="bg-[linear-gradient(180deg,#263d51_0%,#203548_100%)] p-5 sm:p-6">
-                    <p className="text-sm leading-[1.75] text-white/74">{featuredProgressPhoto.note}</p>
-                    <div className="mt-5 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-white/12 bg-white/12 text-center">
-                      {['Actual photos', 'On-ground work', 'Visit ready'].map((item) => (
-                        <span key={item} className="bg-white/6 px-2 py-3 text-[10px] font-semibold uppercase tracking-[0.1em] text-white/82">
-                          {item}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </article>
-
-                <div className="rounded-2xl border border-hairline bg-[linear-gradient(135deg,#ffffff_0%,#f7f2e8_58%,#eef4ef_100%)] p-5 shadow-[0_24px_72px_-52px_rgba(6,31,45,0.42)] sm:p-6">
-                  <p className="eyebrow-label text-terracotta">See it in person</p>
-                  <h3 className="mt-3 font-display text-2xl font-bold leading-tight text-ink">
-                    Walk the street, inspect the build, then choose with confidence.
-                  </h3>
-                  <p className="mt-3 text-sm leading-[1.7] text-ink-muted">
-                    A site visit lets you compare plot frontage, construction quality, road width and neighbourhood progress on ground.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setSiteVisitOpen(true)}
-                    className="mt-5 w-full rounded-none border border-chrome bg-chrome px-5 py-3 text-sm font-semibold uppercase tracking-[0.04em] text-white transition-colors hover:border-terracotta hover:bg-terracotta"
-                  >
-                    Book a site visit
-                  </button>
+        {(featuredProgressPhoto || progressPhotos.length > 0) && (
+          <section className="mx-auto mt-16 max-w-6xl border-t border-hairline pt-12 sm:mt-20 sm:pt-16">
+            <div className="grid gap-8 lg:grid-cols-[0.82fr_1.18fr] lg:items-end">
+              <div>
+                <div className="flex items-center gap-3">
+                  <span className="h-px w-12 bg-terracotta" />
+                  <p className="eyebrow-label text-terracotta">Our work</p>
                 </div>
+                <h2 className="mt-4 max-w-[11ch] font-display text-5xl font-bold leading-[0.95] text-ink sm:text-6xl">
+                  Real ground, real township.
+                </h2>
+              </div>
+              <div className="max-w-3xl border-l border-hairline pl-5">
+                <p className="font-display text-2xl font-bold leading-tight text-ink">
+                  A curated look at the township and everything already standing around it.
+                </p>
+                <p className="mt-4 text-sm leading-[1.85] text-ink-muted sm:text-[15px]">
+                  From the entrance and internal roads to the commercial and residential blocks
+                  already delivered nearby, these are unretouched photographs — turning the
+                  neighbourhood into something a buyer can see before they visit.
+                </p>
+              </div>
+            </div>
 
-                <div className="rounded-2xl border border-hairline bg-surface p-5 shadow-[0_18px_58px_-44px_rgba(6,31,45,0.32)] sm:p-6">
-                  <p className="eyebrow-label text-chrome">Construction timeline</p>
-                  <div className="mt-5 grid gap-4">
-                    {['Structure', 'Brickwork', 'Facade', 'Finishing', 'Ready home'].map((stage, index) => (
-                      <div key={stage} className="grid grid-cols-[32px_minmax(0,1fr)] gap-3">
-                        <span className="flex h-8 w-8 items-center justify-center rounded-full border border-hairline bg-white text-xs font-bold text-terracotta">
-                          {index + 1}
-                        </span>
-                        <div className="border-b border-hairline pb-4 last:border-b-0 last:pb-0">
-                          <p className="font-display text-lg font-bold leading-tight text-ink">{stage}</p>
-                          <p className="mt-1 text-sm leading-[1.6] text-ink-muted">
-                            {index === 0
-                              ? 'The built form comes up on the plotted street.'
-                              : index === 1
-                                ? 'Elevation openings and masonry details become visible.'
-                                : index === 2
-                                  ? 'Exterior character, railings and cladding take shape.'
-                                  : index === 3
-                                    ? 'Services, surfaces and landscape edges are refined.'
-                                    : 'The residence begins to feel complete and visit-ready.'}
-                          </p>
-                        </div>
+            <div className="mt-8 grid gap-5 lg:grid-cols-[minmax(300px,0.82fr)_minmax(0,1.18fr)]">
+              {featuredProgressPhoto && (
+                <div className="grid self-start gap-5">
+                  <article className="group overflow-hidden rounded-2xl border border-hairline bg-chrome text-white shadow-[0_34px_100px_-54px_rgba(6,31,45,0.62)]">
+                    <div className="relative aspect-[4/3] overflow-hidden bg-black">
+                      <img
+                        src={featuredProgressPhoto.src}
+                        alt={featuredProgressPhoto.alt}
+                        className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+                        loading="lazy"
+                      />
+                      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-[linear-gradient(0deg,rgba(6,31,45,0.86),transparent)]" />
+                      <div className="absolute bottom-5 left-5 right-5">
+                        <p className="eyebrow-label text-terracotta-light">{featuredProgressPhoto.label}</p>
+                        <h3 className="mt-2 font-display text-2xl font-bold leading-tight sm:text-3xl">{featuredProgressPhoto.title}</h3>
                       </div>
-                    ))}
+                    </div>
+                    <div className="bg-[linear-gradient(180deg,#263d51_0%,#203548_100%)] p-5 sm:p-6">
+                      <p className="text-sm leading-[1.75] text-white/74">{featuredProgressPhoto.note}</p>
+                      <div className="mt-5 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-white/12 bg-white/12 text-center">
+                        {['Actual photos', 'On ground', 'Visit ready'].map((item) => (
+                          <span key={item} className="bg-white/6 px-2 py-3 text-[10px] font-semibold uppercase tracking-[0.1em] text-white/82">
+                            {item}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </article>
+
+                  <div className="rounded-2xl border border-hairline bg-[linear-gradient(135deg,#ffffff_0%,#f7f2e8_58%,#eef4ef_100%)] p-5 shadow-[0_24px_72px_-52px_rgba(6,31,45,0.42)] sm:p-6">
+                    <p className="eyebrow-label text-terracotta">See it in person</p>
+                    <h3 className="mt-3 font-display text-2xl font-bold leading-tight text-ink">
+                      Walk the street, inspect the build, then choose with confidence.
+                    </h3>
+                    <p className="mt-3 text-sm leading-[1.7] text-ink-muted">
+                      A site visit lets you compare plot frontage, construction quality, road width and neighbourhood progress on ground.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setSiteVisitOpen(true)}
+                      className="mt-5 w-full rounded-none border border-chrome bg-chrome px-5 py-3 text-sm font-semibold uppercase tracking-[0.04em] text-white transition-colors hover:border-terracotta hover:bg-terracotta"
+                    >
+                      Book a site visit
+                    </button>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              {progressPhotos.map((photo) => (
-                <article
-                  key={photo.src}
-                  className="group overflow-hidden rounded-2xl border border-hairline bg-surface shadow-[0_24px_72px_-50px_rgba(6,31,45,0.38)]"
-                >
-                  <div className="relative aspect-[9/12] overflow-hidden bg-black">
-                    <img
-                      src={photo.src}
-                      alt={photo.alt}
-                      className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
-                      loading="lazy"
-                    />
-                    <span className="absolute left-4 top-4 rounded-full border border-white/25 bg-black/44 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white backdrop-blur-sm">
-                      {photo.label}
-                    </span>
-                  </div>
-                  <div className="p-4 sm:p-5">
-                    <h3 className="font-display text-xl font-bold leading-tight text-ink">{photo.title}</h3>
-                    <p className="mt-2 text-sm leading-[1.65] text-ink-muted">{photo.note}</p>
-                  </div>
-                </article>
-              ))}
+              <div className="grid gap-4 sm:grid-cols-2">
+                {progressPhotos.map((photo) => (
+                  <article
+                    key={photo.src}
+                    className="group overflow-hidden rounded-2xl border border-hairline bg-surface shadow-[0_24px_72px_-50px_rgba(6,31,45,0.38)]"
+                  >
+                    <div className="relative aspect-[4/3] overflow-hidden bg-black">
+                      <img
+                        src={photo.src}
+                        alt={photo.alt}
+                        className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
+                        loading="lazy"
+                      />
+                      <span className="absolute left-4 top-4 rounded-full border border-white/25 bg-black/44 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white backdrop-blur-sm">
+                        {photo.label}
+                      </span>
+                    </div>
+                    <div className="p-4 sm:p-5">
+                      <h3 className="font-display text-xl font-bold leading-tight text-ink">{photo.title}</h3>
+                      <p className="mt-2 text-sm leading-[1.65] text-ink-muted">{photo.note}</p>
+                    </div>
+                  </article>
+                ))}
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
       </main>
 
       <Footer />

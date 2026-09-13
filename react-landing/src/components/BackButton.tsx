@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 /** Routes where a back control makes no sense (the site root is already home). */
@@ -28,6 +29,20 @@ function ChevronLeftIcon() {
 export function BackButton() {
   const navigate = useNavigate();
   const location = useLocation();
+  // Being `fixed` under the navbar means it stays glued to the same spot as
+  // the page scrolls underneath it — fine over plain backgrounds, but it
+  // ends up stamped awkwardly on top of any full-bleed hero photo/video that
+  // scrolls up to meet it. Fading it out past the first ~120px of scroll
+  // keeps it useful (still there for the common case: land on a page, go
+  // back immediately) without it ever overlapping a hero image.
+  const [pastHero, setPastHero] = useState(false);
+
+  useEffect(() => {
+    setPastHero(window.scrollY > 120);
+    const onScroll = () => setPastHero(window.scrollY > 120);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [location.pathname]);
 
   if (HIDDEN_ON.has(location.pathname)) return null;
 
@@ -40,13 +55,20 @@ export function BackButton() {
   };
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-[68px] z-[80] px-3 sm:top-[84px] sm:px-10">
+    <div
+      className={`pointer-events-none fixed inset-x-0 top-[68px] z-[80] px-3 transition-opacity duration-200 sm:top-[84px] sm:px-10 ${
+        pastHero ? 'opacity-0' : 'opacity-100'
+      }`}
+    >
       <div className="mx-auto max-w-7xl">
         <button
           type="button"
           onClick={handleBack}
           aria-label="Go back"
-          className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-hairline bg-bg/90 px-3.5 py-2 text-xs font-semibold text-ink shadow-[0_10px_30px_-16px_rgba(6,31,45,0.45)] backdrop-blur-md transition-colors hover:border-terracotta hover:text-terracotta"
+          tabIndex={pastHero ? -1 : 0}
+          className={`inline-flex items-center gap-1.5 rounded-full border border-hairline bg-bg/90 px-3.5 py-2 text-xs font-semibold text-ink shadow-[0_10px_30px_-16px_rgba(6,31,45,0.45)] backdrop-blur-md transition-colors hover:border-terracotta hover:text-terracotta ${
+            pastHero ? 'pointer-events-none' : 'pointer-events-auto'
+          }`}
         >
           <ChevronLeftIcon />
           Back
