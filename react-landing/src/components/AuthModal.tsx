@@ -7,6 +7,7 @@ import { DivineVisionLogo } from './DivineVisionLogo';
 import { ApiError, requestPasswordReset, resetPassword } from '../services/authApi';
 import type { Role } from '../services/authApi';
 import { applicationProjects } from '../data/applicationProjects';
+import { COUNTRY_CODES_SORTED, flagEmoji } from '../data/countryCodes';
 
 function IconWrap({ children }: { children: ReactNode }) {
   return (
@@ -78,23 +79,6 @@ const ROLES: { value: Role; label: string; Icon: () => ReactNode }[] = [
   { value: 'broker', label: 'Channel Partner', Icon: BriefcaseIcon },
 ];
 
-// Country code picked separately from the number itself, so an NRI buyer or
-// broker signing up from abroad doesn't have to fight a single India-shaped
-// phone field. India stays first/default since that's the primary market.
-const COUNTRY_CODES = [
-  { code: '+91', country: 'India', flag: '🇮🇳' },
-  { code: '+971', country: 'UAE', flag: '🇦🇪' },
-  { code: '+1', country: 'USA / Canada', flag: '🇺🇸' },
-  { code: '+44', country: 'United Kingdom', flag: '🇬🇧' },
-  { code: '+61', country: 'Australia', flag: '🇦🇺' },
-  { code: '+65', country: 'Singapore', flag: '🇸🇬' },
-  { code: '+966', country: 'Saudi Arabia', flag: '🇸🇦' },
-  { code: '+974', country: 'Qatar', flag: '🇶🇦' },
-  { code: '+965', country: 'Kuwait', flag: '🇰🇼' },
-  { code: '+968', country: 'Oman', flag: '🇴🇲' },
-  { code: '+973', country: 'Bahrain', flag: '🇧🇭' },
-] as const;
-
 // The local number, digits only — the country code is a separate field, so
 // this doesn't need to know India's specific 10-digit mobile shape and can
 // fit a reasonable range of real national number lengths.
@@ -155,7 +139,12 @@ export function AuthModal() {
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [countryCode, setCountryCode] = useState<string>(COUNTRY_CODES[0].code);
+  // Keyed by ISO code, not dial code — many countries share a dial code
+  // (+1 for the US/Canada/Caribbean, +44 for the UK/Guernsey/Jersey/Isle of
+  // Man, +7 for Russia/Kazakhstan), so the dial code alone can't identify
+  // which option is selected.
+  const [countryIso, setCountryIso] = useState<string>('IN');
+  const selectedCountry = COUNTRY_CODES_SORTED.find((entry) => entry.iso === countryIso) ?? COUNTRY_CODES_SORTED[0];
   const [phone, setPhone] = useState('');
   const [project, setProject] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -201,7 +190,7 @@ export function AuthModal() {
       setPassword('');
       setFirstName('');
       setLastName('');
-      setCountryCode(COUNTRY_CODES[0].code);
+      setCountryIso('IN');
       setPhone('');
       setProject('');
       setShowPassword(false);
@@ -354,7 +343,7 @@ export function AuthModal() {
           password,
           first_name: firstName.trim(),
           last_name: lastName.trim(),
-          phone: `${countryCode}${phone}`,
+          phone: `${selectedCountry.code}${phone}`,
           project: modalRole === 'broker' ? project : undefined,
         });
         // Account created, but not signed in — send them to the sign-in screen
@@ -623,16 +612,19 @@ export function AuthModal() {
                   <label className="flex flex-col gap-1.5 text-sm text-ink">
                     Phone
                     <div className="flex gap-2">
-                      <div className="relative w-[132px] shrink-0">
+                      <div className="relative w-[104px] shrink-0">
                         <select
-                          value={countryCode}
-                          onChange={(event) => setCountryCode(event.target.value)}
+                          value={countryIso}
+                          onChange={(event) => setCountryIso(event.target.value)}
                           aria-label="Country code"
-                          className="w-full appearance-none rounded-xl border border-hairline bg-bg py-2.5 pl-3 pr-7 text-sm text-ink outline-none transition-all focus:border-green focus:ring-4 focus:ring-green/10"
+                          // A native <select> with this many options already opens as a
+                          // scrollable listbox in every browser — no extra markup needed
+                          // for the scrollbar itself.
+                          className="w-full appearance-none truncate rounded-xl border border-hairline bg-bg py-2.5 pl-3 pr-6 text-sm text-ink outline-none transition-all focus:border-green focus:ring-4 focus:ring-green/10"
                         >
-                          {COUNTRY_CODES.map((entry) => (
-                            <option key={entry.code + entry.country} value={entry.code}>
-                              {entry.flag} {entry.code}
+                          {COUNTRY_CODES_SORTED.map((entry) => (
+                            <option key={entry.iso} value={entry.iso}>
+                              {flagEmoji(entry.iso)} {entry.code}
                             </option>
                           ))}
                         </select>
@@ -657,7 +649,7 @@ export function AuthModal() {
                       </div>
                     </div>
                     <span className="text-xs text-ink-muted">
-                      {COUNTRY_CODES.find((entry) => entry.code === countryCode)?.country} · {countryCode}
+                      {selectedCountry.country} · {selectedCountry.code}
                     </span>
                   </label>
                 )}
