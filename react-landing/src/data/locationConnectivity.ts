@@ -111,7 +111,15 @@ export const townshipLocations: TownshipLocation[] = [
         },
       },
       { label: 'Hospitals nearby', value: '3' },
-      { label: 'Schools nearby', value: '5' },
+      {
+        label: 'Prayaas International School',
+        value: 'Nearby',
+        photo: {
+          src: '/landmarks/prayaas-international-school.jpg',
+          alt: 'Prayaas International School entrance gate, Ganaur',
+          blurb: 'One of the schools within easy reach of Suraksha Enclave.',
+        },
+      },
     ],
   },
 ];

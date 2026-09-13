@@ -18,5 +18,6 @@ entry (see the two railway-station photos).
 | `dps-karnal.jpg` | Delhi Public School, Karnal | developer (low-res) |
 | `ganaur-railway-station.jpg` | Ganaur railway station (Suraksha) | developer |
 | `karnal-railway-station.jpg` | Karnal railway station | Wikimedia Commons, CC BY-SA 4.0 (Keshavv1234), resized — swap for a developer photo when available |
+| `prayaas-international-school.jpg` | Prayaas International School, Ganaur (Suraksha) | developer |
 
 To swap any photo, just overwrite the file with the same name — no code change.
