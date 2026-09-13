@@ -89,13 +89,6 @@ export const siteProgressGalleryByTownship: Record<string, SiteProgressPhoto[]> 
       note: 'Facade cladding, balcony detail and exterior finishing visible on site.',
     },
     {
-      src: '/site-progress/construction-1.jpeg',
-      alt: 'Ready residence with landscaped frontage inside the township',
-      label: 'Ready home',
-      title: 'Finished residence frontage',
-      note: 'A completed home framed by internal landscaping and plotted-street access.',
-    },
-    {
       src: '/site-progress/construction-4.jpeg',
       alt: 'Residence structure in grey plaster stage photographed through greenery',
       label: 'Structure stage',

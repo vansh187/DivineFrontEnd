@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { SiteVisitDrawer } from '../components/SiteVisitDrawer';
@@ -23,8 +23,10 @@ const filters: { id: FilterId; label: string }[] = [
 ];
 
 export function OurWorkPage() {
+  const heroFilmRef = useRef<HTMLVideoElement>(null);
   const [siteVisitOpen, setSiteVisitOpen] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterId>('all');
+  const [heroFilmMuted, setHeroFilmMuted] = useState(false);
 
   const entries = Object.entries(siteProgressGalleryByTownship) as [
     keyof typeof siteProgressGalleryByTownship,
@@ -35,6 +37,30 @@ export function OurWorkPage() {
   const [featured, ...rest] = allPhotos;
   const filteredRest = rest.filter((photo) => activeFilter === 'all' || activeFilter === photo.townshipId);
   const showFeatured = activeFilter === 'all' || activeFilter === featured?.townshipId;
+
+  useEffect(() => {
+    const video = heroFilmRef.current;
+    if (!video) return;
+
+    video.muted = false;
+    setHeroFilmMuted(false);
+    video.play().catch(() => {
+      video.muted = true;
+      setHeroFilmMuted(true);
+      video.play().catch(() => {});
+    });
+  }, []);
+
+  const toggleHeroFilmSound = () => {
+    const video = heroFilmRef.current;
+    if (!video) return;
+
+    const nextMuted = !video.muted;
+    video.volume = 1;
+    video.muted = nextMuted;
+    setHeroFilmMuted(nextMuted);
+    if (!nextMuted) video.play().catch(() => {});
+  };
 
   return (
     <>
@@ -76,17 +102,26 @@ export function OurWorkPage() {
               <div className="absolute -inset-5 rounded-[2rem] border border-terracotta-light/20 bg-white/[0.03]" />
               <div className="relative overflow-hidden rounded-[1.75rem] border border-white/15 bg-black shadow-[0_44px_120px_-42px_rgba(0,0,0,0.78)]">
                 <video
+                  ref={heroFilmRef}
                   className="aspect-[4/5] h-[520px] w-full object-cover"
                   src="/our-work/ops-divine-premium.mp4"
                   poster="/townships/ops-hero.jpg"
                   autoPlay
-                  muted
+                  muted={heroFilmMuted}
                   loop
                   playsInline
                   preload="metadata"
                   aria-label="Premium on-site video from OPS Divine Greens"
                 />
                 <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(6,31,45,0.08)_0%,rgba(6,31,45,0.2)_52%,rgba(6,31,45,0.78)_100%)]" />
+                <button
+                  type="button"
+                  onClick={toggleHeroFilmSound}
+                  aria-pressed={!heroFilmMuted}
+                  className="absolute right-5 top-5 rounded-full border border-white/25 bg-black/45 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/88 backdrop-blur-sm transition-colors hover:border-terracotta-light hover:text-white"
+                >
+                  {heroFilmMuted ? 'Sound off' : 'Sound on'}
+                </button>
                 <div className="absolute bottom-5 left-5 right-5 flex items-end justify-between gap-5">
                   <div>
                     <p className="eyebrow-label text-terracotta-light">OPS Divine Greens</p>
