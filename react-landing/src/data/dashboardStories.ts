@@ -8,10 +8,18 @@ export interface DashboardStory {
 }
 
 /** Instagram-style story reels shown on the customer/broker dashboard home,
- *  so the first thing after login isn't a blank white page. Videos are
- *  cinematic township-lifestyle renders — kept short and silent (no audio
- *  track assumptions) since they autoplay inside the viewer. */
+ *  so the first thing after login isn't a blank white page. Each plays with
+ *  its own audio track (autoplay-with-sound, falling back to muted if the
+ *  browser blocks it) since the viewer is opened by a tap. */
 export const dashboardStories: DashboardStory[] = [
+  {
+    id: 'ops-divine-intro',
+    label: 'Divine Greens',
+    poster: '/stories/ops-divine-intro-poster.jpg',
+    video: '/stories/ops-divine-intro.mp4',
+    eyebrow: 'Now selling',
+    headline: 'Introducing OPS Divine Greens.',
+  },
   {
     id: 'garden-life',
     label: 'Garden & parks',
@@ -30,7 +38,7 @@ export const dashboardStories: DashboardStory[] = [
   },
   {
     id: 'ops-divine-tour',
-    label: 'OPS Divine Greens',
+    label: 'Divine Greens tour',
     poster: '/stories/ops-divine-tour-poster.jpg',
     video: '/stories/ops-divine-tour.mp4',
     eyebrow: 'Now selling',
