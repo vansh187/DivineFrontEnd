@@ -24,6 +24,13 @@ export const siteProgressGalleryByTownship: Record<string, SiteProgressPhoto[]> 
       note: 'The arrival arch marking the entrance to Divine City, the larger township Suraksha Enclave is part of.',
     },
     {
+      src: '/site-progress/suraksha/suraksha-divine-city-entrance.jpg',
+      alt: 'Wide view of the Divine City entrance canopy with landscaped roads on both sides',
+      label: 'Township entrance',
+      title: 'A landmark arrival into Divine City',
+      note: 'The broad entrance canopy and landscaped approach roads that welcome residents and visitors into the township.',
+    },
+    {
       src: '/site-progress/suraksha/suraksha-internal-road-block-b.jpg',
       alt: 'Internal plotted road with Block-B signage inside the township',
       label: 'Plotted layout',

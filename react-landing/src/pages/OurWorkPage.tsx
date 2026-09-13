@@ -46,7 +46,8 @@ export function OurWorkPage() {
         <section className="relative overflow-hidden bg-chrome px-4 pb-16 pt-28 sm:px-10 sm:pb-20 sm:pt-32">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_60%_at_15%_10%,rgba(230,126,34,0.16),transparent_58%)]" />
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_50%_50%_at_100%_100%,rgba(230,126,34,0.1),transparent_60%)]" />
-          <div className="relative z-10 mx-auto max-w-6xl">
+          <div className="relative z-10 mx-auto grid max-w-6xl gap-10 lg:grid-cols-[minmax(0,0.98fr)_minmax(360px,0.72fr)] lg:items-center">
+            <div>
             <span className="eyebrow-label text-terracotta-light">Our work</span>
             <h1 className="mt-5 max-w-[16ch] font-display text-balance text-5xl font-bold leading-[1.05] text-white sm:text-7xl">
               Proof, not promises.
@@ -68,6 +69,36 @@ export function OurWorkPage() {
                   <p className="eyebrow-label mt-1 text-[9px] text-terracotta-light">{label}</p>
                 </div>
               ))}
+            </div>
+            </div>
+
+            <div className="relative hidden lg:block">
+              <div className="absolute -inset-5 rounded-[2rem] border border-terracotta-light/20 bg-white/[0.03]" />
+              <div className="relative overflow-hidden rounded-[1.75rem] border border-white/15 bg-black shadow-[0_44px_120px_-42px_rgba(0,0,0,0.78)]">
+                <video
+                  className="aspect-[4/5] h-[520px] w-full object-cover"
+                  src="/our-work/ops-divine-premium.mp4"
+                  poster="/townships/ops-hero.jpg"
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  preload="metadata"
+                  aria-label="Premium on-site video from OPS Divine Greens"
+                />
+                <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(6,31,45,0.08)_0%,rgba(6,31,45,0.2)_52%,rgba(6,31,45,0.78)_100%)]" />
+                <div className="absolute bottom-5 left-5 right-5 flex items-end justify-between gap-5">
+                  <div>
+                    <p className="eyebrow-label text-terracotta-light">OPS Divine Greens</p>
+                    <p className="mt-2 max-w-[20ch] font-display text-2xl font-bold leading-tight text-white">
+                      Living proof of craft.
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-full border border-terracotta-light/45 bg-black/45 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/88 backdrop-blur-sm">
+                    Site film
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         </section>
