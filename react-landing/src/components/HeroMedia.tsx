@@ -44,9 +44,17 @@ export function HeroMedia() {
     const video = videoRef.current;
     if (!video) return;
 
-    video.muted = true;
-    setMuted(true);
-    video.play().catch(() => {});
+    // Try to play with sound on first — most browsers only block this on a
+    // visitor's very first, no-interaction visit. If that gets rejected,
+    // fall back to muted autoplay (which is never blocked) instead of
+    // leaving the hero frozen on its poster frame.
+    video.muted = false;
+    setMuted(false);
+    video.play().catch(() => {
+      video.muted = true;
+      setMuted(true);
+      video.play().catch(() => {});
+    });
   }, [reducedMotion]);
 
   if (reducedMotion) {
@@ -77,7 +85,7 @@ export function HeroMedia() {
         autoPlay
         loop
         playsInline
-        preload="auto"
+        preload="metadata"
         poster="/hero/hero-loop-poster.jpg"
         aria-label="Cinematic fly-through of OPS Divine Greens and Suraksha Enclave, with background score — entrance gates, aerial township views, amenities and clubhouses"
       >

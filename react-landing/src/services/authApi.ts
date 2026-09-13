@@ -16,9 +16,15 @@ export interface AuthProfile {
 export interface SignupInput {
   email: string;
   password: string;
+  // Optional in the type since the chat-based quick-signup fallback
+  // (ChatWidget) doesn't collect one — but the AuthModal signup form makes
+  // this required client-side, and the backend should enforce it too.
   phone?: string;
   first_name?: string;
   last_name?: string;
+  /** Which township the channel partner works with — 'suraksha-enclave' or
+   *  'ops-divine-greens'. Only meaningful (and required) for role 'broker'. */
+  project?: string;
 }
 
 export interface LoginInput {
@@ -114,9 +120,10 @@ export function signup(role: Role, input: SignupInput): Promise<AuthProfile> {
     username: input.email,
     email: input.email,
     password: input.password,
-    phone: input.phone || undefined,
+    phone: input.phone,
     first_name: input.first_name || undefined,
     last_name: input.last_name || undefined,
+    project: role === 'broker' ? input.project : undefined,
   }, 'signup');
 }
 
