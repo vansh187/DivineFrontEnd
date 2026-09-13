@@ -78,6 +78,28 @@ const ROLES: { value: Role; label: string; Icon: () => ReactNode }[] = [
   { value: 'broker', label: 'Channel Partner', Icon: BriefcaseIcon },
 ];
 
+// Country code picked separately from the number itself, so an NRI buyer or
+// broker signing up from abroad doesn't have to fight a single India-shaped
+// phone field. India stays first/default since that's the primary market.
+const COUNTRY_CODES = [
+  { code: '+91', country: 'India', flag: '🇮🇳' },
+  { code: '+971', country: 'UAE', flag: '🇦🇪' },
+  { code: '+1', country: 'USA / Canada', flag: '🇺🇸' },
+  { code: '+44', country: 'United Kingdom', flag: '🇬🇧' },
+  { code: '+61', country: 'Australia', flag: '🇦🇺' },
+  { code: '+65', country: 'Singapore', flag: '🇸🇬' },
+  { code: '+966', country: 'Saudi Arabia', flag: '🇸🇦' },
+  { code: '+974', country: 'Qatar', flag: '🇶🇦' },
+  { code: '+965', country: 'Kuwait', flag: '🇰🇼' },
+  { code: '+968', country: 'Oman', flag: '🇴🇲' },
+  { code: '+973', country: 'Bahrain', flag: '🇧🇭' },
+] as const;
+
+// The local number, digits only — the country code is a separate field, so
+// this doesn't need to know India's specific 10-digit mobile shape and can
+// fit a reasonable range of real national number lengths.
+const PHONE_PATTERN = /^\d{6,12}$/;
+
 interface FieldProps {
   label: string;
   type: string;
@@ -91,9 +113,11 @@ interface FieldProps {
   inputMode?: 'text' | 'numeric' | 'tel' | 'email';
   optional?: boolean;
   trailing?: ReactNode;
+  pattern?: string;
+  title?: string;
 }
 
-function Field({ label, type, value, onChange, icon, autoComplete, required, minLength, maxLength, inputMode, optional, trailing }: FieldProps) {
+function Field({ label, type, value, onChange, icon, autoComplete, required, minLength, maxLength, inputMode, optional, trailing, pattern, title }: FieldProps) {
   return (
     <label className="flex flex-col gap-1.5 text-sm text-ink">
       <span>
@@ -108,6 +132,8 @@ function Field({ label, type, value, onChange, icon, autoComplete, required, min
           minLength={minLength}
           maxLength={maxLength}
           inputMode={inputMode}
+          pattern={pattern}
+          title={title}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           autoComplete={autoComplete}
@@ -129,6 +155,7 @@ export function AuthModal() {
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [countryCode, setCountryCode] = useState<string>(COUNTRY_CODES[0].code);
   const [phone, setPhone] = useState('');
   const [project, setProject] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -174,6 +201,7 @@ export function AuthModal() {
       setPassword('');
       setFirstName('');
       setLastName('');
+      setCountryCode(COUNTRY_CODES[0].code);
       setPhone('');
       setProject('');
       setShowPassword(false);
@@ -289,12 +317,25 @@ export function AuthModal() {
     event.preventDefault();
     if (submitting) return;
 
-    if (password.length < 8) {
+    if (!password) {
+      setError('Enter your password.');
+      return;
+    }
+    if (isSignup && password.length < 8) {
       setError('Password must be at least 8 characters.');
       return;
     }
-    if (isSignup && !phone.trim()) {
-      setError('Phone number is required.');
+    if (isSignup && !PHONE_PATTERN.test(phone)) {
+      setError('Enter a valid mobile number.');
+      return;
+    }
+    const namePattern = /^[A-Za-z][A-Za-z '.-]*$/;
+    if (isSignup && !namePattern.test(firstName.trim())) {
+      setError('Enter a valid first name (letters only).');
+      return;
+    }
+    if (isSignup && !namePattern.test(lastName.trim())) {
+      setError('Enter a valid last name (letters only).');
       return;
     }
     if (isSignup && modalRole === 'broker' && !project) {
@@ -309,11 +350,11 @@ export function AuthModal() {
     try {
       if (isSignup) {
         await signup(modalRole, {
-          email,
+          email: email.trim(),
           password,
-          first_name: firstName || undefined,
-          last_name: lastName || undefined,
-          phone,
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+          phone: `${countryCode}${phone}`,
           project: modalRole === 'broker' ? project : undefined,
         });
         // Account created, but not signed in — send them to the sign-in screen
@@ -322,7 +363,7 @@ export function AuthModal() {
         setPassword('');
         setSuccessMessage('Account created successfully. Sign in to continue.');
       } else {
-        await login(modalRole, { email, password });
+        await login(modalRole, { email: email.trim(), password });
         closeModal();
         // Leaving "/" unmounts the hero/journey sections, which GSAP has pinned by
         // physically wrapping them in "pin-spacer" divs — React doesn't know about
@@ -530,8 +571,32 @@ export function AuthModal() {
               <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
                 {isSignup && (
                   <div className="grid grid-cols-2 gap-3">
-                    <Field label="First name" type="text" value={firstName} onChange={setFirstName} icon={<UserIcon />} autoComplete="given-name" />
-                    <Field label="Last name" type="text" value={lastName} onChange={setLastName} icon={<UserIcon />} autoComplete="family-name" />
+                    <Field
+                      label="First name"
+                      type="text"
+                      value={firstName}
+                      onChange={setFirstName}
+                      icon={<UserIcon />}
+                      autoComplete="given-name"
+                      required
+                      minLength={2}
+                      maxLength={50}
+                      pattern="[A-Za-z][A-Za-z '.-]*"
+                      title="Letters only (2-50 characters)."
+                    />
+                    <Field
+                      label="Last name"
+                      type="text"
+                      value={lastName}
+                      onChange={setLastName}
+                      icon={<UserIcon />}
+                      autoComplete="family-name"
+                      required
+                      minLength={2}
+                      maxLength={50}
+                      pattern="[A-Za-z][A-Za-z '.-]*"
+                      title="Letters only (2-50 characters)."
+                    />
                   </div>
                 )}
 
@@ -545,6 +610,7 @@ export function AuthModal() {
                       ref={emailInputRef}
                       type="email"
                       required
+                      maxLength={254}
                       value={email}
                       onChange={(event) => setEmail(event.target.value)}
                       autoComplete="email"
@@ -554,7 +620,46 @@ export function AuthModal() {
                 </label>
 
                 {isSignup && (
-                  <Field label="Phone" type="tel" value={phone} onChange={setPhone} icon={<PhoneIcon />} autoComplete="tel" required />
+                  <label className="flex flex-col gap-1.5 text-sm text-ink">
+                    Phone
+                    <div className="flex gap-2">
+                      <div className="relative w-[132px] shrink-0">
+                        <select
+                          value={countryCode}
+                          onChange={(event) => setCountryCode(event.target.value)}
+                          aria-label="Country code"
+                          className="w-full appearance-none rounded-xl border border-hairline bg-bg py-2.5 pl-3 pr-7 text-sm text-ink outline-none transition-all focus:border-green focus:ring-4 focus:ring-green/10"
+                        >
+                          {COUNTRY_CODES.map((entry) => (
+                            <option key={entry.code + entry.country} value={entry.code}>
+                              {entry.flag} {entry.code}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="relative flex-1">
+                        <span className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted">
+                          <PhoneIcon />
+                        </span>
+                        <input
+                          type="tel"
+                          inputMode="numeric"
+                          required
+                          minLength={6}
+                          maxLength={12}
+                          pattern="\d{6,12}"
+                          title="Mobile number, digits only (6-12 digits)."
+                          value={phone}
+                          onChange={(event) => setPhone(event.target.value.replace(/\D/g, '').slice(0, 12))}
+                          autoComplete="tel-national"
+                          className="w-full rounded-xl border border-hairline bg-bg py-2.5 pl-10 pr-3.5 text-sm text-ink outline-none transition-all focus:border-green focus:ring-4 focus:ring-green/10"
+                        />
+                      </div>
+                    </div>
+                    <span className="text-xs text-ink-muted">
+                      {COUNTRY_CODES.find((entry) => entry.code === countryCode)?.country} · {countryCode}
+                    </span>
+                  </label>
                 )}
 
                 {isSignup && modalRole === 'broker' && (
@@ -589,7 +694,8 @@ export function AuthModal() {
                   icon={<LockIcon />}
                   autoComplete={isSignup ? 'new-password' : 'current-password'}
                   required
-                  minLength={8}
+                  minLength={isSignup ? 8 : undefined}
+                  maxLength={128}
                   trailing={
                     <button
                       type="button"
