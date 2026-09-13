@@ -5,6 +5,7 @@ import { journeyStops } from '../data/journeyStops';
 import { townshipLocations } from '../data/locationConnectivity';
 import { getProjectDetail, type ProjectSpec } from '../data/projectDetails';
 import { townshipVideoByProject } from '../data/townshipVideos';
+import { StoriesBar } from './stories/StoriesBar';
 
 /** Ongoing, bookable townships — the ones with a RERA id and plot sizing. */
 const liveProjects = journeyStops.filter(
@@ -69,6 +70,10 @@ export function LiveProjectsSection() {
       <h2 className="font-display text-balance text-4xl font-bold text-ink sm:text-6xl">
         Two live townships on the corridor.
       </h2>
+
+      <div className="mt-8">
+        <StoriesBar />
+      </div>
 
       <div className="mt-8 flex flex-wrap gap-x-8 gap-y-1 border-b border-hairline">
         {liveProjects.map((project) => (

@@ -10,6 +10,7 @@ import { loadSavedTownships, toggleSavedTownship } from '../services/savedTownsh
 import { loadPendingUnit, savePendingUnit } from '../services/pendingUnit';
 import type { InventoryUnit } from '../services/inventoryApi';
 import { PaymentDueBanner } from '../components/PaymentDueBanner';
+import { StoriesBar } from '../components/stories/StoriesBar';
 
 interface TownshipCardProps {
   savedIds: string[];
@@ -177,6 +178,9 @@ export function CustomerPage() {
         subheading="Your shortlist and site visits will live here as we build out the customer portal — documents are ready below."
         before={
           <>
+            <div className="mt-6">
+              <StoriesBar />
+            </div>
             {pendingUnit && (
               <p className="mt-6 truncate rounded-lg border border-terracotta/30 bg-terracotta/10 px-3 py-2 text-xs font-semibold text-terracotta">
                 Booking {pendingUnit.project_name}

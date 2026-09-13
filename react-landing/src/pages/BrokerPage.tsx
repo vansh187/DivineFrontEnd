@@ -3,6 +3,7 @@ import { useAuth, getDisplayName } from '../hooks/useAuth';
 import { DashboardLayout, PlaceholderCard } from '../components/DashboardLayout';
 import { BrokerDocuments } from '../components/BrokerDocuments';
 import { UsersIcon, TagIcon, ChartIcon } from '../components/DashboardIcons';
+import { StoriesBar } from '../components/stories/StoriesBar';
 
 export function BrokerPage() {
   const { session } = useAuth();
@@ -14,7 +15,14 @@ export function BrokerPage() {
       eyebrow="Broker workspace"
       heading={<>Welcome back, {name}.</>}
       subheading="Schedule site visits first, then manage broker documents and the rest of your workspace."
-      before={<BrokerDocuments />}
+      before={
+        <>
+          <div className="mt-6">
+            <StoriesBar />
+          </div>
+          <BrokerDocuments />
+        </>
+      }
     >
       <PlaceholderCard
         icon={<UsersIcon />}

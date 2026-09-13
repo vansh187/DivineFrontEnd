@@ -114,6 +114,8 @@ export function OurWorkPage() {
                   aria-label="Premium on-site video from OPS Divine Greens"
                 />
                 <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(6,31,45,0.08)_0%,rgba(6,31,45,0.2)_52%,rgba(6,31,45,0.78)_100%)]" />
+                {/* Covers the AI-generation watermark baked into the corner of the source clip. */}
+                <div className="pointer-events-none absolute bottom-0 right-0 h-16 w-32 bg-chrome/40 backdrop-blur-md" />
                 <button
                   type="button"
                   onClick={toggleHeroFilmSound}
