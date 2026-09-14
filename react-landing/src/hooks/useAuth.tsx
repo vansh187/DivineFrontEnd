@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import * as authApi from '../services/authApi';
 import type { LoginInput, Role, SignupInput } from '../services/authApi';
@@ -86,10 +86,24 @@ const STORAGE_KEY = 'dvi_auth_session';
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+/** A JWT with no exp claim is treated as expired rather than eternal - a
+ * malformed/undecodable token should never be trusted as a live session. */
+function isTokenExpired(token: string): boolean {
+  const exp = authApi.decodeJwtClaims(token)?.exp;
+  if (!exp) return true;
+  return Date.now() >= exp * 1000;
+}
+
 function readStoredSession(): AuthSession | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as AuthSession) : null;
+    if (!raw) return null;
+    const stored = JSON.parse(raw) as AuthSession;
+    if (isTokenExpired(stored.token)) {
+      localStorage.removeItem(STORAGE_KEY);
+      return null;
+    }
+    return stored;
   } catch {
     return null;
   }
@@ -111,6 +125,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // lives in React state for this tab; it just won't survive a reload.
     }
   }, []);
+
+  // A token that expires while the tab stays open (rather than being caught on
+  // the next reload by readStoredSession) must still sign the visitor out -
+  // otherwise a stale session can sit in memory showing the dashboard all day.
+  useEffect(() => {
+    if (!session) return;
+    if (isTokenExpired(session.token)) {
+      persist(null);
+      return;
+    }
+    const id = window.setInterval(() => {
+      if (isTokenExpired(session.token)) persist(null);
+    }, 60_000);
+    return () => window.clearInterval(id);
+  }, [session, persist]);
 
   const login = useCallback(
     async (role: Role, input: LoginInput) => {
