@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, getDisplayName } from '../hooks/useAuth';
 import { DashboardLayout } from '../components/DashboardLayout';
@@ -14,6 +15,18 @@ import { StoriesBar } from '../components/stories/StoriesBar';
 import { listMyVisits } from '../services/visitsApi';
 import type { VisitRecord } from '../services/visitsApi';
 import { getApplicationProject } from '../data/applicationProjects';
+import { fetchBookingReceiptPdf, listMyBookings } from '../services/bookingsApi';
+import type { BookingRecord } from '../services/bookingsApi';
+import { downloadPdfBlob } from '../services/applicationPdf';
+
+const BOOKING_BANNER_DAYS = 15;
+const BOOKING_BANNER_MS = BOOKING_BANNER_DAYS * 24 * 60 * 60 * 1000;
+
+function isWithinBookingBannerWindow(booking: BookingRecord): boolean {
+  const timestamp = Date.parse(booking.created_at);
+  if (Number.isNaN(timestamp)) return false;
+  return Date.now() - timestamp <= BOOKING_BANNER_MS;
+}
 
 interface TownshipCardProps {
   savedIds: string[];
@@ -190,6 +203,90 @@ function SiteVisitsCard({ visits, loading, onAddVisit }: SiteVisitsCardProps) {
   );
 }
 
+interface ConfirmedBookingBannerProps {
+  bookings: BookingRecord[];
+  downloadingBookingId: string | null;
+  error: string | null;
+  onDownload: (booking: BookingRecord) => void;
+}
+
+function ConfirmedBookingBanner({
+  bookings,
+  downloadingBookingId,
+  error,
+  onDownload,
+}: ConfirmedBookingBannerProps) {
+  const pieces = Array.from({ length: 14 }, (_, index) => index);
+  const hasMany = bookings.length > 1;
+
+  return (
+    <div className="relative mt-6 overflow-hidden rounded-2xl border border-green/30 bg-green/10 px-5 py-5 shadow-[0_18px_42px_-30px_rgba(6,31,45,0.45)]">
+      <style>{`
+        @keyframes booking-confetti-burst {
+          0% { transform: translate3d(0, 0, 0) rotate(0deg); opacity: 0; }
+          18% { opacity: 1; }
+          100% { transform: translate3d(var(--x), var(--y), 0) rotate(220deg); opacity: 0; }
+        }
+        .booking-confetti-piece {
+          animation: booking-confetti-burst 1.8s ease-out infinite;
+          animation-delay: var(--delay);
+        }
+      `}</style>
+      <div className="pointer-events-none absolute inset-0">
+        {pieces.map((piece) => (
+          <span
+            key={piece}
+            className="booking-confetti-piece absolute left-1/2 top-7 h-2 w-1 rounded-sm"
+            style={
+              {
+                '--x': `${(piece % 2 === 0 ? 1 : -1) * (36 + piece * 9)}px`,
+                '--y': `${32 + (piece % 5) * 18}px`,
+                '--delay': `${piece * 0.08}s`,
+                backgroundColor: piece % 3 === 0 ? '#C47A2C' : piece % 3 === 1 ? '#1D7F58' : '#3E6EA8',
+              } as CSSProperties
+            }
+          />
+        ))}
+      </div>
+      <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-green">Congratulations</p>
+          <h2 className="mt-1 font-display text-2xl font-bold text-ink">
+            {hasMany ? 'Your plots are booked and KYC is verified.' : 'Your plot is booked and KYC is verified.'}
+          </h2>
+          <div className="mt-3 grid max-h-56 gap-2 overflow-y-auto pr-1">
+            {bookings.map((booking) => {
+              const downloadingReceipt = downloadingBookingId === booking.id;
+              return (
+                <div
+                  key={booking.id}
+                  className="flex flex-col gap-3 rounded-lg border border-green/20 bg-surface/80 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <p className="text-sm leading-relaxed text-ink-muted">
+                    Plot <span className="font-semibold text-ink">{booking.unit_number || '-'}</span>
+                    {booking.project_name ? ` in ${booking.project_name}` : ''} is confirmed.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onDownload(booking)}
+                      disabled={downloadingReceipt || !booking.can_download_receipt}
+                      className="shrink-0 rounded-full bg-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {downloadingReceipt ? 'Preparing receipt...' : 'Download receipt'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {error && <p className="mt-2 text-xs font-semibold text-red-700">{error}</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CustomerPage() {
   const { session, openModal } = useAuth();
   const navigate = useNavigate();
@@ -229,6 +326,9 @@ export function CustomerPage() {
   const [siteVisitOpen, setSiteVisitOpen] = useState(false);
   const [visits, setVisits] = useState<VisitRecord[]>([]);
   const [visitsLoading, setVisitsLoading] = useState(false);
+  const [bookings, setBookings] = useState<BookingRecord[]>([]);
+  const [downloadingBookingId, setDownloadingBookingId] = useState<string | null>(null);
+  const [bookingReceiptError, setBookingReceiptError] = useState<string | null>(null);
 
   const refreshVisits = useCallback(() => {
     if (!session) {
@@ -246,6 +346,45 @@ export function CustomerPage() {
     refreshVisits();
   }, [refreshVisits]);
 
+  const refreshBookings = useCallback(() => {
+    if (!session) {
+      setBookings([]);
+      return;
+    }
+    listMyBookings(session.token)
+      .then(setBookings)
+      .catch(() => {
+        setBookings([]);
+      });
+  }, [session]);
+
+  useEffect(() => {
+    refreshBookings();
+  }, [refreshBookings]);
+
+  const confirmedBookings = bookings.filter(
+    (booking) =>
+      booking.status === 'booked' &&
+      booking.kyc_status === 'verified' &&
+      booking.can_download_receipt &&
+      isWithinBookingBannerWindow(booking),
+  );
+  const hasConfirmedBookings = confirmedBookings.length > 0;
+
+  const handleDownloadBookingReceipt = async (booking: BookingRecord) => {
+    if (!session) return;
+    setDownloadingBookingId(booking.id);
+    setBookingReceiptError(null);
+    try {
+      const blob = await fetchBookingReceiptPdf(session.token, booking.id);
+      downloadPdfBlob(blob, `${booking.project_name || 'booking'}-receipt-${booking.id}.pdf`);
+    } catch (err) {
+      setBookingReceiptError(err instanceof Error ? err.message : 'Could not download the booking receipt.');
+    } finally {
+      setDownloadingBookingId(null);
+    }
+  };
+
   return (
     <>
       <DashboardLayout
@@ -257,6 +396,14 @@ export function CustomerPage() {
             <div className="mt-6">
               <StoriesBar />
             </div>
+            {hasConfirmedBookings && (
+              <ConfirmedBookingBanner
+                bookings={confirmedBookings}
+                downloadingBookingId={downloadingBookingId}
+                error={bookingReceiptError}
+                onDownload={handleDownloadBookingReceipt}
+              />
+            )}
             {pendingUnit && (
               <p className="mt-6 truncate rounded-lg border border-terracotta/30 bg-terracotta/10 px-3 py-2 text-xs font-semibold text-terracotta">
                 Booking {pendingUnit.project_name}

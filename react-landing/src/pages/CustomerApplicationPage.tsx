@@ -17,6 +17,8 @@ import { createPaymentOrder, recordCashPayment, verifyPayment } from '../service
 import { openRazorpayCheckout } from '../services/razorpayCheckout';
 import { amountToIndianWords } from '../utils/currency';
 import { formatAadhaarDob, mapAadhaarGender } from '../utils/aadhaar';
+import { listMyBookings } from '../services/bookingsApi';
+import type { BookingRecord } from '../services/bookingsApi';
 
 function parseAmount(value: string): number {
   const cleaned = Number(value.replace(/,/g, '').trim());
@@ -422,6 +424,7 @@ export function CustomerApplicationPage() {
   const [payingCash, setPayingCash] = useState(false);
   const [downloadingReceipt, setDownloadingReceipt] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [bookings, setBookings] = useState<BookingRecord[]>([]);
 
   const persist = (next: CustomerDocState) => {
     setDocs(next);
@@ -640,6 +643,24 @@ export function CustomerApplicationPage() {
       cancelled = true;
     };
   }, [docs.cancelledCheque.dataUrl, docs.cancelledCheque.documentId, docs.cancelledCheque.fileName, session]);
+
+  useEffect(() => {
+    if (!session) {
+      setBookings([]);
+      return;
+    }
+    let cancelled = false;
+    listMyBookings(session.token)
+      .then((records) => {
+        if (!cancelled) setBookings(records);
+      })
+      .catch(() => {
+        if (!cancelled) setBookings([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
 
   if (!session) return <Navigate to="/" replace />;
 
@@ -1105,6 +1126,14 @@ export function CustomerApplicationPage() {
     parseAmount(form.bookingAmount) > 0;
   const canGeneratePdf = paymentComplete || offlinePaymentEntered;
   const selectedProject = applicationProjects.find((project) => project.id === form.projectId);
+  const currentBookedUnit = docs.bookingApplication.inventoryUnitNumber || form.unitNo;
+  const approvedBooking =
+    bookings.find(
+      (booking) =>
+        booking.status === 'booked' &&
+        booking.kyc_status === 'verified' &&
+        (currentBookedUnit ? booking.unit_number === currentBookedUnit : true),
+    ) ?? null;
   // OPS Divine Greens is fully sold — block the form past project selection
   // and surface the sold-out card instead, rather than let a signed-in
   // customer fill out an application for a plot that no longer exists.
@@ -1710,14 +1739,21 @@ export function CustomerApplicationPage() {
                   {docs.payment.method === 'cash' ? ' in cash' : ' online'}
                   {docs.payment.paidAt ? ` on ${new Date(docs.payment.paidAt).toLocaleDateString('en-IN')}` : ''}.
                 </p>
-                {docs.payment.inventoryStatus === 'pending_kyc_review' && (
+                {approvedBooking ? (
+                  <p className="mt-3 rounded-lg border border-green/30 bg-green/10 px-3 py-2 text-xs leading-relaxed text-green">
+                    <span className="font-semibold text-ink">Booking confirmed.</span> Plot{' '}
+                    {approvedBooking.unit_number || currentBookedUnit}
+                    {approvedBooking.project_name ? ` in ${approvedBooking.project_name}` : ''} is booked and KYC verified.
+                    Your booking receipt is available on your profile.
+                  </p>
+                ) : docs.payment.inventoryStatus === 'pending_kyc_review' && (
                   <p className="mt-3 rounded-lg border border-hairline bg-bg px-3 py-2 text-xs leading-relaxed text-ink-muted">
                     <span className="font-semibold text-ink">Payment received — we&rsquo;re verifying your documents.</span>{' '}
                     Your plot is held for you while our team reviews your KYC. You&rsquo;ll be notified once your
                     booking is confirmed, and the booking receipt unlocks on your profile at that point.
                   </p>
                 )}
-                {docs.payment.inventoryStatus === 'conflict' && (
+                {!approvedBooking && docs.payment.inventoryStatus === 'conflict' && (
                   <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-900">
                     <span className="font-semibold">Your payment went through.</span> Plot{' '}
                     {docs.bookingApplication.inventoryUnitNumber
