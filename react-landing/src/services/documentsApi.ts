@@ -191,6 +191,17 @@ export async function uploadCoApplicantPhoto(token: string, file: File): Promise
   });
 }
 
+/** Uploads the cancelled cheque required by the admin KYC approval checklist. */
+export async function uploadCancelledCheque(token: string, file: File): Promise<GeneratedDocument> {
+  validatePhotoFile(file);
+  const formData = new FormData();
+  formData.append('file', file);
+  return authedRequest<GeneratedDocument>('/documents/cancelled-cheque', token, {
+    method: 'POST',
+    body: formData,
+  });
+}
+
 /** Uploads the customer-generated booking application PDF to backend storage.
  * Backend should persist this file in Supabase Storage and return the document row
  * with a signed URL, matching the other document endpoints. */

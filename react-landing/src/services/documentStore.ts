@@ -140,11 +140,23 @@ export interface SignatureStatus {
   fileSize: number | null;
   uploadedAt: string | null;
   dataUrl: string | null;
+  documentId: string | null;
+  signedUrl: string | null;
+  signedUrlExpiresAt: number | null;
   error: string | null;
 }
 
 export function emptySignatureStatus(): SignatureStatus {
-  return { fileName: null, fileSize: null, uploadedAt: null, dataUrl: null, error: null };
+  return {
+    fileName: null,
+    fileSize: null,
+    uploadedAt: null,
+    dataUrl: null,
+    documentId: null,
+    signedUrl: null,
+    signedUrlExpiresAt: null,
+    error: null,
+  };
 }
 
 export interface BookingApplicationFormData {
@@ -401,8 +413,8 @@ export interface CustomerDocState {
   coApplicantPhoto: AadhaarPhotoStatus;
   applicantSignature: SignatureStatus;
   coApplicantSignature: SignatureStatus;
-  /** Mandatory cancelled cheque upload (Page 2 - Fill application form) - client-side
-   * only, same as the signatures, embedded as an identity attachment page in the PDF. */
+  /** Mandatory cancelled cheque upload (Page 2 - Fill application form). Also
+   * uploaded to backend storage as `cancelled_cheque` for admin KYC approval. */
   cancelledCheque: SignatureStatus;
   /** Optional proof of an offline booking payment - a scan/photo or PDF of the
    * cheque, demand draft, or NEFT/RTGS/UTR receipt entered on Page 2. Client-side
