@@ -38,6 +38,7 @@ export function SiteVisitDrawer({ open, onClose }: SiteVisitDrawerProps) {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [notes, setNotes] = useState('');
   const [project, setProject] = useState<ApplicationProjectId>(applicationProjects[0].id);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -58,6 +59,7 @@ export function SiteVisitDrawer({ open, onClose }: SiteVisitDrawerProps) {
         customer_email: email.trim() || undefined,
         project,
         preferred_window: selectedWindow.value,
+        notes: notes.trim() || undefined,
       });
       setRequested(true);
     } catch (err) {
@@ -90,6 +92,7 @@ export function SiteVisitDrawer({ open, onClose }: SiteVisitDrawerProps) {
       setDirectionsOpen(false);
       setRequested(false);
       setError('');
+      setNotes('');
     }
   }, [open]);
 
@@ -215,6 +218,16 @@ export function SiteVisitDrawer({ open, onClose }: SiteVisitDrawerProps) {
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="Email (optional)"
                 aria-label="Email"
+                disabled={submitting || requested}
+                className="rounded-lg border border-hairline bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-green disabled:cursor-not-allowed disabled:opacity-60"
+              />
+              <textarea
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+                placeholder="Notes (optional)"
+                aria-label="Notes"
+                maxLength={1000}
+                rows={3}
                 disabled={submitting || requested}
                 className="rounded-lg border border-hairline bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-green disabled:cursor-not-allowed disabled:opacity-60"
               />
