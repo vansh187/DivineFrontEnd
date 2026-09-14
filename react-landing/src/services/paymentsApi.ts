@@ -20,12 +20,16 @@ export type PaymentPurpose = 'plot_booking' | 'installment' | 'other';
 
 /** Outcome of the inventory lock the backend attempts when a `plot_booking`
  * payment settles:
- *  - `booked`   — the plot was free and is now locked to this buyer
+ *  - `pending_kyc_review` — the plot is held for this buyer while an admin
+ *                 reviews their KYC documents; not booked yet
+ *  - `booked`   — KYC was approved and the plot is now locked to this buyer
+ *                 (only reachable via the KYC approval flow now, not directly
+ *                 on payment settlement)
  *  - `conflict` — the payment went through but the plot was already taken; the
  *                 money is safe and flagged for manual review server-side
  *  - `null`     — this payment had no `plot_booking` purpose, so nothing happened
  */
-export type InventoryLockStatus = 'booked' | 'conflict' | null;
+export type InventoryLockStatus = 'pending_kyc_review' | 'booked' | 'conflict' | null;
 
 /** Only set when `inventory_status === 'conflict'`. */
 export type InventoryConflictReason = 'unit_not_available' | 'inventory_update_failed' | null;
@@ -40,6 +44,8 @@ export interface BookingPaymentOptions {
   dueDate?: string | null;
 }
 
+export type CashPaymentMethod = 'cash' | 'rtgs_neft';
+
 export interface PaymentRecord {
   id: string;
   owner_id: string;
@@ -47,7 +53,7 @@ export interface PaymentRecord {
   amount: number;
   currency: string;
   status: string;
-  method: 'razorpay' | 'cash';
+  method: 'razorpay' | 'cash' | 'rtgs_neft';
   verified: boolean;
   razorpay_order_id: string;
   razorpay_payment_id: string | null;
@@ -58,6 +64,10 @@ export interface PaymentRecord {
   inventory_status?: InventoryLockStatus;
   /** Populated only when `inventory_status === 'conflict'`. */
   inventory_conflict_reason?: InventoryConflictReason;
+  /** Present on a `plot_booking` payment once inventory_status is set - the
+   *  booking record to poll via bookingsApi (GET /bookings/mine) and, once
+   *  approved, download the receipt for. */
+  booking_id?: string | null;
 }
 
 export interface VerifyPaymentInput {
@@ -80,6 +90,8 @@ function messageForPaymentError(status: number, detail: unknown): string {
     if (detail === 'invalid_amount') return 'Enter a valid amount.';
     if (detail === 'amount_too_large') return 'That amount is too large — please contact us directly for large payments.';
     if (detail === 'invalid_purpose') return 'Something went wrong starting your payment. Please refresh and try again.';
+    if (detail === 'invalid_method') return 'Choose a valid payment method.';
+    if (detail === 'utr_number_required') return 'Enter the UTR number for this bank transfer.';
   }
   if (typeof detail === 'string' && detail.startsWith('payment_')) {
     return 'Something went wrong starting your payment. Please try again.';
@@ -121,13 +133,17 @@ export function verifyPayment(token: string, input: VerifyPaymentInput): Promise
   });
 }
 
-/** Records cash already collected in person — settles immediately server-side, no
- * gateway involved (unlike createPaymentOrder/verifyPayment). */
+/** Records cash (or an already-completed RTGS/NEFT transfer) collected outside
+ * Razorpay — settles immediately server-side, no gateway involved (unlike
+ * createPaymentOrder/verifyPayment). `utrNumber` is required when
+ * `method` is `'rtgs_neft'`; omit both for a plain cash record. */
 export function recordCashPayment(
   token: string,
   amount: number,
   note?: string,
   opts: BookingPaymentOptions = {},
+  method: CashPaymentMethod = 'cash',
+  utrNumber?: string | null,
 ): Promise<PaymentRecord> {
   return authedRequest<PaymentRecord>('/payments/cash', token, {
     method: 'POST',
@@ -136,6 +152,8 @@ export function recordCashPayment(
       amount,
       note: note || undefined,
       purpose: opts.purpose ?? 'other',
+      method,
+      ...(utrNumber ? { utr_number: utrNumber } : {}),
       ...(opts.inventoryId ? { inventory_id: opts.inventoryId } : {}),
       ...(opts.installmentNo != null ? { installment_no: opts.installmentNo } : {}),
       ...(opts.dueDate ? { due_date: opts.dueDate } : {}),

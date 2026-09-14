@@ -104,16 +104,17 @@ export interface PaymentStatus {
   paymentId: string | null;
   amount: number | null;
   status: 'created' | 'paid' | 'failed' | null;
-  method: 'razorpay' | 'cash' | null;
+  method: 'razorpay' | 'cash' | 'rtgs_neft' | null;
   razorpayOrderId: string | null;
   razorpayPaymentId: string | null;
   paidAt: string | null;
   /** Inventory lock outcome the backend returned on this booking payment:
-   *  - `booked`   — the plot is now locked to this customer
+   *  - `pending_kyc_review` — the plot is held while an admin reviews KYC docs
+   *  - `booked`   — KYC was approved and the plot is now locked to this customer
    *  - `conflict` — payment succeeded but the plot was already taken; the money
    *                 is safe and under manual review server-side
    *  - `null`     — not a plot-booking payment (or an older record) */
-  inventoryStatus?: 'booked' | 'conflict' | null;
+  inventoryStatus?: 'pending_kyc_review' | 'booked' | 'conflict' | null;
   /** Set only when `inventoryStatus === 'conflict'`. */
   inventoryConflictReason?: 'unit_not_available' | 'inventory_update_failed' | null;
   error: string | null;
