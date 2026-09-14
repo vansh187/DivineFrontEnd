@@ -6,6 +6,9 @@ export interface VisitRecord {
   broker_id: string | null;
   customer_name: string;
   customer_contact: string;
+  /** Only set for website self-service requests - lets a signed-in customer's
+   *  visits be matched back to them via GET /visits/mine. */
+  customer_email?: string | null;
   /** Which township this visit is for - required on every visit, channel-partner
    *  or self-service, so the admin Site Visits table can filter/group by project. */
   project: ApplicationProjectId;
@@ -27,14 +30,13 @@ export interface CreateVisitInput {
   notes?: string;
 }
 
-export type PreferredVisitWindow = 'today' | 'tomorrow' | 'weekend';
-
 export interface SiteVisitRequestInput {
   customer_name: string;
   customer_contact: string;
   customer_email?: string;
   project: ApplicationProjectId;
-  preferred_window: PreferredVisitWindow;
+  date: string;
+  time: string;
   notes?: string;
 }
 
@@ -95,6 +97,13 @@ export function listVisits(token: string): Promise<VisitRecord[]> {
   return authedRequest<VisitRecord[]>('/visits', token);
 }
 
+/** A signed-in customer's own visits (both self-requested from the drawer and
+ *  any a broker scheduled for them), matched server-side by their account
+ *  email - unlike listVisits(), which is broker-only. */
+export function listMyVisits(token: string): Promise<VisitRecord[]> {
+  return authedRequest<VisitRecord[]>('/visits/mine', token);
+}
+
 export function listVisitHistory(token: string): Promise<VisitRecord[]> {
   return authedRequest<VisitRecord[]>('/visits/history', token);
 }
@@ -107,9 +116,10 @@ export function createVisit(token: string, input: CreateVisitInput): Promise<Vis
   });
 }
 
-/** Customer self-service callback request from the "Plan your visit" drawer -
- *  no sign-in required, so it lands as an unassigned, unscheduled lead
- *  (status "requested", source "website") for sales to confirm a slot for. */
+/** Customer self-service booking from the "Plan your visit" drawer - no
+ *  sign-in required. The customer picks the exact date/time themselves (same
+ *  as a broker logging a visit), so it lands directly as "scheduled" rather
+ *  than waiting on staff confirmation. */
 export function requestSiteVisit(input: SiteVisitRequestInput): Promise<VisitRecord> {
   return publicRequest<VisitRecord>('/visits/request', input);
 }
@@ -125,5 +135,15 @@ export function completeVisit(token: string, visitId: string, notes: string): Pr
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status: 'completed', notes }),
+  });
+}
+
+/** Claim and confirm a "requested" website visit - picks the date/time and
+ *  moves it to "scheduled" so it shows up as a normal upcoming visit. */
+export function confirmVisit(token: string, visitId: string, date: string, time: string): Promise<VisitRecord> {
+  return authedRequest<VisitRecord>(`/visits/${encodeURIComponent(visitId)}`, token, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'scheduled', date, time }),
   });
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, getDisplayName } from '../hooks/useAuth';
 import { DashboardLayout } from '../components/DashboardLayout';
@@ -11,6 +11,9 @@ import { loadPendingUnit, savePendingUnit } from '../services/pendingUnit';
 import type { InventoryUnit } from '../services/inventoryApi';
 import { PaymentDueBanner } from '../components/PaymentDueBanner';
 import { StoriesBar } from '../components/stories/StoriesBar';
+import { listMyVisits } from '../services/visitsApi';
+import type { VisitRecord } from '../services/visitsApi';
+import { getApplicationProject } from '../data/applicationProjects';
 
 interface TownshipCardProps {
   savedIds: string[];
@@ -113,12 +116,67 @@ function AvailablePlotsCard({ onView }: { onView: () => void }) {
   );
 }
 
-function SiteVisitsCard({ onAddVisit }: { onAddVisit: () => void }) {
+const visitStatusStyle: Record<VisitRecord['status'], string> = {
+  requested: 'border-terracotta/30 bg-terracotta/10 text-terracotta',
+  scheduled: 'border-chrome/30 bg-chrome/10 text-chrome',
+  completed: 'border-green/30 bg-green/10 text-green',
+  cancelled: 'border-hairline bg-bg text-ink-muted',
+};
+
+const visitStatusLabel: Record<VisitRecord['status'], string> = {
+  requested: 'Requested',
+  scheduled: 'Scheduled',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+};
+
+function formatVisitWhen(visit: VisitRecord) {
+  if (!visit.date) return 'Time to be confirmed';
+  const when = visit.time ? new Date(`${visit.date}T${visit.time}`) : new Date(`${visit.date}T00:00`);
+  if (Number.isNaN(when.getTime())) return 'Time to be confirmed';
+  return when.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    ...(visit.time ? { hour: 'numeric', minute: '2-digit' } : {}),
+  });
+}
+
+interface SiteVisitsCardProps {
+  visits: VisitRecord[];
+  loading: boolean;
+  onAddVisit: () => void;
+}
+
+function SiteVisitsCard({ visits, loading, onAddVisit }: SiteVisitsCardProps) {
   return (
     <div className="group relative rounded-2xl border border-hairline bg-surface p-6 shadow-[0_16px_40px_-26px_rgba(6,31,45,0.24)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_26px_50px_-24px_rgba(6,31,45,0.28)]">
       <IconBadge icon={<CalendarIcon />} accent="green-soft" interactive />
       <h3 className="mt-4 font-display text-lg font-bold text-ink">Site visits</h3>
       <p className="mt-1.5 text-sm leading-[1.6] text-ink-muted">Track upcoming visits and revisit past ones with your broker.</p>
+
+      <div className="mt-4">
+        {loading ? (
+          <p className="text-xs text-ink-muted">Loading your visits...</p>
+        ) : visits.length === 0 ? (
+          <p className="eyebrow-label text-terracotta">No site visits yet</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {visits.map((visit) => (
+              <div key={visit.id} className="rounded-lg border border-hairline bg-bg px-3 py-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="truncate text-sm font-semibold text-ink">{getApplicationProject(visit.project).label}</p>
+                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${visitStatusStyle[visit.status]}`}>
+                    {visitStatusLabel[visit.status]}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-ink-muted">{formatVisitWhen(visit)}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="mt-4">
         <button
           type="button"
@@ -169,6 +227,24 @@ export function CustomerPage() {
   };
 
   const [siteVisitOpen, setSiteVisitOpen] = useState(false);
+  const [visits, setVisits] = useState<VisitRecord[]>([]);
+  const [visitsLoading, setVisitsLoading] = useState(false);
+
+  const refreshVisits = useCallback(() => {
+    if (!session) {
+      setVisits([]);
+      return;
+    }
+    setVisitsLoading(true);
+    listMyVisits(session.token)
+      .then(setVisits)
+      .catch(() => setVisits([]))
+      .finally(() => setVisitsLoading(false));
+  }, [session]);
+
+  useEffect(() => {
+    refreshVisits();
+  }, [refreshVisits]);
 
   return (
     <>
@@ -195,9 +271,15 @@ export function CustomerPage() {
         <TownshipCard savedIds={savedIds} onToggleSave={handleToggleSave} />
         <SavedTownshipsCard savedIds={savedIds} onToggleSave={handleToggleSave} />
         <AvailablePlotsCard onView={() => navigate('/customer/plots')} />
-        <SiteVisitsCard onAddVisit={() => setSiteVisitOpen(true)} />
+        <SiteVisitsCard visits={visits} loading={visitsLoading} onAddVisit={() => setSiteVisitOpen(true)} />
       </DashboardLayout>
-      <SiteVisitDrawer open={siteVisitOpen} onClose={() => setSiteVisitOpen(false)} />
+      <SiteVisitDrawer
+        open={siteVisitOpen}
+        onClose={() => {
+          setSiteVisitOpen(false);
+          refreshVisits();
+        }}
+      />
     </>
   );
 }

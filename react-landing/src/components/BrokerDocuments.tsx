@@ -9,6 +9,7 @@ import {
   listVisitHistory,
   cancelVisit as cancelVisitApi,
   completeVisit as completeVisitApi,
+  confirmVisit as confirmVisitApi,
 } from '../services/visitsApi';
 import type { VisitRecord } from '../services/visitsApi';
 import { ApiError } from '../services/authApi';
@@ -85,11 +86,14 @@ export function BrokerDocuments() {
   const [time, setTime] = useState('');
   const [notes, setNotes] = useState('');
   const [historyVisits, setHistoryVisits] = useState<ScheduledVisit[]>([]);
+  const [requestedVisits, setRequestedVisits] = useState<VisitRecord[]>([]);
+  const [confirmDrafts, setConfirmDrafts] = useState<Record<string, { date: string; time: string }>>({});
   const [loadingVisits, setLoadingVisits] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [savingVisit, setSavingVisit] = useState(false);
   const [cancellingVisitId, setCancellingVisitId] = useState<string | null>(null);
   const [completingVisitId, setCompletingVisitId] = useState<string | null>(null);
+  const [confirmingVisitId, setConfirmingVisitId] = useState<string | null>(null);
   // Which upcoming visit has its "mark complete" notes form open, and its draft.
   const [completeForId, setCompleteForId] = useState<string | null>(null);
   const [completeNotes, setCompleteNotes] = useState('');
@@ -135,25 +139,33 @@ export function BrokerDocuments() {
     }
   }, [logout, openModal]);
 
+  const loadUpcoming = useCallback(
+    (token: string, active: () => boolean) => {
+      setLoadingVisits(true);
+      return listVisits(token)
+        .then((visits) => {
+          if (!active()) return;
+          persistVisits(visits.filter((visit) => visit.status === 'scheduled').map(visitFromApi).filter(isFutureVisit));
+          setRequestedVisits(visits.filter((visit) => visit.status === 'requested'));
+        })
+        .catch((err) => {
+          if (!active()) return;
+          handleVisitError(err);
+        })
+        .finally(() => {
+          if (active()) setLoadingVisits(false);
+        });
+    },
+    [persistVisits, handleVisitError],
+  );
+
   useEffect(() => {
     if (!session?.token) return;
     let active = true;
-    setLoadingVisits(true);
     setLoadingHistory(true);
     setVisitError(null);
     setHistoryError(null);
-    listVisits(session.token)
-      .then((visits) => {
-        if (!active) return;
-        persistVisits(visits.filter((visit) => visit.status === 'scheduled').map(visitFromApi).filter(isFutureVisit));
-      })
-      .catch((err) => {
-        if (!active) return;
-        handleVisitError(err);
-      })
-      .finally(() => {
-        if (active) setLoadingVisits(false);
-      });
+    loadUpcoming(session.token, () => active);
     listVisitHistory(session.token)
       .then((visits) => {
         if (!active) return;
@@ -169,7 +181,7 @@ export function BrokerDocuments() {
     return () => {
       active = false;
     };
-  }, [handleHistoryError, handleVisitError, persistVisits, session?.token]);
+  }, [handleHistoryError, handleVisitError, loadUpcoming, persistVisits, session?.token]);
 
   const scheduleVisit = async () => {
     if (!session) return;
@@ -230,6 +242,43 @@ export function BrokerDocuments() {
     }
   };
 
+  const setConfirmDraft = (id: string, patch: Partial<{ date: string; time: string }>) => {
+    setConfirmDrafts((prev) => ({
+      ...prev,
+      [id]: { date: prev[id]?.date ?? '', time: prev[id]?.time ?? '', ...patch },
+    }));
+  };
+
+  const confirmVisit = async (id: string) => {
+    if (!session) return;
+    const draft = confirmDrafts[id];
+    if (!draft?.date || !draft?.time) return;
+    if (!isFutureDateTime(draft.date, draft.time)) {
+      setVisitError('Choose a future date and time to confirm this visit.');
+      return;
+    }
+    setConfirmingVisitId(id);
+    setVisitError(null);
+    try {
+      await confirmVisitApi(session.token, id, draft.date, draft.time);
+      setRequestedVisits((prev) => prev.filter((visit) => visit.id !== id));
+      setConfirmDrafts((prev) => {
+        const { [id]: _removed, ...rest } = prev;
+        return rest;
+      });
+      await loadUpcoming(session.token, () => true);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        setRequestedVisits((prev) => prev.filter((visit) => visit.id !== id));
+        setVisitError('That request is no longer available. The list has been refreshed.');
+      } else {
+        handleVisitError(err);
+      }
+    } finally {
+      setConfirmingVisitId(null);
+    }
+  };
+
   const openCompleteForm = (visit: ScheduledVisit) => {
     if (completeForId === visit.id) {
       setCompleteForId(null);
@@ -276,6 +325,69 @@ export function BrokerDocuments() {
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <div className="lg:col-span-2">
+          <TileShell
+            icon={<CalendarIcon />}
+            accent="terracotta"
+            title="Customer requests"
+            description="Website visitors waiting for a callback to confirm a time."
+            statusLabel={requestedVisits.length ? `${requestedVisits.length} waiting` : 'No new requests'}
+            statusTone={requestedVisits.length ? 'pending' : 'neutral'}
+          >
+            {requestedVisits.length > 0 ? (
+              <div className="max-h-80 overflow-y-auto rounded-xl border border-hairline">
+                {requestedVisits.map((visit, i) => {
+                  const draft = confirmDrafts[visit.id] ?? { date: '', time: '' };
+                  const busy = confirmingVisitId === visit.id;
+                  return (
+                    <div key={visit.id} className={`bg-bg px-4 py-3 ${i > 0 ? 'border-t border-hairline' : ''}`}>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-ink">{visit.customer_name}</p>
+                        <p className="truncate text-xs text-ink-muted">
+                          {getApplicationProject(visit.project).label}
+                          {visit.customer_contact ? ` · ${visit.customer_contact}` : ''}
+                        </p>
+                        {visit.notes && <p className="mt-1 line-clamp-2 text-xs leading-[1.5] text-ink-muted">{visit.notes}</p>}
+                      </div>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                        <input
+                          type="date"
+                          value={draft.date}
+                          onChange={(event) => setConfirmDraft(visit.id, { date: event.target.value })}
+                          aria-label="Confirm visit date"
+                          min={todayInputValue()}
+                          disabled={busy}
+                          className="min-w-0 rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-green disabled:cursor-not-allowed disabled:opacity-60"
+                        />
+                        <input
+                          type="time"
+                          value={draft.time}
+                          onChange={(event) => setConfirmDraft(visit.id, { time: event.target.value })}
+                          aria-label="Confirm visit time"
+                          disabled={busy}
+                          className="min-w-0 rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-green disabled:cursor-not-allowed disabled:opacity-60"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => confirmVisit(visit.id)}
+                          disabled={busy || !draft.date || !draft.time}
+                          className="rounded-full bg-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {busy ? 'Confirming...' : 'Mark as scheduled'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-hairline bg-bg px-4 py-6 text-sm text-ink-muted">
+                No customers are waiting on a callback right now.
+              </div>
+            )}
+          </TileShell>
+        </div>
+
         <div className="lg:col-span-2">
           <TileShell
             icon={<CalendarIcon />}
