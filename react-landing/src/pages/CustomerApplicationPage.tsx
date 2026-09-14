@@ -10,7 +10,7 @@ import { contact } from '../data/contact';
 import { townshipVideoByProject } from '../data/townshipVideos';
 import type { InventoryUnit } from '../services/inventoryApi';
 import { clearPendingUnit } from '../services/pendingUnit';
-import { getDocument, uploadGeneratedApplicationPdf } from '../services/documentsApi';
+import { getDocument, uploadCancelledCheque, uploadGeneratedApplicationPdf } from '../services/documentsApi';
 import { ApiError } from '../services/authApi';
 import { blobToDataUrl, downloadPdfBlob, generateApplicationPdf, generatePaymentReceiptPdf, openDataUrl, openPdfBlob } from '../services/applicationPdf';
 import { createPaymentOrder, recordCashPayment, verifyPayment } from '../services/paymentsApi';
@@ -58,6 +58,15 @@ function serializeFormData(
 
 function blobToFile(blob: Blob, fileName: string): File {
   return new File([blob], fileName, { type: 'application/pdf' });
+}
+
+function dataUrlToFile(dataUrl: string, fileName: string): File {
+  const [header, base64] = dataUrl.split(',');
+  const contentType = header.match(/^data:(.*?);base64$/)?.[1] || 'application/octet-stream';
+  const binary = atob(base64 ?? '');
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return new File([bytes], fileName, { type: contentType });
 }
 
 /** Plot areas / rates are always positive — drop any minus sign that gets typed
@@ -543,7 +552,7 @@ export function CustomerApplicationPage() {
     const { token, email } = session;
     let cancelled = false;
 
-    const IDENTITY_KEYS = ['aadharFront', 'aadharBack', 'pan', 'applicantPhoto', 'coApplicantPhoto'] as const;
+    const IDENTITY_KEYS = ['aadharFront', 'aadharBack', 'pan', 'applicantPhoto', 'coApplicantPhoto', 'cancelledCheque'] as const;
     const isStale = (doc: {
       documentId: string | null;
       dataUrl: string | null;
@@ -590,6 +599,47 @@ export function CustomerApplicationPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
+
+  useEffect(() => {
+    if (!session || docs.cancelledCheque.documentId || !docs.cancelledCheque.dataUrl) return;
+    const { token, email } = session;
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const file = dataUrlToFile(docs.cancelledCheque.dataUrl as string, docs.cancelledCheque.fileName || 'cancelled-cheque.png');
+        const uploaded = await uploadCancelledCheque(token, file);
+        if (cancelled) return;
+        const latest = store.loadCustomerDocs(email);
+        store.saveCustomerDocs(email, {
+          ...latest,
+          cancelledCheque: {
+            ...latest.cancelledCheque,
+            documentId: uploaded.id,
+            signedUrl: uploaded.signed_url,
+            signedUrlExpiresAt: Date.now() + uploaded.signed_url_expires_in * 1000,
+            error: null,
+          },
+        });
+        setDocs(store.loadCustomerDocs(email));
+      } catch (err) {
+        if (cancelled) return;
+        const latest = store.loadCustomerDocs(email);
+        store.saveCustomerDocs(email, {
+          ...latest,
+          cancelledCheque: {
+            ...latest.cancelledCheque,
+            error: err instanceof Error ? err.message : 'Could not upload cancelled cheque.',
+          },
+        });
+        setDocs(store.loadCustomerDocs(email));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [docs.cancelledCheque.dataUrl, docs.cancelledCheque.documentId, docs.cancelledCheque.fileName, session]);
 
   if (!session) return <Navigate to="/" replace />;
 
@@ -661,6 +711,7 @@ export function CustomerApplicationPage() {
             : 'cancelledCheque';
     try {
       const dataUrl = await blobToDataUrl(file);
+      const uploaded = kind === 'cancelledCheque' ? await uploadCancelledCheque(session.token, file) : null;
       persist({
         ...docs,
         [key]: {
@@ -668,6 +719,9 @@ export function CustomerApplicationPage() {
           fileSize: file.size,
           uploadedAt: new Date().toISOString(),
           dataUrl,
+          documentId: uploaded?.id ?? null,
+          signedUrl: uploaded?.signed_url ?? null,
+          signedUrlExpiresAt: uploaded ? Date.now() + uploaded.signed_url_expires_in * 1000 : null,
           error: null,
         },
       });
@@ -872,7 +926,7 @@ export function CustomerApplicationPage() {
       setError('Upload the co-applicant signature before generating the application PDF.');
       return;
     }
-    if (!docs.cancelledCheque.dataUrl) {
+    if (!docs.cancelledCheque.documentId || (!docs.cancelledCheque.dataUrl && !docs.cancelledCheque.signedUrl)) {
       setError('Upload a cancelled cheque before generating the application PDF.');
       return;
     }
@@ -930,6 +984,7 @@ export function CustomerApplicationPage() {
             title: 'Cancelled Cheque',
             fileName: docs.cancelledCheque.fileName,
             dataUrl: docs.cancelledCheque.dataUrl,
+            signedUrl: docs.cancelledCheque.signedUrl,
           },
           ...(docs.paymentProof.dataUrl
             ? [
