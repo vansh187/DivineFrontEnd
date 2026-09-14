@@ -137,3 +137,13 @@ export function completeVisit(token: string, visitId: string, notes: string): Pr
     body: JSON.stringify({ status: 'completed', notes }),
   });
 }
+
+/** Claim and confirm a "requested" website visit - picks the date/time and
+ *  moves it to "scheduled" so it shows up as a normal upcoming visit. */
+export function confirmVisit(token: string, visitId: string, date: string, time: string): Promise<VisitRecord> {
+  return authedRequest<VisitRecord>(`/visits/${encodeURIComponent(visitId)}`, token, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'scheduled', date, time }),
+  });
+}
