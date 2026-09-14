@@ -52,9 +52,9 @@ export function RecordBookingPaymentModal({ unit, onClose, onBooked }: RecordBoo
       );
       return;
     }
-    // 'booked', or the backend doesn't report an inventory status yet (the
-    // reserved → booked flip may not be deployed). Either way the payment
-    // settled, so treat the lead as converted — same as the customer flow.
+    // 'pending_kyc_review', 'booked', or the backend doesn't report an inventory
+    // status yet — either way the payment settled and the plot is held/booked,
+    // so treat the lead as converted and drop it from the available list.
     onBooked(unit);
   };
 
@@ -118,8 +118,8 @@ export function RecordBookingPaymentModal({ unit, onClose, onBooked }: RecordBoo
           {unit.unit_number ? ` · Plot ${unit.unit_number}` : ''}
         </h3>
         <p className="mt-1.5 text-sm leading-[1.6] text-ink-muted">
-          Enter the agreed Total Plot Amount. The booking instalment is 10% of it. Once the payment settles, the plot is
-          marked booked and leaves the available list.
+          Enter the agreed Total Plot Amount. The booking instalment is 10% of it. Once the payment settles, the plot
+          is held for this customer while their KYC is reviewed, and leaves the available list.
         </p>
 
         <label className="mt-5 block">

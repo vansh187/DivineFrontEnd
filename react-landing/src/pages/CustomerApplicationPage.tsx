@@ -1655,6 +1655,13 @@ export function CustomerApplicationPage() {
                   {docs.payment.method === 'cash' ? ' in cash' : ' online'}
                   {docs.payment.paidAt ? ` on ${new Date(docs.payment.paidAt).toLocaleDateString('en-IN')}` : ''}.
                 </p>
+                {docs.payment.inventoryStatus === 'pending_kyc_review' && (
+                  <p className="mt-3 rounded-lg border border-hairline bg-bg px-3 py-2 text-xs leading-relaxed text-ink-muted">
+                    <span className="font-semibold text-ink">Payment received — we&rsquo;re verifying your documents.</span>{' '}
+                    Your plot is held for you while our team reviews your KYC. You&rsquo;ll be notified once your
+                    booking is confirmed, and the booking receipt unlocks on your profile at that point.
+                  </p>
+                )}
                 {docs.payment.inventoryStatus === 'conflict' && (
                   <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-900">
                     <span className="font-semibold">Your payment went through.</span> Plot{' '}

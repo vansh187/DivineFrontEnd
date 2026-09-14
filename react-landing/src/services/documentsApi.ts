@@ -17,7 +17,7 @@ export interface GeneratedDocument {
    * the outcome of that lock. `conflict` means the plot was already taken - the
    * document is still saved and the payment is under manual review server-side. */
   inventory_id?: string | null;
-  inventory_status?: 'booked' | 'conflict' | null;
+  inventory_status?: 'pending_kyc_review' | 'booked' | 'conflict' | null;
 }
 
 export interface GenerateDocumentInput {
