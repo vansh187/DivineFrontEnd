@@ -6,6 +6,9 @@ export interface VisitRecord {
   broker_id: string | null;
   customer_name: string;
   customer_contact: string;
+  /** Only set for website self-service requests - lets a signed-in customer's
+   *  visits be matched back to them via GET /visits/mine. */
+  customer_email?: string | null;
   /** Which township this visit is for - required on every visit, channel-partner
    *  or self-service, so the admin Site Visits table can filter/group by project. */
   project: ApplicationProjectId;
@@ -93,6 +96,13 @@ async function publicRequest<T>(path: string, body: unknown): Promise<T> {
 
 export function listVisits(token: string): Promise<VisitRecord[]> {
   return authedRequest<VisitRecord[]>('/visits', token);
+}
+
+/** A signed-in customer's own visits (both self-requested from the drawer and
+ *  any a broker scheduled for them), matched server-side by their account
+ *  email - unlike listVisits(), which is broker-only. */
+export function listMyVisits(token: string): Promise<VisitRecord[]> {
+  return authedRequest<VisitRecord[]>('/visits/mine', token);
 }
 
 export function listVisitHistory(token: string): Promise<VisitRecord[]> {

@@ -7,6 +7,7 @@ import type { ApplicationProjectId } from '../data/applicationProjects';
 import { requestSiteVisit } from '../services/visitsApi';
 import type { PreferredVisitWindow } from '../services/visitsApi';
 import { ApiError } from '../services/authApi';
+import { useAuth } from '../hooks/useAuth';
 
 type SiteVisitDrawerProps = {
   open: boolean;
@@ -32,6 +33,7 @@ function getWhatsAppHref(windowLabel: string) {
 }
 
 export function SiteVisitDrawer({ open, onClose }: SiteVisitDrawerProps) {
+  const { session } = useAuth();
   const [selectedWindow, setSelectedWindow] = useState(visitWindows[0]);
   const [directionsOpen, setDirectionsOpen] = useState(false);
 
@@ -93,8 +95,14 @@ export function SiteVisitDrawer({ open, onClose }: SiteVisitDrawerProps) {
       setRequested(false);
       setError('');
       setNotes('');
+      return;
     }
-  }, [open]);
+    // Prefill from the signed-in session so a logged-in customer's request
+    // carries the email their /visits/mine lookup matches against.
+    if (session) {
+      setEmail((current) => current || session.email);
+    }
+  }, [open, session]);
 
   return (
     <div
