@@ -30,14 +30,13 @@ export interface CreateVisitInput {
   notes?: string;
 }
 
-export type PreferredVisitWindow = 'today' | 'tomorrow' | 'weekend';
-
 export interface SiteVisitRequestInput {
   customer_name: string;
   customer_contact: string;
   customer_email?: string;
   project: ApplicationProjectId;
-  preferred_window: PreferredVisitWindow;
+  date: string;
+  time: string;
   notes?: string;
 }
 
@@ -117,9 +116,10 @@ export function createVisit(token: string, input: CreateVisitInput): Promise<Vis
   });
 }
 
-/** Customer self-service callback request from the "Plan your visit" drawer -
- *  no sign-in required, so it lands as an unassigned, unscheduled lead
- *  (status "requested", source "website") for sales to confirm a slot for. */
+/** Customer self-service booking from the "Plan your visit" drawer - no
+ *  sign-in required. The customer picks the exact date/time themselves (same
+ *  as a broker logging a visit), so it lands directly as "scheduled" rather
+ *  than waiting on staff confirmation. */
 export function requestSiteVisit(input: SiteVisitRequestInput): Promise<VisitRecord> {
   return publicRequest<VisitRecord>('/visits/request', input);
 }

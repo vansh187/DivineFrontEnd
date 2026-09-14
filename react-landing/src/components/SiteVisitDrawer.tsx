@@ -2,10 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { contact } from '../data/contact';
 import { company } from '../data/company';
 import { corporateOfficeLocation, getGoogleMapsSearchHref, siteMapLocations } from '../data/mapLocations';
-import { applicationProjects } from '../data/applicationProjects';
+import { applicationProjects, getApplicationProject } from '../data/applicationProjects';
 import type { ApplicationProjectId } from '../data/applicationProjects';
 import { requestSiteVisit } from '../services/visitsApi';
-import type { PreferredVisitWindow } from '../services/visitsApi';
 import { ApiError } from '../services/authApi';
 import { useAuth } from '../hooks/useAuth';
 
@@ -14,19 +13,24 @@ type SiteVisitDrawerProps = {
   onClose: () => void;
 };
 
-const visitWindows: { label: string; value: PreferredVisitWindow }[] = [
-  { label: 'Today', value: 'today' },
-  { label: 'Tomorrow', value: 'tomorrow' },
-  { label: 'This weekend', value: 'weekend' },
-];
 const directionLocations = [...siteMapLocations, corporateOfficeLocation];
 
-function getWhatsAppHref(windowLabel: string) {
+function todayInputValue() {
+  const today = new Date();
+  const offsetMs = today.getTimezoneOffset() * 60 * 1000;
+  return new Date(today.getTime() - offsetMs).toISOString().slice(0, 10);
+}
+
+function isFutureDateTime(date: string, time: string) {
+  return new Date(`${date}T${time}`).getTime() > Date.now();
+}
+
+function getWhatsAppHref(project: ApplicationProjectId, date: string, time: string) {
   const phoneNumber = contact.phoneHref.replace('tel:', '').replace(/\D/g, '');
   const message = [
     'Hi Divine Vision, I would like to book a site visit.',
-    `Preferred visit window: ${windowLabel}.`,
-    'Please share the available time slots.',
+    `Project: ${getApplicationProject(project).label}.`,
+    date && time ? `Preferred date/time: ${date} ${time}.` : 'Please share the available time slots.',
   ].join(' ');
 
   return `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
@@ -34,24 +38,29 @@ function getWhatsAppHref(windowLabel: string) {
 
 export function SiteVisitDrawer({ open, onClose }: SiteVisitDrawerProps) {
   const { session } = useAuth();
-  const [selectedWindow, setSelectedWindow] = useState(visitWindows[0]);
   const [directionsOpen, setDirectionsOpen] = useState(false);
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [date, setDate] = useState('');
+  const [time, setTime] = useState('');
   const [notes, setNotes] = useState('');
   const [project, setProject] = useState<ApplicationProjectId>(applicationProjects[0].id);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [requested, setRequested] = useState(false);
 
-  const whatsappHref = useMemo(() => getWhatsAppHref(selectedWindow.label), [selectedWindow]);
+  const whatsappHref = useMemo(() => getWhatsAppHref(project, date, time), [project, date, time]);
 
-  const canSubmit = Boolean(name.trim() && phone.trim() && !submitting);
+  const canSubmit = Boolean(name.trim() && phone.trim() && date && time && !submitting);
 
-  const handleRequestCallback = async () => {
+  const handleBookVisit = async () => {
     if (!canSubmit) return;
+    if (!isFutureDateTime(date, time)) {
+      setError('Choose a future date and time for the site visit.');
+      return;
+    }
     setSubmitting(true);
     setError('');
     try {
@@ -60,12 +69,13 @@ export function SiteVisitDrawer({ open, onClose }: SiteVisitDrawerProps) {
         customer_contact: phone.trim(),
         customer_email: email.trim() || undefined,
         project,
-        preferred_window: selectedWindow.value,
+        date,
+        time,
         notes: notes.trim() || undefined,
       });
       setRequested(true);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not send your request. Please try again.');
+      setError(err instanceof ApiError ? err.message : 'Could not book your visit. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -95,6 +105,8 @@ export function SiteVisitDrawer({ open, onClose }: SiteVisitDrawerProps) {
       setRequested(false);
       setError('');
       setNotes('');
+      setDate('');
+      setTime('');
       return;
     }
     // Prefill from the signed-in session so a logged-in customer's request
@@ -156,7 +168,7 @@ export function SiteVisitDrawer({ open, onClose }: SiteVisitDrawerProps) {
             <p className="text-sm font-semibold text-ink">NH-1 Delhi-Chandigarh corridor</p>
             <p className="mt-2 text-sm leading-6 text-ink-muted">
               Visit active townships around {company.locations.join(', ')} with the sales team.
-              Request a callback below, or confirm instantly by call or WhatsApp.
+              Pick a date and time below, or confirm instantly by call or WhatsApp.
             </p>
           </div>
 
@@ -175,31 +187,6 @@ export function SiteVisitDrawer({ open, onClose }: SiteVisitDrawerProps) {
                 </option>
               ))}
             </select>
-          </div>
-
-          <div className="mt-6">
-            <p className="eyebrow-label text-[11px] text-ink-muted">Preferred window</p>
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              {visitWindows.map((windowOption) => {
-                const selected = selectedWindow.value === windowOption.value;
-
-                return (
-                  <button
-                    key={windowOption.value}
-                    type="button"
-                    onClick={() => setSelectedWindow(windowOption)}
-                    disabled={submitting || requested}
-                    className={`min-h-12 rounded-lg border px-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-                      selected
-                        ? 'border-chrome bg-chrome text-white'
-                        : 'border-hairline bg-white text-ink hover:border-green hover:text-green'
-                    }`}
-                  >
-                    {windowOption.label}
-                  </button>
-                );
-              })}
-            </div>
           </div>
 
           <div className="mt-6">
@@ -229,6 +216,25 @@ export function SiteVisitDrawer({ open, onClose }: SiteVisitDrawerProps) {
                 disabled={submitting || requested}
                 className="rounded-lg border border-hairline bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-green disabled:cursor-not-allowed disabled:opacity-60"
               />
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(event) => setDate(event.target.value)}
+                  aria-label="Visit date"
+                  min={todayInputValue()}
+                  disabled={submitting || requested}
+                  className="min-w-0 rounded-lg border border-hairline bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-green disabled:cursor-not-allowed disabled:opacity-60"
+                />
+                <input
+                  type="time"
+                  value={time}
+                  onChange={(event) => setTime(event.target.value)}
+                  aria-label="Visit time"
+                  disabled={submitting || requested}
+                  className="min-w-0 rounded-lg border border-hairline bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-green disabled:cursor-not-allowed disabled:opacity-60"
+                />
+              </div>
               <textarea
                 value={notes}
                 onChange={(event) => setNotes(event.target.value)}
@@ -249,16 +255,16 @@ export function SiteVisitDrawer({ open, onClose }: SiteVisitDrawerProps) {
 
             {requested ? (
               <p role="status" className="mt-3 rounded-lg border border-green/35 bg-green/5 px-3 py-2.5 text-sm font-semibold text-chrome">
-                Request received - our sales team will call you shortly to confirm a time.
+                Visit scheduled - we'll see you then. Check "Site visits" on your dashboard any time.
               </p>
             ) : (
               <button
                 type="button"
-                onClick={handleRequestCallback}
+                onClick={handleBookVisit}
                 disabled={!canSubmit}
                 className="mt-3 w-full rounded-full bg-green px-4 py-3 text-sm font-bold text-white shadow-[0_18px_36px_-20px_rgba(6,31,45,0.62)] transition-all hover:-translate-y-0.5 hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {submitting ? 'Sending request...' : 'Request a callback'}
+                {submitting ? 'Booking visit...' : 'Book site visit'}
               </button>
             )}
           </div>
