@@ -12,6 +12,8 @@ import {
 } from '../services/visitsApi';
 import type { VisitRecord } from '../services/visitsApi';
 import { ApiError } from '../services/authApi';
+import { applicationProjects, getApplicationProject } from '../data/applicationProjects';
+import type { ApplicationProjectId } from '../data/applicationProjects';
 import { TileShell } from './DocumentTile';
 import { AadhaarVerifyTile } from './AadhaarVerifyTile';
 import { CalendarIcon } from './DashboardIcons';
@@ -21,6 +23,7 @@ function visitFromApi(visit: VisitRecord): ScheduledVisit {
     id: visit.id,
     customerName: visit.customer_name,
     customerContact: visit.customer_contact ?? '',
+    project: visit.project,
     date: visit.date,
     time: visit.time,
     notes: visit.notes ?? '',
@@ -77,6 +80,7 @@ export function BrokerDocuments() {
 
   const [customerName, setCustomerName] = useState('');
   const [customerContact, setCustomerContact] = useState('');
+  const [project, setProject] = useState<ApplicationProjectId>(applicationProjects[0].id);
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
   const [notes, setNotes] = useState('');
@@ -184,6 +188,7 @@ export function BrokerDocuments() {
       const created = await createVisit(session.token, {
         customer_name: customerName.trim(),
         customer_contact: customerContact.trim() || undefined,
+        project,
         date,
         time,
         notes: notes.trim() || undefined,
@@ -296,7 +301,10 @@ export function BrokerDocuments() {
                       <div className="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center">
                         <div className="min-w-0">
                           <p className="truncate text-sm font-semibold text-ink">{visit.customerName}</p>
-                          <p className="truncate text-xs text-ink-muted">{visit.customerContact || 'No contact provided'}</p>
+                          <p className="truncate text-xs text-ink-muted">
+                            {getApplicationProject(visit.project).label}
+                            {visit.customerContact ? ` · ${visit.customerContact}` : ''}
+                          </p>
                           {visit.notes && <p className="mt-1 line-clamp-2 text-xs leading-[1.5] text-ink-muted">{visit.notes}</p>}
                         </div>
                         <p className="text-sm font-semibold text-ink sm:text-right">{formatVisitDate(visit)}</p>
@@ -425,6 +433,19 @@ export function BrokerDocuments() {
                 className="min-w-0 rounded-lg border border-hairline bg-bg px-3 py-2.5 text-sm text-ink outline-none focus:border-green disabled:cursor-not-allowed disabled:opacity-60"
               />
             </div>
+            <select
+              value={project}
+              onChange={(event) => setProject(event.target.value as ApplicationProjectId)}
+              aria-label="Project"
+              disabled={!aadhaarVerified || savingVisit}
+              className="min-w-0 rounded-lg border border-hairline bg-bg px-3 py-2.5 text-sm font-semibold text-ink outline-none focus:border-green disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {applicationProjects.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
             <div className="grid gap-3 sm:grid-cols-2">
               <input
                 type="date"

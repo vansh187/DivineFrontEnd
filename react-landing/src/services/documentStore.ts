@@ -1,4 +1,6 @@
 import type { PaymentPlan } from './customerProfileApi';
+import type { ApplicationProjectId } from '../data/applicationProjects';
+import { applicationProjects } from '../data/applicationProjects';
 
 /**
  * Local persistence for the document-upload flow. Aadhar/PAN file storage and
@@ -418,10 +420,11 @@ export interface ScheduledVisit {
   id: string;
   customerName: string;
   customerContact: string;
+  project: ApplicationProjectId;
   date: string;
   time: string;
   notes: string;
-  status: 'scheduled' | 'completed' | 'cancelled';
+  status: 'requested' | 'scheduled' | 'completed' | 'cancelled';
   createdAt: string;
 }
 
@@ -469,6 +472,7 @@ function normalizeVisits(visits: Partial<ScheduledVisit>[] | undefined): Schedul
     id: visit.id ?? `${Date.now()}`,
     customerName: visit.customerName ?? '',
     customerContact: visit.customerContact ?? '',
+    project: visit.project ?? applicationProjects[0].id,
     date: visit.date ?? '',
     time: visit.time ?? '',
     notes: visit.notes ?? '',
