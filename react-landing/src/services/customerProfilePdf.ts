@@ -297,7 +297,7 @@ export async function generateAllotmentLetterPdf(input: ProfilePdfInput): Promis
 
 const COMPANY = {
   name: 'KCG Resorts Pvt. Ltd.',
-  email: 'crm2@divinevisioninfra.com',
+  email: 'sales1@divinevisioninfra.com',
   web: 'www.divineinfravision.com',
   state: 'Haryana',
   stateCode: '06',
@@ -308,7 +308,7 @@ const COMPANY = {
   bankName: 'ICICI Bank Ltd.',
   bankBranch: 'Sector-7, Karnal',
   ifsc: 'ICIC0003703',
-  footerEmail: 'crm2@divinevisioninfra.com',
+  footerEmail: 'sales1@divinevisioninfra.com',
   footerMob: 'Mob : +91-74282 91303',
   footerAddress: 'OPS Divine Greens - Sec-16, Taraori Karnal, Haryana 132116',
 };
