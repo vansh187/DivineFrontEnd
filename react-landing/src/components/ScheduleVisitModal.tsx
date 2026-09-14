@@ -6,6 +6,7 @@ import { createVisit } from '../services/visitsApi';
 import { saveReservationVisitor } from '../services/reservationVisitors';
 import { ApiError } from '../services/authApi';
 import { loadBrokerDocs } from '../services/documentStore';
+import { matchApplicationProjectId } from '../data/applicationProjects';
 
 interface ScheduleVisitModalProps {
   unit: InventoryUnit;
@@ -52,6 +53,7 @@ export function ScheduleVisitModal({ unit, onClose, onReserved }: ScheduleVisitM
         await createVisit(session.token, {
           customer_name: name.trim(),
           customer_contact: phone.trim(),
+          project: matchApplicationProjectId(unit.project_name),
           date: todayInputValue(),
           time: nowTimeValue(),
           notes: `Site visit for ${unit.project_name}${unit.unit_number ? ` · Plot ${unit.unit_number}` : ''}.${
