@@ -33,7 +33,7 @@ import {
 } from '../services/customerProfilePdf';
 import { blobToDataUrl } from '../services/applicationPdf';
 import { downloadPdfBlob, generatePaymentReceiptPdf } from '../services/applicationPdf';
-import { fetchDemandLetterPdf, getLatestDocumentByType, uploadApplicantPhoto } from '../services/documentsApi';
+import { fetchDemandLetterPdf, getDocument, getLatestDocumentByType, uploadApplicantPhoto } from '../services/documentsApi';
 import { listMyBookings, fetchBookingReceiptPdf, type BookingRecord } from '../services/bookingsApi';
 
 const formatINR = formatCurrencyINR;
@@ -196,7 +196,7 @@ export function CustomerProfilePage() {
   const location = useLocation();
   const photoInputRef = useRef<HTMLInputElement>(null);
   const paymentsRef = useRef<HTMLElement>(null);
-  const [downloading, setDownloading] = useState<'allotment' | 'demand' | 'receipt' | null>(null);
+  const [downloading, setDownloading] = useState<'application' | 'allotment' | 'demand' | 'receipt' | null>(null);
   const [error, setError] = useState('');
   const [kycBookings, setKycBookings] = useState<BookingRecord[]>([]);
   const [kycBookingsLoading, setKycBookingsLoading] = useState(false);
@@ -635,11 +635,21 @@ export function CustomerProfilePage() {
     }
   };
 
-  const handleDownload = async (kind: 'allotment' | 'demand') => {
+  const handleDownload = async (kind: 'allotment' | 'demand' | 'application') => {
     if (!session) return;
     setDownloading(kind);
     setError('');
     try {
+      if (kind === 'application') {
+        if (!profile.backendDocumentId) {
+          setError('The booking application form is not available for the selected plot yet.');
+          return;
+        }
+        const doc = await getDocument(session.token, profile.backendDocumentId);
+        window.open(doc.signed_url, '_blank', 'noopener,noreferrer');
+        return;
+      }
+
       if (kind === 'allotment') {
         const blob = await generateAllotmentLetterPdf(profile.pdfInput);
         downloadBlob(blob, 'Divine-Vision-Allotment-Letter.pdf');
@@ -1020,7 +1030,23 @@ export function CustomerProfilePage() {
       <p className="eyebrow-label mt-12 text-terracotta">Documents</p>
       {profile.bookingOptions.length > 1 && <div className="mt-4">{renderBookingSelector('profile-booking-documents')}</div>}
 
-      <div className="mt-4 grid grid-cols-1 gap-5 lg:grid-cols-3">
+      <div className="mt-4 grid grid-cols-1 gap-5 lg:grid-cols-4">
+        <div className="group relative rounded-2xl border border-hairline bg-surface p-6 shadow-[0_16px_40px_-26px_rgba(6,31,45,0.24)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_26px_50px_-24px_rgba(6,31,45,0.28)]">
+          <IconBadge icon={<FileIcon />} accent="terracotta" interactive />
+          <h3 className="mt-4 font-display text-lg font-bold text-ink">Application form</h3>
+          <p className="mt-1.5 text-sm leading-[1.6] text-ink-muted">
+            Full booking application packet with the uploaded documents for the selected plot.
+          </p>
+          <button
+            type="button"
+            onClick={() => handleDownload('application')}
+            disabled={downloading !== null || !profile.backendDocumentId}
+            className="mt-4 rounded-full bg-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {downloading === 'application' ? 'Preparing...' : 'Download application form'}
+          </button>
+        </div>
+
         <div className="group relative rounded-2xl border border-hairline bg-surface p-6 shadow-[0_16px_40px_-26px_rgba(6,31,45,0.24)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_26px_50px_-24px_rgba(6,31,45,0.28)]">
           <IconBadge icon={<FileIcon />} accent="green" interactive />
           <h3 className="mt-4 font-display text-lg font-bold text-ink">Allotment letter</h3>
