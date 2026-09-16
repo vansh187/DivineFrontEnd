@@ -44,6 +44,10 @@ interface PdfContext {
   coApplicantPhoto: PDFImage | null;
   pageNumber: number;
   project: ApplicationProject;
+  /** Real per-project brand icon (e.g. Suraksha Enclave's soldier/arch mark),
+   *  pre-embedded once up front - null for projects with no dedicated icon
+   *  asset yet, which fall back to the drawn monogram tile. */
+  brandIcon: PDFImage | null;
 }
 
 interface PageCursor {
@@ -225,6 +229,24 @@ const RECEIPT_COMPANY: Record<ApplicationProjectId, ReceiptCompanyProfile> = {
   },
 };
 
+/** Real per-project brand icon, used in place of the drawn monogram tile (see
+ *  drawBrandEmblem) wherever one exists. Projects without an entry here fall
+ *  back to the drawn tile. */
+const BRAND_ICON_URL: Partial<Record<ApplicationProjectId, string>> = {
+  'suraksha-enclave': '/brand/suraksha-enclave-icon.png',
+};
+
+async function embedBrandIcon(pdfDoc: PDFDocument, projectId: ApplicationProjectId): Promise<PDFImage | null> {
+  const url = BRAND_ICON_URL[projectId];
+  if (!url) return null;
+  try {
+    return await embedImageFromSource(pdfDoc, url);
+  } catch {
+    // Offline / asset unavailable - fall back to the drawn monogram tile.
+    return null;
+  }
+}
+
 function drawCenteredText(
   page: PDFPage,
   text: string,
@@ -268,9 +290,14 @@ function receiptNumber(project: ApplicationProject, paymentInfo: PaymentStatus |
   return `RCPT/${projectMonogram(project)}/${tail || String(Date.now()).slice(-8)}`;
 }
 
-/** Blocky signage-style monogram tile — filled square + inset keyline + project
+/** Real project brand icon when one is embedded on ctx (see brandIcon), else the
+ * blocky signage-style monogram tile — filled square + inset keyline + project
  * monogram reversed out, matching the brand's grid-based, solid icon direction. */
 function drawBrandEmblem(page: PDFPage, x: number, y: number, size: number, ctx: PdfContext) {
+  if (ctx.brandIcon) {
+    drawTemplateImage(page, ctx.brandIcon, x, y, size, size);
+    return;
+  }
   const mark = projectMonogram(ctx.project);
   page.drawRectangle({ x, y, width: size, height: size, color: divineGreen });
   page.drawRectangle({ x: x + size * 0.1, y: y + size * 0.1, width: size * 0.8, height: size * 0.8, borderColor: receiptAccent, borderWidth: size > 32 ? 0.9 : 0.6 });
@@ -543,8 +570,8 @@ function drawPageHeader(ctx: PdfContext, page: PDFPage, title: string, subtitle?
   const cRight = width - marginX;
   const wm = projectWordmark(ctx.project);
 
-  drawBrandEmblem(page, marginX, 786, 24, ctx);
-  const wx = marginX + 34;
+  drawBrandEmblem(page, marginX, 782, 32, ctx);
+  const wx = marginX + 42;
   page.drawText(wm.head, { x: wx, y: 796, size: 12.5, font: ctx.bold, color: divineGreen });
   page.drawText(wm.tail, { x: wx + ctx.bold.widthOfTextAtSize(wm.head, 12.5), y: 796, size: 12.5, font: ctx.bold, color: receiptFoliage });
   page.drawText(co.tagline.toUpperCase(), { x: wx, y: 786, size: 5.6, font: ctx.font, color: muted });
@@ -1106,6 +1133,7 @@ export async function generateApplicationPdf({
   const coApplicantSignature = hasCoApplicant && coApplicantSignatureDataUrl ? await embedSignature(pdfDoc, coApplicantSignatureDataUrl) : null;
   const applicantPhoto = await embedPhotoOrNull(pdfDoc, applicantPhotoSource);
   const coApplicantPhoto = hasCoApplicant ? await embedPhotoOrNull(pdfDoc, coApplicantPhotoSource) : null;
+  const brandIcon = await embedBrandIcon(pdfDoc, project.id);
   const ctx: PdfContext = {
     pdfDoc,
     font,
@@ -1116,6 +1144,7 @@ export async function generateApplicationPdf({
     coApplicantPhoto,
     pageNumber: 0,
     project,
+    brandIcon,
   };
 
   await renderReadableApplicationPacket(ctx, formData, identityAttachments, hasCoApplicant, paymentInfo);
@@ -1146,6 +1175,7 @@ export async function generatePaymentReceiptPdf({ formData, paymentInfo }: Gener
     coApplicantPhoto: null,
     pageNumber: 0,
     project,
+    brandIcon: null,
   };
 
   await renderPaymentReceiptPage(ctx, formData, paymentInfo);
