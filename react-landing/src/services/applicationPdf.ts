@@ -170,6 +170,10 @@ const paymentPlanRows: Array<[string, string]> = [
 const receiptAccent = rgb(0.78, 0.45, 0.16);
 const receiptFoliage = rgb(0.29, 0.44, 0.17);
 const receiptPanel = rgb(0.949, 0.965, 0.976);
+// Bright accent block behind "Amount Received" - matches the plain, invoice-style
+// receipt template the client asked to switch to (as opposed to the previous
+// ornate certificate-style layout).
+const receiptGreenFill = rgb(0.545, 0.745, 0.298);
 
 interface ReceiptCompanyProfile {
   entity: string;
@@ -182,6 +186,21 @@ interface ReceiptCompanyProfile {
   state?: string;
   stateCode?: string;
 }
+
+/** Fixed issuer shown on the payment receipt page only (per the client's
+ *  reference template) - deliberately independent of RECEIPT_COMPANY, which
+ *  still supplies the correct per-project legal entity for the booking
+ *  application's own letterhead (cover page, declarations, terms, etc.). */
+const RECEIPT_ISSUER: ReceiptCompanyProfile = {
+  entity: 'Mera Baba Real Estate Pvt Ltd',
+  tagline: '',
+  addressInline: '315, 3rd Floor, Universal Trade Tower, Sector 49, Gurgaon Sohna Road, Gurgaon Delhi 122018 India',
+  email: 'sales1@divinevisioninfra.com',
+  phones: '+91 74282 91303',
+  gstin: '07AAECM5039N2Z3',
+  state: 'Delhi',
+  stateCode: '07',
+};
 
 const RECEIPT_COMPANY: Record<ApplicationProjectId, ReceiptCompanyProfile> = {
   'ops-divine-greens': {
@@ -281,6 +300,13 @@ function formatDateTimeIN(value: string | null | undefined): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString('en-IN');
+}
+
+function formatDateOnlyIN(value: string | null | undefined): string {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 function formatPaymentMethod(value: PaymentStatus['method']): string {
@@ -867,164 +893,150 @@ function renderChecklistPage(ctx: PdfContext, formData: BookingApplicationFormDa
   cursor = drawAccepted(ctx, cursor, 'Checklist confirmed', formData.checklistAccepted);
 }
 
-function renderPaymentReceiptPage(ctx: PdfContext, formData: BookingApplicationFormData, paymentInfo: PaymentStatus | null | undefined) {
+/** Plain, invoice-style layout (per the client's reference template) - a
+ *  letterhead, a "Payment Received Date / Mode / Amount in words" block next
+ *  to a filled "Amount Received" panel, a "Received From" block, and a
+ *  "Payment for" line-item table. Replaces the previous ornate
+ *  certificate-style receipt (frame, watermark, wax-style "PAID" seal). */
+// Drawn as vector text rather than an embedded raster - pdf-lib's PNG/JPEG
+// embedding renders this brand asset's colors inverted in every viewer
+// tested, so text avoids that entirely and stays crisp at any size.
+function drawDivineVisionWordmark(page: PDFPage, x: number, y: number, size: number, font: PDFFont, color = ink) {
+  page.drawText('DIVINE VISION', { x, y, size, font, color });
+}
+
+async function renderPaymentReceiptPage(ctx: PdfContext, formData: BookingApplicationFormData, paymentInfo: PaymentStatus | null | undefined) {
   const page = ctx.pdfDoc.addPage(pageSize);
   ctx.pageNumber += 1;
   const { width, height } = page.getSize();
-  const co = RECEIPT_COMPANY[ctx.project.id] ?? RECEIPT_COMPANY['ops-divine-greens'];
+  const co = RECEIPT_ISSUER;
   const cx = marginX;
   const cRight = width - marginX;
   const innerW = cRight - cx;
-  const midX = cx + innerW / 2 + 12;
 
-  // ---- Decorative double frame + corner blocks ----------------------------
-  page.drawRectangle({ x: 22, y: 22, width: width - 44, height: height - 44, borderColor: divineGreen, borderWidth: 1.4 });
-  page.drawRectangle({ x: 27, y: 27, width: width - 54, height: height - 54, borderColor: receiptAccent, borderWidth: 0.5 });
-  ([[27, 27], [width - 33, 27], [27, height - 33], [width - 33, height - 33]] as Array<[number, number]>).forEach(([bx, by]) => {
-    page.drawRectangle({ x: bx, y: by, width: 6, height: 6, color: divineGreen });
-  });
+  let y = height - 64;
 
-  // ---- Watermark emblem --------------------------------------------------
-  drawCenteredText(page, projectMonogram(ctx.project), width / 2, height / 2 - 30, 150, ctx.bold, divineGreen, 0.045);
-
-  // ---- Letterhead ------------------------------------------------------
-  let y = height - 74;
-  drawBrandEmblem(page, cx, y - 44, 52, ctx);
-  const wmX = cx + 66;
-  const wm = projectWordmark(ctx.project);
-  page.drawText(wm.head, { x: wmX, y: y - 6, size: 19, font: ctx.bold, color: divineGreen });
-  page.drawText(wm.tail, {
-    x: wmX + ctx.bold.widthOfTextAtSize(wm.head, 19),
-    y: y - 6,
-    size: 19,
-    font: ctx.bold,
-    color: receiptFoliage,
-  });
-  page.drawText(co.tagline.toUpperCase(), { x: wmX, y: y - 20, size: 6.8, font: ctx.font, color: muted });
-  page.drawText(`Developed by ${co.entity}`, { x: wmX, y: y - 33, size: 8, font: ctx.bold, color: ink });
-  [co.addressInline, co.email, co.phones].forEach((line, i) => {
-    drawTextRight(page, line, cRight, y - 4 - i * 11, 7.6, ctx.font, muted);
-  });
-
-  y -= 54;
-  page.drawLine({ start: { x: cx, y }, end: { x: cRight, y }, thickness: 1.3, color: divineGreen });
-  page.drawLine({ start: { x: cx, y: y - 3 }, end: { x: cRight, y: y - 3 }, thickness: 0.5, color: receiptAccent });
-  y -= 34;
-
-  // ---- Title + receipt meta -----------------------------------------
-  page.drawText('PAYMENT RECEIPT', { x: cx, y, size: 16, font: ctx.bold, color: ink });
-  drawTextRight(page, `Receipt No.  ${receiptNumber(ctx.project, paymentInfo)}`, cRight, y + 5, 8.5, ctx.bold, ink);
-  drawTextRight(page, `Date  ${formatDateTimeIN(paymentInfo?.paidAt)}`, cRight, y - 7, 8.5, ctx.font, muted);
-  page.drawText('OFFICIAL ACKNOWLEDGEMENT OF BOOKING PAYMENT', { x: cx, y: y - 14, size: 7, font: ctx.font, color: muted });
-  y -= 52;
-
-  // ---- "PAID" seal -------------------------------------------------
-  const sealCX = cRight - 42;
-  const sealCY = y - 18;
-  page.drawEllipse({ x: sealCX, y: sealCY, xScale: 34, yScale: 34, borderColor: receiptFoliage, borderWidth: 1.6 });
-  page.drawEllipse({ x: sealCX, y: sealCY, xScale: 28, yScale: 28, borderColor: receiptFoliage, borderWidth: 0.5 });
-  drawCenteredText(page, 'PAID', sealCX, sealCY + 1, 13, ctx.bold, receiptFoliage);
-  drawCenteredText(page, 'RECEIVED', sealCX, sealCY - 12, 5.4, ctx.font, receiptFoliage);
-
-  // ---- Received with thanks from ---------------------------------
-  page.drawText('RECEIVED WITH THANKS FROM', { x: cx, y, size: 8, font: ctx.bold, color: muted });
-  y -= 16;
-  page.drawText(applicantsLabel(formData), { x: cx, y, size: 12.5, font: ctx.bold, color: ink });
-  y -= 15;
-  wrapTextToWidth(ctx.font, valueOrDash(formData.correspondenceAddress || formData.permanentAddress), 8.5, innerW - 96)
-    .slice(0, 3)
+  // ---- Letterhead: Divine Vision wordmark + legal entity name, address, GSTIN --
+  drawDivineVisionWordmark(page, cx, y, 11, ctx.bold, ink);
+  y -= 20;
+  const textX = cx;
+  page.drawText(co.entity, { x: textX, y: y - 4, size: 14, font: ctx.bold, color: ink });
+  let hy = y - 18;
+  wrapTextToWidth(ctx.font, co.addressInline, 8, innerW - (textX - cx) - 140)
+    .slice(0, 2)
     .forEach((line) => {
-      page.drawText(line, { x: cx, y, size: 8.5, font: ctx.font, color: muted });
-      y -= 11;
+      page.drawText(line, { x: textX, y: hy, size: 8, font: ctx.font, color: muted });
+      hy -= 10;
     });
-  y -= 22;
+  if (co.gstin) {
+    page.drawText(`GSTIN: ${co.gstin}`, { x: textX, y: hy, size: 8, font: ctx.font, color: muted });
+    hy -= 10;
+  }
+  y = Math.min(y - 44, hy) - 12;
 
-  // ---- Amount panel (hero) --------------------------------------
-  const panelH = 74;
-  page.drawRectangle({ x: cx, y: y - panelH, width: innerW, height: panelH, color: receiptPanel, borderColor: divineGreen, borderWidth: 1 });
-  page.drawRectangle({ x: cx, y: y - panelH, width: 3.5, height: panelH, color: receiptAccent });
-  page.drawText('AMOUNT RECEIVED', { x: cx + 18, y: y - 22, size: 8, font: ctx.bold, color: muted });
-  page.drawText(formatCurrencyINR(paymentInfo?.amount), { x: cx + 18, y: y - 52, size: 24, font: ctx.bold, color: divineGreen });
-  drawTextRight(page, 'TOWARDS', cRight - 18, y - 22, 8, ctx.bold, muted);
-  drawTextRight(page, 'Plot Booking Amount', cRight - 18, y - 38, 9.5, ctx.font, ink);
-  y -= panelH + 22;
+  page.drawLine({ start: { x: cx, y }, end: { x: cRight, y }, thickness: 0.8, color: hairline });
+  y -= 26;
+
+  // ---- Title ---------------------------------------------------------
+  drawCenteredText(page, 'PAYMENT RECEIPT', width / 2, y, 13, ctx.bold, ink);
+  y -= 30;
+
+  // ---- Left detail rows + right "Amount Received" panel --------------
+  const boxW = 150;
+  const boxX = cRight - boxW;
+  const leftW = boxX - cx - 24;
+  const rowsTop = y;
   const rawWords = amountInWords(paymentInfo?.amount, formData.bookingAmountWords);
-  const wordsLine = rawWords === '-' ? '-' : `Rupees ${rawWords.replace(/\s*Rupees Only\s*$/i, '')} Only`;
-  page.drawText(wordsLine, { x: cx, y, size: 9.5, font: ctx.bold, color: ink });
-  y -= 32;
-
-  // ---- Payment details (two engraved columns) ------------------
-  page.drawText('PAYMENT DETAILS', { x: cx, y, size: 8, font: ctx.bold, color: muted });
-  y -= 10;
-  const detailRows: Array<[string, string]> = [
-    ['Project', ctx.project.label],
+  const wordsLine = rawWords === '-' ? '-' : `Indian Rupee ${rawWords.replace(/\s*Rupees Only\s*$/i, '')} Only`;
+  const rows: Array<[string, string]> = [
+    ['Payment Received Date', formatDateOnlyIN(paymentInfo?.paidAt)],
     ['Payment Mode', formatPaymentMethod(paymentInfo?.method ?? null)],
-    ['Location', ctx.project.location],
-    ['Payment Status', paymentInfo?.status === 'paid' ? 'PAID' : valueOrDash(paymentInfo?.status)],
-    ['Unit / Plot No.', valueOrDash(formData.unitNo)],
-    ['Received On', formatDateTimeIN(paymentInfo?.paidAt)],
-    ['Transaction Ref.', valueOrDash(paymentInfo?.razorpayPaymentId)],
-    ['Order Ref.', valueOrDash(paymentInfo?.razorpayOrderId)],
-    ['Internal Ref.', valueOrDash(paymentInfo?.paymentId)],
+    ['Amount Received In Words', wordsLine],
   ];
-  const rowH = 25;
-  detailRows.forEach(([label, value], i) => {
-    const col = i % 2;
-    const rowTopY = y - Math.floor(i / 2) * rowH;
-    const lx = col === 0 ? cx : midX;
-    const halfRight = col === 0 ? midX - 12 : cRight;
-    page.drawText(label.toUpperCase(), { x: lx, y: rowTopY - 9, size: 6.6, font: ctx.bold, color: divineGreen });
-    const [valLine] = wrapTextToWidth(ctx.font, value, 9, halfRight - lx);
-    page.drawText(valLine ?? '-', { x: lx, y: rowTopY - 20, size: 9, font: ctx.font, color: ink });
-    page.drawLine({ start: { x: lx, y: rowTopY - 25 }, end: { x: halfRight, y: rowTopY - 25 }, thickness: 0.4, color: hairline });
-  });
-  y -= Math.ceil(detailRows.length / 2) * rowH + 22;
-
-  // ---- Scope note -------------------------------------------------
-  page.drawRectangle({ x: cx, y: y - 40, width: innerW, height: 40, color: receiptPanel });
-  wrapTextToWidth(
-    ctx.font,
-    'This receipt acknowledges the amount recorded above against the plot booking. It is subject to realisation of the instrument / payment-gateway confirmation. Allotment remains governed by the Application Form, the Agreement for Sale and applicable RERA rules.',
-    7.6,
-    innerW - 28,
-  )
-    .slice(0, 3)
-    .forEach((line, i) => {
-      page.drawText(line, { x: cx + 14, y: y - 15 - i * 10, size: 7.6, font: ctx.font, color: muted });
+  let ry = rowsTop;
+  rows.forEach(([label, value]) => {
+    page.drawText(label, { x: cx, y: ry, size: 8, font: ctx.font, color: muted });
+    const lines = wrapTextToWidth(ctx.bold, value, 9.5, leftW).slice(0, 2);
+    let vy = ry - 13;
+    lines.forEach((line) => {
+      page.drawText(line, { x: cx, y: vy, size: 9.5, font: ctx.bold, color: ink });
+      vy -= 11;
     });
-  y -= 66;
+    page.drawLine({ start: { x: cx, y: vy - 3 }, end: { x: cx + leftW, y: vy - 3 }, thickness: 0.4, color: hairline });
+    ry = vy - 15;
+  });
+  const rowsBottom = ry;
+
+  const boxH = Math.max(rowsTop - rowsBottom + 6, 70);
+  const boxTop = rowsTop + 6;
+  page.drawRectangle({ x: boxX, y: boxTop - boxH, width: boxW, height: boxH, color: receiptGreenFill });
+  drawCenteredText(page, 'Amount Received', boxX + boxW / 2, boxTop - boxH / 2 + 8, 8.5, ctx.font, rgb(1, 1, 1));
+  drawCenteredText(page, formatCurrencyINR(paymentInfo?.amount), boxX + boxW / 2, boxTop - boxH / 2 - 8, 14, ctx.bold, rgb(1, 1, 1));
+
+  y = Math.min(rowsBottom, boxTop - boxH) - 30;
+
+  // ---- Received from ---------------------------------------------
+  page.drawText('Received From', { x: cx, y, size: 8, font: ctx.bold, color: muted });
+  y -= 16;
+  page.drawText(`Name: ${applicantsLabel(formData)}`, { x: cx, y, size: 11.5, font: ctx.bold, color: ink });
+  y -= 15;
+  const receivedFromLines: Array<[string, string]> = [
+    ['Phone', valueOrDash(formData.mobile)],
+    ['Plot Number', valueOrDash(formData.unitNo)],
+    ['Area', formData.plotAreaSqYd.trim() ? `${formData.plotAreaSqYd} sq. yd.` : '-'],
+  ];
+  receivedFromLines.forEach(([label, value]) => {
+    page.drawText(`${label}: ${value}`, { x: cx, y, size: 9, font: ctx.font, color: muted });
+    y -= 12;
+  });
+  wrapTextToWidth(ctx.font, valueOrDash(formData.correspondenceAddress || formData.permanentAddress), 9, innerW)
+    .slice(0, 2)
+    .forEach((line, i) => {
+      page.drawText(i === 0 ? `Address: ${line}` : line, { x: cx, y, size: 9, font: ctx.font, color: muted });
+      y -= 12;
+    });
+  y -= 20;
+
+  // ---- Payment for: line-item table ------------------------------
+  page.drawText('Payment for', { x: cx, y, size: 11, font: ctx.bold, color: ink });
+  y -= 16;
+
+  const cols = ['Receipt No.', 'Payment Date', 'Amount Due', 'Amount Paid'];
+  const colW = innerW / cols.length;
+  page.drawRectangle({ x: cx, y: y - 20, width: innerW, height: 20, color: receiptPanel });
+  cols.forEach((label, i) => {
+    page.drawText(label, { x: cx + i * colW + 8, y: y - 14, size: 8, font: ctx.bold, color: muted });
+  });
+  y -= 20;
+  page.drawLine({ start: { x: cx, y }, end: { x: cRight, y }, thickness: 0.6, color: hairline });
+  y -= 18;
+  const rowValues = [
+    receiptNumber(ctx.project, paymentInfo),
+    formatDateOnlyIN(paymentInfo?.paidAt),
+    formatCurrencyINR(paymentInfo?.amount),
+    formatCurrencyINR(paymentInfo?.amount),
+  ];
+  rowValues.forEach((value, i) => {
+    const [line] = wrapTextToWidth(ctx.font, value, 9, colW - 12);
+    page.drawText(line ?? '-', { x: cx + i * colW + 8, y, size: 9, font: ctx.font, color: ink });
+  });
+  y -= 12;
+  page.drawLine({ start: { x: cx, y }, end: { x: cRight, y }, thickness: 0.4, color: hairline });
+  y -= 60;
 
   // ---- Signature + issuer -------------------------------------
   page.drawLine({ start: { x: cRight - 170, y }, end: { x: cRight, y }, thickness: 0.8, color: ink });
   drawTextRight(page, `For ${co.entity}`, cRight, y - 13, 9, ctx.bold, ink);
   drawTextRight(page, 'Authorised Signatory', cRight, y - 25, 7.5, ctx.font, muted);
-  page.drawText('Issued by Divine Vision Infratech — Customer Portal', { x: cx, y: y - 13, size: 8, font: ctx.font, color: muted });
-  page.drawText('Computer-generated receipt; valid without physical signature.', { x: cx, y: y - 24, size: 7, font: ctx.font, color: muted });
-  y -= 60;
+  page.drawText('Computer-generated receipt; valid without physical signature.', { x: cx, y: y - 13, size: 7.5, font: ctx.font, color: muted });
+  page.drawText(`Issued ${formatDateTimeIN(new Date().toISOString())}`, { x: cx, y: y - 24, size: 7, font: ctx.font, color: muted });
+  y -= 50;
 
-  // ---- Closing flourish -------------------------------------
-  const flourishHalf = 90;
-  page.drawLine({ start: { x: width / 2 - flourishHalf, y }, end: { x: width / 2 - 12, y }, thickness: 0.6, color: hairline });
-  page.drawLine({ start: { x: width / 2 + 12, y }, end: { x: width / 2 + flourishHalf, y }, thickness: 0.6, color: hairline });
-  page.drawEllipse({ x: width / 2, y: y + 1, xScale: 2.4, yScale: 2.4, color: receiptAccent });
-  drawCenteredText(page, 'THANK YOU FOR YOUR BOOKING', width / 2, y - 22, 8.5, ctx.bold, divineGreen);
-  drawCenteredText(page, `We look forward to welcoming you to ${ctx.project.label}.`, width / 2, y - 34, 7.5, ctx.font, muted);
-
-  // ---- Statutory line + footer band --------------------------
+  // ---- Statutory line -------------------------------------------
   const statutory = [co.gstin ? `GSTIN ${co.gstin}` : null, co.state ? `State ${co.state} (${co.stateCode})` : null, co.cin ? `CIN ${co.cin}` : null]
     .filter(Boolean)
     .join('     |     ');
-  if (statutory) drawCenteredText(page, statutory, width / 2, 68, 7, ctx.font, muted);
-  page.drawRectangle({ x: 27, y: 30, width: width - 54, height: 22, color: divineGreen });
-  drawCenteredText(
-    page,
-    `${ctx.project.label.toUpperCase()}     •     ${co.addressInline}     •     ${co.email}`,
-    width / 2,
-    38,
-    7,
-    ctx.font,
-    rgb(1, 1, 1),
-  );
+  if (statutory) drawCenteredText(page, statutory, width / 2, Math.max(y, 40), 7, ctx.font, muted);
 }
 
 async function renderReadableApplicationPacket(
@@ -1056,7 +1068,7 @@ async function renderReadableApplicationPacket(
   renderForm60Page(ctx, formData);
   renderChecklistPage(ctx, formData);
   await appendIdentityAttachmentPages(ctx, identityAttachments);
-  renderPaymentReceiptPage(ctx, formData, paymentInfo);
+  await renderPaymentReceiptPage(ctx, formData, paymentInfo);
 }
 
 async function embedPhotoOrNull(pdfDoc: PDFDocument, source: string | null | undefined): Promise<PDFImage | null> {
@@ -1136,7 +1148,7 @@ export async function generatePaymentReceiptPdf({ formData, paymentInfo }: Gener
     project,
   };
 
-  renderPaymentReceiptPage(ctx, formData, paymentInfo);
+  await renderPaymentReceiptPage(ctx, formData, paymentInfo);
 
   const bytes = await pdfDoc.save();
   const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
