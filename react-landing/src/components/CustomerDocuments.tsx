@@ -292,7 +292,7 @@ export function CustomerDocuments({ pendingUnit = null }: CustomerDocumentsProps
   const genStatusTone = docs.generatedDoc.signatureVerified ? 'done' : docs.generatedDoc.generated ? 'pending' : 'neutral';
 
   return (
-    <section className="mt-14">
+    <section>
       <p className="eyebrow-label text-terracotta">Document upload</p>
       <h2 className="mt-2 font-display text-2xl font-bold text-ink sm:text-3xl">Aadhar, PAN &amp; document generation</h2>
       <p className="mt-2 text-sm leading-[1.6] text-ink-muted">
