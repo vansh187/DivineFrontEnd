@@ -790,8 +790,15 @@ export function CustomerApplicationPage() {
     setPaymentError(null);
     try {
       const inventoryId = docs.bookingApplication.inventoryId;
+      // This button only ever pays the plot booking instalment (10% of Total
+      // Plot Amount) - it's always a plot_booking payment, whether or not a
+      // specific inventory unit happens to be bound yet (e.g. the customer
+      // typed the unit number by hand instead of arriving via "Book Plot" on
+      // Available Plots). Gating purpose on inventoryId meant that case never
+      // got flagged for KYC review until the application PDF was uploaded,
+      // instead of the moment the payment itself settled.
       const order = await createPaymentOrder(session.token, amount, {
-        purpose: inventoryId ? 'plot_booking' : 'other',
+        purpose: 'plot_booking',
         inventoryId,
       });
       const result = await openRazorpayCheckout({
@@ -852,11 +859,12 @@ export function CustomerApplicationPage() {
     setPaymentError(null);
     try {
       const inventoryId = docs.bookingApplication.inventoryId;
+      // See handlePayNow - always a plot_booking payment, not gated on inventoryId.
       const record = await recordCashPayment(
         session.token,
         amount,
         'Cash recorded from booking application final page.',
-        { purpose: inventoryId ? 'plot_booking' : 'other', inventoryId },
+        { purpose: 'plot_booking', inventoryId },
       );
       if (isShortPayment(record.amount)) {
         setPaymentError('Please correct the amount.');
@@ -907,11 +915,12 @@ export function CustomerApplicationPage() {
     setPaymentError(null);
     try {
       const inventoryId = docs.bookingApplication.inventoryId;
+      // See handlePayNow - always a plot_booking payment, not gated on inventoryId.
       const record = await recordCashPayment(
         session.token,
         amount,
         'NEFT/RTGS transfer recorded from booking application final page.',
-        { purpose: inventoryId ? 'plot_booking' : 'other', inventoryId },
+        { purpose: 'plot_booking', inventoryId },
         'rtgs_neft',
         utrNumber,
       );
