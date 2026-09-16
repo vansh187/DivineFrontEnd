@@ -472,7 +472,7 @@ export function CustomerProfilePage() {
             paymentId: receiptPaymentId,
             amount: receiptAmount,
             status: 'paid',
-            method: rb.payment_method === 'cash' ? 'cash' : 'razorpay',
+            method: rb.payment_method === 'cash' ? 'cash' : rb.payment_method === 'rtgs_neft' ? 'rtgs_neft' : 'razorpay',
             razorpayOrderId: rb.razorpay_order_id ?? null,
             razorpayPaymentId: rb.razorpay_payment_id ?? null,
             paidAt: rb.payment_created_date ?? rb.booking_date ?? null,

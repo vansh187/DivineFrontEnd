@@ -152,10 +152,17 @@ function SelectField({
 const GENDER_OPTIONS = ['Male', 'Female', 'Prefer not to say'];
 const RESIDENTIAL_STATUS_OPTIONS = ['Resident', 'Non Resident', 'Person of Indian Origin', 'Foreign National'];
 const PAYMENT_MODE_OPTIONS = ['Cheque', 'Demand Draft', 'NEFT / RTGS / UTR', 'Cash', 'Online transfer', 'Other'];
-/** Modes that count as an offline booking payment captured on Page 2 — enough,
- *  with a reference no. and amount, to generate the packet without an online/cash
- *  transaction on the last page. */
-const OFFLINE_PAYMENT_MODES = ['Cheque', 'Demand Draft', 'NEFT / RTGS / UTR', 'Online transfer', 'Other'];
+/** Physical instruments with no backend-verifiable settlement — the backend has
+ *  no payment method for these (see `CashPaymentMethod`), so there is no
+ *  payment/booking record to run KYC review against. Entering the mode,
+ *  reference no. and amount here is enough to generate the packet without an
+ *  online/cash/NEFT transaction on the last page; the customer hands the
+ *  physical instrument to the sales desk separately. */
+const MANUAL_OFFLINE_PAYMENT_MODES = ['Cheque', 'Demand Draft', 'Online transfer', 'Other'];
+/** Backend-recognized label for the "NEFT / RTGS / UTR" payment mode — routed
+ *  through `recordCashPayment(method: 'rtgs_neft')` so it gets a real payment
+ *  record, an inventory lock, and the same KYC-gated packet release as cash. */
+const RTGS_NEFT_PAYMENT_MODE = 'NEFT / RTGS / UTR';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -422,6 +429,7 @@ export function CustomerApplicationPage() {
   const [pageDirection, setPageDirection] = useState<'forward' | 'back'>('forward');
   const [paying, setPaying] = useState(false);
   const [payingCash, setPayingCash] = useState(false);
+  const [payingRtgsNeft, setPayingRtgsNeft] = useState(false);
   const [downloadingReceipt, setDownloadingReceipt] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
@@ -878,6 +886,63 @@ export function CustomerApplicationPage() {
     }
   };
 
+  // Confirms an already-completed NEFT/RTGS transfer, using the UTR number
+  // entered as "Cheque / DD / UTR / reference no." on the "Fill application
+  // form" page. Unlike Cheque/DD/Online transfer/Other (which the backend has
+  // no payment method for), 'rtgs_neft' is a real `CashPaymentMethod` — this
+  // creates a payment + inventory-lock record exactly like cash, so the
+  // generated packet is held for KYC review the same way.
+  const handleConfirmRtgsNeft = async () => {
+    const amount = bookingDueAmount;
+    if (amount <= 0) {
+      setPaymentError('Enter the Total Plot Amount on the Pricing page first — the booking amount is 10% of it.');
+      return;
+    }
+    const utrNumber = form.chequeNo.trim();
+    if (!utrNumber) {
+      setPaymentError('Enter the NEFT / RTGS UTR number on the "Fill application form" page before confirming.');
+      return;
+    }
+    setPayingRtgsNeft(true);
+    setPaymentError(null);
+    try {
+      const inventoryId = docs.bookingApplication.inventoryId;
+      const record = await recordCashPayment(
+        session.token,
+        amount,
+        'NEFT/RTGS transfer recorded from booking application final page.',
+        { purpose: inventoryId ? 'plot_booking' : 'other', inventoryId },
+        'rtgs_neft',
+        utrNumber,
+      );
+      if (isShortPayment(record.amount)) {
+        setPaymentError('Please correct the amount.');
+        return;
+      }
+      persist({
+        ...docs,
+        payment: {
+          paymentId: record.id,
+          amount: record.amount,
+          status: 'paid',
+          method: record.method,
+          razorpayOrderId: record.razorpay_order_id,
+          razorpayPaymentId: record.razorpay_payment_id,
+          paidAt: new Date().toISOString(),
+          inventoryStatus: record.inventory_status ?? null,
+          inventoryConflictReason: record.inventory_conflict_reason ?? null,
+          error: null,
+        },
+      });
+      // Booking is on record — drop the "pending unit" (see handlePayNow).
+      clearPendingUnit(session.email);
+    } catch (err) {
+      setPaymentError(describePaymentError(err));
+    } finally {
+      setPayingRtgsNeft(false);
+    }
+  };
+
   const handleDownloadPaymentReceipt = async () => {
     if (docs.payment.status !== 'paid') {
       setPaymentError('Complete payment before downloading the receipt.');
@@ -906,12 +971,14 @@ export function CustomerApplicationPage() {
     // tile (Documents page) - the single source of truth for whether their signature/photo
     // are required, not whatever happens to be typed into the name field below.
     const hasCoApplicant = docs.hasCoApplicant;
-    // Either the online/cash transaction is complete, or the offline payment
-    // (cheque / DD / UTR) has been captured on the "Fill application form" page.
+    // Either a backend-tracked payment (online, cash, or a confirmed NEFT/RTGS
+    // transfer) is complete, or a manual offline instrument (cheque / DD /
+    // online transfer / other) has been captured on the "Fill application
+    // form" page.
     const onlinePaymentComplete = docs.payment.status === 'paid' && !!docs.payment.paymentId;
     if (!onlinePaymentComplete && !offlinePaymentEntered) {
       setError(
-        'Complete the plot booking payment, or enter the cheque / DD / UTR payment mode, reference number and amount on the "Fill application form" page, before generating the application PDF.',
+        'Complete the plot booking payment (online, cash, or a confirmed NEFT/RTGS transfer), or enter the cheque / DD / other payment mode, reference number and amount on the "Fill application form" page, before generating the application PDF.',
       );
       return;
     }
@@ -1087,7 +1154,13 @@ export function CustomerApplicationPage() {
             ? { ...docs.payment, inventoryStatus: backendDoc.inventory_status }
             : docs.payment,
         });
-        openPdfBlob(blob);
+        // The plot booking (online/cash payment) is held for admin KYC review —
+        // don't hand the customer their own copy of the filled application
+        // packet until that booking shows up verified in `bookings`. The
+        // "Open generated PDF" control enforces the same rule once persisted.
+        if (approvedBooking) {
+          openPdfBlob(blob);
+        }
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) {
           logout();
@@ -1117,11 +1190,14 @@ export function CustomerApplicationPage() {
   // customer never types it.
   const totalPlotAmount = parseAmount(form.totalPlotAmount) || parseAmount(form.totalAmount);
   const bookingDueAmount = bookingAmountFor(totalPlotAmount);
-  // Offline booking payment captured on Page 2 (cheque / DD / UTR): mode + a
-  // reference no. + a positive amount. This unlocks PDF generation without an
-  // online or cash transaction on the last page.
+  // Manual offline instrument (cheque / DD / online transfer / other) captured
+  // on Page 2: mode + a reference no. + a positive amount. This unlocks PDF
+  // generation without a backend-tracked payment — see MANUAL_OFFLINE_PAYMENT_MODES.
+  // NEFT/RTGS is deliberately excluded: it's confirmed via handleConfirmRtgsNeft
+  // instead, which creates a real payment record and keeps the packet KYC-gated
+  // like cash/online, rather than releasing it the moment the fields are typed.
   const offlinePaymentEntered =
-    OFFLINE_PAYMENT_MODES.includes(form.paymentMode.trim()) &&
+    MANUAL_OFFLINE_PAYMENT_MODES.includes(form.paymentMode.trim()) &&
     form.chequeNo.trim() !== '' &&
     parseAmount(form.bookingAmount) > 0;
   const canGeneratePdf = paymentComplete || offlinePaymentEntered;
@@ -1134,6 +1210,12 @@ export function CustomerApplicationPage() {
         booking.kyc_status === 'verified' &&
         (currentBookedUnit ? booking.unit_number === currentBookedUnit : true),
     ) ?? null;
+  // A packet generated after an online/cash booking payment (tracked via
+  // backendDocumentId) is held until the plot's KYC review clears — the
+  // application form is a KYC artifact, not just a payment receipt. A packet
+  // generated from the offline cheque/DD/UTR path (no backendDocumentId, never
+  // uploaded to the backend) isn't part of that review and stays unaffected.
+  const pdfHeldForKyc = !!docs.bookingApplication.backendDocumentId && !approvedBooking;
   // OPS Divine Greens is fully sold — block the form past project selection
   // and surface the sold-out card instead, rather than let a signed-in
   // customer fill out an application for a plot that no longer exists.
@@ -1252,11 +1334,19 @@ export function CustomerApplicationPage() {
           />
           <Field label="Dated" type="date" value={form.chequeDate} onChange={(value) => updateForm('chequeDate', value)} />
           <Field label="Drawn on bank" value={form.bankName} onChange={(value) => updateForm('bankName', value)} />
-          <div className="sm:col-span-2 rounded-lg border border-hairline bg-bg p-3 text-xs leading-relaxed text-ink-muted">
-            Paying by cheque, demand draft or bank transfer? Enter the mode, reference number and amount above, then
-            attach the instrument below. That is enough to generate the application packet on the last page — an online
-            or cash transaction is not required.
-          </div>
+          {form.paymentMode.trim() === RTGS_NEFT_PAYMENT_MODE ? (
+            <div className="sm:col-span-2 rounded-lg border border-hairline bg-bg p-3 text-xs leading-relaxed text-ink-muted">
+              Paying by NEFT/RTGS? Enter the UTR number and amount above and attach the transfer receipt below, then
+              confirm the transfer on the last (Generate) page. Like an online or cash payment, the application packet
+              stays locked until our team verifies your KYC.
+            </div>
+          ) : (
+            <div className="sm:col-span-2 rounded-lg border border-hairline bg-bg p-3 text-xs leading-relaxed text-ink-muted">
+              Paying by cheque, demand draft or other bank transfer? Enter the mode, reference number and amount above,
+              then attach the instrument below. That is enough to generate the application packet on the last page — an
+              online or cash transaction is not required.
+            </div>
+          )}
           <SignatureUpload
             label="First applicant signature for undertaking"
             status={docs.applicantSignature}
@@ -1268,7 +1358,7 @@ export function CustomerApplicationPage() {
             onUpload={(file) => void handleSignatureUpload('cancelledCheque', file)}
           />
           <SignatureUpload
-            label="Payment proof - cheque / DD / UTR receipt (optional)"
+            label="Payment proof - cheque / DD / NEFT / RTGS / UTR receipt (optional)"
             hint="Image (JPG/PNG) or PDF. Attached to the generated application PDF."
             accept="image/jpeg,image/png,application/pdf"
             status={docs.paymentProof}
@@ -1736,7 +1826,7 @@ export function CustomerApplicationPage() {
               <>
                 <p className="mt-4 text-sm text-ink-muted">
                   <span className="font-semibold text-ink">Rs. {docs.payment.amount?.toLocaleString('en-IN')}</span> paid
-                  {docs.payment.method === 'cash' ? ' in cash' : ' online'}
+                  {docs.payment.method === 'cash' ? ' in cash' : docs.payment.method === 'rtgs_neft' ? ' via NEFT / RTGS' : ' online'}
                   {docs.payment.paidAt ? ` on ${new Date(docs.payment.paidAt).toLocaleDateString('en-IN')}` : ''}.
                 </p>
                 {approvedBooking ? (
@@ -1750,7 +1840,7 @@ export function CustomerApplicationPage() {
                   <p className="mt-3 rounded-lg border border-hairline bg-bg px-3 py-2 text-xs leading-relaxed text-ink-muted">
                     <span className="font-semibold text-ink">Payment received — we&rsquo;re verifying your documents.</span>{' '}
                     Your plot is held for you while our team reviews your KYC. You&rsquo;ll be notified once your
-                    booking is confirmed, and the booking receipt unlocks on your profile at that point.
+                    booking is confirmed, and the booking receipt and your filled application PDF unlock at that point.
                   </p>
                 )}
                 {!approvedBooking && docs.payment.inventoryStatus === 'conflict' && (
@@ -1783,7 +1873,7 @@ export function CustomerApplicationPage() {
                     </p>
                   )}
                 </div>
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-3">
                   <div className="rounded-lg border border-hairline bg-surface p-4">
                     <p className="text-xs font-semibold text-ink">Online payment</p>
                     <p className="mt-1 text-xs text-ink-muted">Razorpay, for the fixed booking instalment above.</p>
@@ -1806,6 +1896,31 @@ export function CustomerApplicationPage() {
                       className="mt-3 rounded-full border border-hairline px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-green hover:text-green disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {payingCash ? 'Recording...' : 'Record Cash Payment'}
+                    </button>
+                  </div>
+                  <div className="rounded-lg border border-hairline bg-surface p-4">
+                    <p className="text-xs font-semibold text-ink">NEFT / RTGS transfer</p>
+                    <p className="mt-1 text-xs text-ink-muted">
+                      Already transferred? Select &ldquo;NEFT / RTGS / UTR&rdquo; and enter the UTR number on the
+                      &ldquo;Fill application form&rdquo; page, then confirm it here.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleConfirmRtgsNeft}
+                      disabled={
+                        payingRtgsNeft ||
+                        bookingDueAmount <= 0 ||
+                        form.paymentMode.trim() !== RTGS_NEFT_PAYMENT_MODE ||
+                        !form.chequeNo.trim()
+                      }
+                      title={
+                        form.paymentMode.trim() !== RTGS_NEFT_PAYMENT_MODE || !form.chequeNo.trim()
+                          ? 'Select "NEFT / RTGS / UTR" as the payment mode and enter the UTR number on the "Fill application form" page first.'
+                          : undefined
+                      }
+                      className="mt-3 rounded-full border border-hairline px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-green hover:text-green disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {payingRtgsNeft ? 'Confirming...' : 'Confirm NEFT / RTGS Payment'}
                     </button>
                   </div>
                 </div>
@@ -1842,7 +1957,7 @@ export function CustomerApplicationPage() {
                 {downloadingReceipt ? 'Downloading...' : 'Download payment receipt'}
               </button>
             )}
-            {docs.bookingApplication.pdfDataUrl && (
+            {docs.bookingApplication.pdfDataUrl && !pdfHeldForKyc && (
               <button
                 type="button"
                 onClick={() => openDataUrl(docs.bookingApplication.pdfDataUrl as string)}
@@ -1851,7 +1966,21 @@ export function CustomerApplicationPage() {
                 Open generated PDF
               </button>
             )}
+            {docs.bookingApplication.pdfDataUrl && pdfHeldForKyc && (
+              <span
+                title="The filled application packet unlocks for download once our team verifies your KYC documents."
+                className="ml-3 inline-block cursor-not-allowed rounded-full border border-hairline px-5 py-3 text-sm font-semibold text-ink-muted"
+              >
+                Locked until KYC verified
+              </span>
+            )}
           </div>
+          {docs.bookingApplication.pdfDataUrl && pdfHeldForKyc && (
+            <p className="basis-full text-xs leading-relaxed text-ink-muted">
+              Your application has been submitted for review. The filled application PDF unlocks for download once our
+              team verifies your KYC documents.
+            </p>
+          )}
           {docs.bookingApplication.generatedAt && (
             <span className="text-xs text-ink-muted">
               Generated on {new Date(docs.bookingApplication.generatedAt).toLocaleString('en-IN')}

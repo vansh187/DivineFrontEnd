@@ -286,6 +286,7 @@ function formatDateTimeIN(value: string | null | undefined): string {
 function formatPaymentMethod(value: PaymentStatus['method']): string {
   if (value === 'razorpay') return 'Online payment - Razorpay';
   if (value === 'cash') return 'Cash payment';
+  if (value === 'rtgs_neft') return 'Bank transfer - NEFT / RTGS';
   return '-';
 }
 
