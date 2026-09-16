@@ -21,12 +21,18 @@ export const brochures = {
     href: '/brochures/divine-vision-portfolio.pdf',
     fileName: 'Divine-Vision-Group-Portfolio.pdf',
   },
+  opsDivineGreens: {
+    id: 'ops-divine-greens',
+    label: 'OPS Divine Greens',
+    meta: 'Karnal — plotted township brochure',
+    href: '/brochures/ops-divine-greens-brochure.pdf',
+    fileName: 'OPS-Divine-Greens-Brochure.pdf',
+  },
 } as const satisfies Record<string, Brochure>;
 
 export const brochureList: Brochure[] = Object.values(brochures);
 
-/** OPS Divine Greens has no dedicated brochure yet, so it falls back to the group portfolio. */
 export const brochureByTownshipId: Record<string, Brochure> = {
   'suraksha-enclave': brochures.surakshaEnclave,
-  'ops-divine-greens': brochures.divineVision,
+  'ops-divine-greens': brochures.opsDivineGreens,
 };

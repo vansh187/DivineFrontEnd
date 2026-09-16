@@ -7,7 +7,8 @@ import { loadCustomerDocs, markInstallmentPaidLocally, saveCustomerDocs, type Pa
 import { usePaymentSchedule } from '../hooks/usePaymentSchedule';
 import { formatCurrencyINR, formatIndianDate } from '../utils/currency';
 import { PAY_WINDOW_DAYS, type MilestoneStatus, type ScheduleMilestone } from '../services/paymentSchedule';
-import { createPaymentOrder, verifyPayment } from '../services/paymentsApi';
+import { createPaymentOrder, recordCashPayment, verifyPayment } from '../services/paymentsApi';
+import type { CashPaymentMethod } from '../services/paymentsApi';
 import { openRazorpayCheckout } from '../services/razorpayCheckout';
 import { townshipPricing } from '../data/townshipPricing';
 import {
@@ -243,6 +244,11 @@ export function CustomerProfilePage() {
   const [payingNo, setPayingNo] = useState<number | null>(null);
   const [payError, setPayError] = useState('');
   const [paySuccess, setPaySuccess] = useState('');
+  // Per-milestone payment method choice ('razorpay' | 'cash' | 'rtgs_neft') and
+  // the UTR number typed for an NEFT/RTGS confirmation - both keyed by
+  // milestone.no since every open instalment picks independently.
+  const [installmentMethod, setInstallmentMethod] = useState<Record<number, 'razorpay' | CashPaymentMethod>>({});
+  const [installmentUtr, setInstallmentUtr] = useState<Record<number, string>>({});
 
   useEffect(() => {
     if (!session) return;
@@ -396,7 +402,12 @@ export function CustomerProfilePage() {
         hasRemote ? '' : aadhaar.address,
       ) || unknown;
     const email = firstText(r.email) || session.email;
-    const phone = firstText(r.phone, hasRemote ? '' : form.mobile, hasRemote ? '' : form.phone) || unknown;
+    // Unlike name/address/etc., the phone has no KYC-derived source (Aadhaar QR
+    // doesn't carry it) to fall back to once the backend is authoritative - the
+    // locally cached application form is the *only* other place a customer ever
+    // typed their number, so use it even when hasRemote is true rather than
+    // showing "-" for a number we actually have on this device.
+    const phone = firstText(r.phone, form.mobile, form.phone) || unknown;
     const customerId = firstText(r.customer_id) || (hasRemote ? unknown : session.userId || unknown);
     const township =
       firstText(rb.township_label, rb.project_name) ||
@@ -462,7 +473,12 @@ export function CustomerProfilePage() {
       totalPlotAmount: totalAmount != null ? String(totalAmount) : form.totalPlotAmount,
       totalAmount: totalAmount != null ? String(totalAmount) : form.totalAmount,
       applicantName: name,
-      mobile: phone === unknown ? form.mobile : phone,
+      mobile: phone === unknown ? '' : phone,
+      // The visible profile page shows the merged `address` (backend text/KYC/
+      // form, whichever resolved) - the receipt must use the same value rather
+      // than the raw, possibly-never-filled-in wizard fields, or it can show
+      // blank even when the profile page itself displays a real address.
+      correspondenceAddress: address === unknown ? '' : address,
       email,
       applicationDate: bookingDate || form.applicationDate,
     };
@@ -730,39 +746,77 @@ export function CustomerProfilePage() {
     }
   };
 
-  const handlePayInstallment = async (milestone: ScheduleMilestone) => {
-    if (!session || milestone.amount == null || milestone.amount <= 0) return;
-    setPayingNo(milestone.no);
-    setPayError('');
-    setPaySuccess('');
-    try {
-      const order = await createPaymentOrder(session.token, milestone.amount, {
+  const handlePayInstallmentOnline = async (milestone: ScheduleMilestone) => {
+    if (!session || milestone.amount == null) return;
+    const order = await createPaymentOrder(session.token, milestone.amount, {
+      purpose: 'installment',
+      inventoryId: profile.selectedBooking?.inventory_id ?? null,
+      installmentNo: milestone.no,
+      dueDate: milestone.dueDateISO,
+    });
+    const result = await openRazorpayCheckout({
+      keyId: order.razorpay_key_id,
+      amountPaise: order.amount_paise,
+      currency: order.currency,
+      orderId: order.razorpay_order_id,
+      name: 'Divine Vision Infratech',
+      description: `Instalment ${milestone.no} · ${milestone.label}`,
+      prefillEmail: session.email,
+      prefillName: profile.name,
+    });
+    const record = await verifyPayment(session.token, {
+      razorpay_order_id: result.razorpay_order_id,
+      razorpay_payment_id: result.razorpay_payment_id,
+      razorpay_signature: result.razorpay_signature,
+    });
+    if (!record.verified) {
+      setPayError('Payment could not be verified. Please try again or contact support.');
+      return;
+    }
+    return record.amount;
+  };
+
+  // Cash and a confirmed NEFT/RTGS transfer both settle immediately server-side
+  // via the same endpoint (see recordCashPayment) - only the method label and,
+  // for rtgs_neft, the UTR number differ from the online (Razorpay) path above.
+  const handlePayInstallmentOffline = async (milestone: ScheduleMilestone, method: CashPaymentMethod, utrNumber?: string) => {
+    if (!session || milestone.amount == null) return;
+    const record = await recordCashPayment(
+      session.token,
+      milestone.amount,
+      `${method === 'cash' ? 'Cash' : 'NEFT/RTGS'} recorded for instalment ${milestone.no} from the profile page.`,
+      {
         purpose: 'installment',
         inventoryId: profile.selectedBooking?.inventory_id ?? null,
         installmentNo: milestone.no,
         dueDate: milestone.dueDateISO,
-      });
-      const result = await openRazorpayCheckout({
-        keyId: order.razorpay_key_id,
-        amountPaise: order.amount_paise,
-        currency: order.currency,
-        orderId: order.razorpay_order_id,
-        name: 'Divine Vision Infratech',
-        description: `Instalment ${milestone.no} · ${milestone.label}`,
-        prefillEmail: session.email,
-        prefillName: profile.name,
-      });
-      const record = await verifyPayment(session.token, {
-        razorpay_order_id: result.razorpay_order_id,
-        razorpay_payment_id: result.razorpay_payment_id,
-        razorpay_signature: result.razorpay_signature,
-      });
-      if (!record.verified) {
-        setPayError('Payment could not be verified. Please try again or contact support.');
-        return;
-      }
-      markInstallmentPaidLocally(session.email, milestone.no, record.amount);
-      setPaySuccess(`Instalment ${milestone.no} paid — ${formatINR(record.amount)} received.`);
+      },
+      method,
+      utrNumber,
+    );
+    return record.amount;
+  };
+
+  const handlePayInstallment = async (milestone: ScheduleMilestone) => {
+    if (!session || milestone.amount == null || milestone.amount <= 0) return;
+    const method = installmentMethod[milestone.no] ?? 'razorpay';
+    const utrNumber = installmentUtr[milestone.no]?.trim() ?? '';
+    if (method === 'rtgs_neft' && !utrNumber) {
+      setPayError('Enter the NEFT / RTGS UTR number before confirming.');
+      return;
+    }
+    setPayingNo(milestone.no);
+    setPayError('');
+    setPaySuccess('');
+    try {
+      const paidAmount =
+        method === 'razorpay'
+          ? await handlePayInstallmentOnline(milestone)
+          : await handlePayInstallmentOffline(milestone, method, method === 'rtgs_neft' ? utrNumber : undefined);
+      if (paidAmount == null) return;
+      markInstallmentPaidLocally(session.email, milestone.no, paidAmount);
+      setPaySuccess(`Instalment ${milestone.no} paid — ${formatINR(paidAmount)} received.`);
+      setInstallmentUtr((prev) => ({ ...prev, [milestone.no]: '' }));
       schedule.refresh();
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
@@ -861,8 +915,8 @@ export function CustomerProfilePage() {
           <p className="eyebrow-label text-terracotta">Payment schedule</p>
           <h2 className="mt-2 font-display text-2xl font-bold text-ink">What you pay, and when</h2>
           <p className="mt-2 max-w-[60ch] text-sm leading-[1.65] text-ink-muted">
-            Your plot cost is split across these milestones. The <span className="font-semibold text-ink">Pay now</span>{' '}
-            button for the next instalment opens {PAY_WINDOW_DAYS} days before its due date.
+            Your plot cost is split across these milestones. Payment for the next instalment opens {PAY_WINDOW_DAYS} days
+            before its due date — once it does, choose to pay online, in cash, or by NEFT/RTGS transfer.
           </p>
           {profile.bookingOptions.length > 1 && <div className="mt-5">{renderBookingSelector('profile-booking-payments')}</div>}
 
@@ -920,29 +974,70 @@ export function CustomerProfilePage() {
                       <td className="px-5 py-3.5 text-right">
                         {milestone.status === 'paid' ? (
                           <span className="text-xs font-semibold text-green">Paid</span>
-                        ) : (
+                        ) : !milestone.payable ? (
                           <div className="flex flex-col items-end gap-1">
                             <button
                               type="button"
-                              onClick={() => void handlePayInstallment(milestone)}
-                              disabled={!milestone.payable || payingNo !== null}
-                              title={
-                                milestone.payable
-                                  ? undefined
-                                  : opensOn
-                                    ? `Opens ${formatDateObj(opensOn)}`
-                                    : 'Available closer to the due date'
-                              }
-                              className="rounded-full bg-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-50"
+                              disabled
+                              title={opensOn ? `Opens ${formatDateObj(opensOn)}` : 'Available closer to the due date'}
+                              className="cursor-not-allowed rounded-full bg-green px-4 py-2 text-xs font-semibold text-white opacity-50"
                             >
-                              {payingNo === milestone.no
-                                ? 'Processing…'
-                                : `Pay ${milestone.amount != null ? formatINR(milestone.amount) : 'now'}`}
+                              Pay {milestone.amount != null ? formatINR(milestone.amount) : 'now'}
                             </button>
-                            {!milestone.payable && opensOn && (
-                              <span className="text-[11px] text-ink-muted">Opens {formatDateObj(opensOn)}</span>
-                            )}
+                            {opensOn && <span className="text-[11px] text-ink-muted">Opens {formatDateObj(opensOn)}</span>}
                           </div>
+                        ) : (
+                          (() => {
+                            const method = installmentMethod[milestone.no] ?? 'razorpay';
+                            const paying = payingNo === milestone.no;
+                            const amountLabel = milestone.amount != null ? formatINR(milestone.amount) : 'now';
+                            const actionLabel = paying
+                              ? 'Processing…'
+                              : method === 'cash'
+                                ? `Record ${amountLabel} (Cash)`
+                                : method === 'rtgs_neft'
+                                  ? `Confirm ${amountLabel} (NEFT/RTGS)`
+                                  : `Pay ${amountLabel}`;
+                            return (
+                              <div className="flex flex-col items-end gap-1.5">
+                                <select
+                                  value={method}
+                                  onChange={(event) =>
+                                    setInstallmentMethod((prev) => ({
+                                      ...prev,
+                                      [milestone.no]: event.target.value as 'razorpay' | CashPaymentMethod,
+                                    }))
+                                  }
+                                  disabled={payingNo !== null}
+                                  className="rounded-lg border border-hairline bg-bg px-2 py-1.5 text-xs text-ink outline-none focus:border-green disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  <option value="razorpay">Online (Razorpay)</option>
+                                  <option value="cash">Cash</option>
+                                  <option value="rtgs_neft">NEFT / RTGS</option>
+                                </select>
+                                {method === 'rtgs_neft' && (
+                                  <input
+                                    type="text"
+                                    value={installmentUtr[milestone.no] ?? ''}
+                                    onChange={(event) =>
+                                      setInstallmentUtr((prev) => ({ ...prev, [milestone.no]: event.target.value }))
+                                    }
+                                    placeholder="UTR number"
+                                    disabled={payingNo !== null}
+                                    className="w-32 rounded-lg border border-hairline bg-bg px-2 py-1.5 text-xs text-ink outline-none focus:border-green disabled:cursor-not-allowed disabled:opacity-60"
+                                  />
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => void handlePayInstallment(milestone)}
+                                  disabled={payingNo !== null}
+                                  className="rounded-full bg-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  {actionLabel}
+                                </button>
+                              </div>
+                            );
+                          })()
                         )}
                       </td>
                     </tr>
@@ -1114,10 +1209,11 @@ export function CustomerProfilePage() {
           <button
             type="button"
             onClick={() => void handleDownloadReceipt()}
-            disabled={downloading !== null || !profile.receiptPayment}
+            disabled={downloading !== null || remoteLoading || !profile.receiptPayment}
+            title={remoteLoading ? 'Waiting for your profile to finish loading...' : undefined}
             className="mt-4 rounded-full bg-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {downloading === 'receipt' ? 'Preparing…' : 'Download PDF'}
+            {downloading === 'receipt' ? 'Preparing…' : remoteLoading ? 'Loading…' : 'Download PDF'}
           </button>
         </div>
       </div>
