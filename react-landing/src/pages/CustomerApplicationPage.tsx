@@ -976,66 +976,77 @@ export function CustomerApplicationPage() {
     // online transfer / other) has been captured on the "Fill application
     // form" page.
     const onlinePaymentComplete = docs.payment.status === 'paid' && !!docs.payment.paymentId;
+    // Once the payment side is done, the checklist below is still required —
+    // it's what gets submitted for KYC review, not a signal that KYC is
+    // somehow blocking the submission. Say so on every checklist error while
+    // the booking is paid-but-unverified and no packet exists yet, so the
+    // customer doesn't read a routine "accept this checkbox" prompt as a
+    // KYC-related failure.
+    const kycReminder =
+      pdfHeldForKyc && !docs.bookingApplication.pdfDataUrl
+        ? ' This step is required to submit your application for KYC review — the filled PDF stays locked for download until our team verifies your KYC, even after you submit it.'
+        : '';
+    const fail = (message: string) => setError(message + kycReminder);
     if (!onlinePaymentComplete && !offlinePaymentEntered) {
-      setError(
+      fail(
         'Complete the plot booking payment (online, cash, or a confirmed NEFT/RTGS transfer), or enter the cheque / DD / other payment mode, reference number and amount on the "Fill application form" page, before generating the application PDF.',
       );
       return;
     }
     if (!docs.bookingApplication.formData.projectId) {
-      setError('Select the project before generating the application PDF.');
+      fail('Select the project before generating the application PDF.');
       return;
     }
     if (!docs.aadharFront.documentId || (!docs.aadharFront.dataUrl && !docs.aadharFront.signedUrl)) {
-      setError('Upload the Aadhaar front photo before generating the application PDF.');
+      fail('Upload the Aadhaar front photo before generating the application PDF.');
       return;
     }
     if (!docs.aadharBack.documentId || (!docs.aadharBack.dataUrl && !docs.aadharBack.signedUrl)) {
-      setError('Upload the Aadhaar back photo before generating the application PDF.');
+      fail('Upload the Aadhaar back photo before generating the application PDF.');
       return;
     }
     if (!docs.pan.documentId || (!docs.pan.dataUrl && !docs.pan.signedUrl)) {
-      setError('Upload the PAN card photo before generating the application PDF.');
+      fail('Upload the PAN card photo before generating the application PDF.');
       return;
     }
     if (!docs.applicantPhoto.documentId || (!docs.applicantPhoto.dataUrl && !docs.applicantPhoto.signedUrl)) {
-      setError('Upload the applicant photo before generating the application PDF.');
+      fail('Upload the applicant photo before generating the application PDF.');
       return;
     }
     if (hasCoApplicant && (!docs.coApplicantPhoto.documentId || (!docs.coApplicantPhoto.dataUrl && !docs.coApplicantPhoto.signedUrl))) {
-      setError('Upload the co-applicant photo before generating the application PDF.');
+      fail('Upload the co-applicant photo before generating the application PDF.');
       return;
     }
     if (!applicantSignature) {
-      setError('Upload the first applicant signature before generating the application PDF.');
+      fail('Upload the first applicant signature before generating the application PDF.');
       return;
     }
     if (hasCoApplicant && !docs.coApplicantSignature.dataUrl) {
-      setError('Upload the co-applicant signature before generating the application PDF.');
+      fail('Upload the co-applicant signature before generating the application PDF.');
       return;
     }
     if (!docs.cancelledCheque.documentId || (!docs.cancelledCheque.dataUrl && !docs.cancelledCheque.signedUrl)) {
-      setError('Upload a cancelled cheque before generating the application PDF.');
+      fail('Upload a cancelled cheque before generating the application PDF.');
       return;
     }
     if (!docs.bookingApplication.formData.pricingNotesAccepted) {
-      setError('Accept the pricing notes before generating the application PDF.');
+      fail('Accept the pricing notes before generating the application PDF.');
       return;
     }
     if (!docs.bookingApplication.formData.applicantDeclarationAccepted) {
-      setError('Accept the applicant declaration before generating the application PDF.');
+      fail('Accept the applicant declaration before generating the application PDF.');
       return;
     }
     if (!docs.bookingApplication.formData.termsAccepted) {
-      setError('Accept the terms and conditions before generating the application PDF.');
+      fail('Accept the terms and conditions before generating the application PDF.');
       return;
     }
     if (!docs.bookingApplication.formData.paymentPlanAccepted) {
-      setError('Accept the construction linked payment plan before generating the application PDF.');
+      fail('Accept the construction linked payment plan before generating the application PDF.');
       return;
     }
     if (!docs.bookingApplication.formData.checklistAccepted) {
-      setError('Confirm the application checklist before generating the application PDF.');
+      fail('Confirm the application checklist before generating the application PDF.');
       return;
     }
     setGenerating(true);
@@ -1937,6 +1948,14 @@ export function CustomerApplicationPage() {
               <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
                 Complete the plot booking payment, or enter the cheque / DD / UTR payment mode, reference number and amount
                 on the &ldquo;Fill application form&rdquo; page, to enable PDF generation.
+              </p>
+            )}
+            {canGeneratePdf && pdfHeldForKyc && !docs.bookingApplication.pdfDataUrl && (
+              <p className="mb-3 rounded-lg border border-hairline bg-bg px-3 py-2 text-xs leading-relaxed text-ink-muted">
+                <span className="font-semibold text-ink">Your payment is confirmed and awaiting KYC verification.</span>{' '}
+                &ldquo;Generate application PDF&rdquo; still needs every checklist item above completed (signatures,
+                declarations, terms) — that submits your application for KYC review. The filled PDF itself stays
+                locked for download until our team verifies your KYC, even after you submit it.
               </p>
             )}
             <button

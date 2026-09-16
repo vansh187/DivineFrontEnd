@@ -533,6 +533,23 @@ export function CustomerProfilePage() {
 
   if (!session || !profile) return null;
 
+  // The filled application packet is a KYC artifact, not just a payment
+  // receipt (see CustomerApplicationPage's pdfHeldForKyc) - this page must
+  // hold it back the same way, or a customer could bypass that gate simply by
+  // visiting their profile instead of the application wizard. `kycBookings`
+  // is the same `/bookings/mine` source of truth used there; a booking record
+  // is created for every backend-tracked payment (online/cash/rtgs_neft), so
+  // no match here means either KYC review hasn't produced a record yet, or
+  // this document predates booking tracking - lock it either way.
+  const selectedUnitNumber = profile.selectedBooking?.unit_number ?? null;
+  const applicationKycVerified = kycBookings.some(
+    (booking) =>
+      booking.status === 'booked' &&
+      booking.kyc_status === 'verified' &&
+      (selectedUnitNumber ? booking.unit_number === selectedUnitNumber : true),
+  );
+  const applicationPdfLocked = !!profile.backendDocumentId && !applicationKycVerified;
+
   const initial = profile.name.charAt(0).toUpperCase();
   const handleBookingChange = (value: string) => {
     setSelectedBookingKey(value || null);
@@ -643,6 +660,10 @@ export function CustomerProfilePage() {
       if (kind === 'application') {
         if (!profile.backendDocumentId) {
           setError('The booking application form is not available for the selected plot yet.');
+          return;
+        }
+        if (applicationPdfLocked) {
+          setError('The filled application PDF unlocks for download once our team verifies your KYC documents.');
           return;
         }
         const doc = await getDocument(session.token, profile.backendDocumentId);
@@ -1040,10 +1061,15 @@ export function CustomerProfilePage() {
           <button
             type="button"
             onClick={() => handleDownload('application')}
-            disabled={downloading !== null || !profile.backendDocumentId}
+            disabled={downloading !== null || !profile.backendDocumentId || applicationPdfLocked}
+            title={applicationPdfLocked ? 'Unlocks once our team verifies your KYC documents.' : undefined}
             className="mt-4 rounded-full bg-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {downloading === 'application' ? 'Preparing...' : 'Download application form'}
+            {downloading === 'application'
+              ? 'Preparing...'
+              : applicationPdfLocked
+                ? 'Unlocks once KYC verified'
+                : 'Download application form'}
           </button>
         </div>
 
