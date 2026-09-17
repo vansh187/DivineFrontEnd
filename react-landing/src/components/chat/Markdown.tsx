@@ -13,6 +13,21 @@ import { isReportDownloadUrl, resolveReportUrl } from '../../utils/chatReport';
 const INLINE_RE =
   /(\*\*([^*]+)\*\*|__([^_]+)__|\*([^*\n]+)\*|(?<![A-Za-z0-9])_([^_\n]+)_(?![A-Za-z0-9])|`([^`]+)`|\[([^\]]+)\]\(([^)\s]+)\)|\[(\/[A-Za-z0-9._~\-/]+|https?:\/\/[^\]\s]+)\](?!\()|(?<![([])\b(https?:\/\/[^\s)\]]+))/g;
 
+/** Only http(s), mailto, and site-relative paths render as clickable links — a
+ * `javascript:`/`data:`/other scheme is left as plain text instead, so a link
+ * embedded in reply text can never execute script on click. A relative path is
+ * rejected if it contains a backslash or starts with a second `/` or `\` right
+ * after the first — browsers normalize both `//host` and `/\host` as a
+ * protocol-relative URL to an *external* host, so without this a same-site-
+ * looking `/\evil.com` would otherwise pass as "safe". */
+const ABSOLUTE_SAFE_HREF_RE = /^(https?:\/\/|mailto:)/i;
+
+function isSafeHref(href: string): boolean {
+  if (ABSOLUTE_SAFE_HREF_RE.test(href)) return true;
+  if (href.includes('\\')) return false;
+  return href.startsWith('/') && !href.startsWith('//');
+}
+
 /**
  * Resolves a link from an agent reply. A loan/report download URL is sent to
  * the API host and rendered as a download button; every other link (including
@@ -76,12 +91,20 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
         </code>,
       );
     } else if (linkText && linkHref) {
-      const link = resolveLink(linkHref, linkText);
-      nodes.push(<LinkNode key={key} href={link.href} label={link.label} download={link.download} />);
+      if (isSafeHref(linkHref)) {
+        const link = resolveLink(linkHref, linkText);
+        nodes.push(<LinkNode key={key} href={link.href} label={link.label} download={link.download} />);
+      } else {
+        nodes.push(linkText);
+      }
     } else if (bracketUrl || autoUrl) {
       const raw = bracketUrl || autoUrl;
-      const link = resolveLink(raw, raw);
-      nodes.push(<LinkNode key={key} href={link.href} label={link.label} download={link.download} />);
+      if (isSafeHref(raw)) {
+        const link = resolveLink(raw, raw);
+        nodes.push(<LinkNode key={key} href={link.href} label={link.label} download={link.download} />);
+      } else {
+        nodes.push(raw);
+      }
     }
     last = match.index + match[0].length;
   }

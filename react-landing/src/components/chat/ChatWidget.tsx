@@ -385,7 +385,7 @@ export function ChatWidget() {
       chatInitiatedAuthChangeRef.current = true;
       pendingChatNavRef.current = null;
       pendingChatLoginRef.current = false;
-      logout();
+      logout({ clearDocsCache: true });
       greetingSentRef.current = false;
       greetingInFlightRef.current = false;
       greetingRetriedSinceOpenRef.current = false;
