@@ -210,7 +210,7 @@ export function LoginMenu({ light = false }: { light?: boolean }) {
                   type="button"
                   role="menuitem"
                   onClick={() => {
-                    logout();
+                    logout({ clearDocsCache: true });
                     setOpen(false);
                     // Always land on the public home page after signing out,
                     // whatever page the menu was opened from.

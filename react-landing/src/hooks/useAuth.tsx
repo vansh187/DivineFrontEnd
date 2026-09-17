@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from 'react';
 import * as authApi from '../services/authApi';
 import type { LoginInput, Role, SignupInput } from '../services/authApi';
+import { clearBrokerDocsCache, clearCustomerDocsCache } from '../services/documentStore';
 
 export interface AuthSession {
   token: string;
@@ -72,7 +73,12 @@ interface AuthContextValue {
   signup: (role: Role, input: SignupInput) => Promise<void>;
   /** Persist a session from a token issued outside the auth API (chat login). */
   applySession: (input: { token: string; role?: Role; email?: string }) => void;
-  logout: () => void;
+  /** `clearDocsCache` also wipes the cached document uploads/booking-application
+   * draft for this account from localStorage — only pass it for a deliberate,
+   * user-initiated sign-out (the "Log out" menu action), never for an
+   * involuntary 401/session-expired auto-logout, which would otherwise destroy
+   * an in-progress, not-yet-submitted form the visitor never chose to abandon. */
+  logout: (options?: { clearDocsCache?: boolean }) => void;
   isModalOpen: boolean;
   modalMode: ModalMode;
   modalRole: Role;
@@ -183,7 +189,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [persist],
   );
 
-  const logout = useCallback(() => persist(null), [persist]);
+  // `clearDocsCache` also drops the cached Aadhaar/PAN/signature/cheque uploads,
+  // generated PDF, and in-progress booking-application draft for this account so
+  // they don't linger in localStorage on a shared/public device — only requested
+  // for a deliberate sign-out, never an involuntary 401 auto-logout.
+  const logout = useCallback(
+    (options?: { clearDocsCache?: boolean }) => {
+      if (options?.clearDocsCache && session) {
+        if (session.role === 'broker') clearBrokerDocsCache(session.email);
+        else clearCustomerDocsCache(session.email);
+      }
+      persist(null);
+    },
+    [persist, session],
+  );
 
   const openModal = useCallback((mode: ModalMode, role: Role = 'customer') => {
     setModalMode(mode);

@@ -593,9 +593,12 @@ function purgeStaleDocCaches(currentKey: string) {
   }
 }
 
-/** localStorage.setItem that never throws: on a quota error it purges stale
- * caches and falls back to progressively slimmer payloads; if nothing fits it
- * leaves the previously stored value untouched. No-ops when storage is off. */
+/** localStorage.setItem that never throws: always slims base64 payloads that are
+ * already backed up server-side (documentId/signedUrl set) before writing, so
+ * synced copies of Aadhaar/PAN/signature/cheque images and the generated PDF
+ * don't linger on disk once the backend has them. On a quota error it purges
+ * stale caches and falls back to progressively slimmer payloads; if nothing
+ * fits it leaves the previously stored value untouched. No-ops when storage is off. */
 function persistDocs(key: string, state: unknown) {
   const tryWrite = (payload: string): boolean | 'quota' => {
     try {
@@ -606,10 +609,10 @@ function persistDocs(key: string, state: unknown) {
     }
   };
 
-  if (tryWrite(JSON.stringify(state)) === true) return;
+  const slim = JSON.stringify(slimDocsForStorage(state, false));
+  if (tryWrite(slim) === true) return;
 
   purgeStaleDocCaches(key);
-  const slim = JSON.stringify(slimDocsForStorage(state, false));
   if (tryWrite(slim) === true) return;
 
   tryWrite(JSON.stringify(slimDocsForStorage(state, true)));
@@ -618,6 +621,26 @@ function persistDocs(key: string, state: unknown) {
 
 export function saveCustomerDocs(email: string, state: CustomerDocState) {
   persistDocs(storageKey('customer', email), state);
+}
+
+/** Clears the on-disk cache of uploaded documents (Aadhaar/PAN/signature/cheque
+ * images, the generated booking PDF) for one account. Called on logout so this
+ * data doesn't linger in localStorage on a shared/public device after sign-out;
+ * the in-memory copy for the current tab is unaffected. */
+export function clearCustomerDocsCache(email: string) {
+  try {
+    localStorage.removeItem(storageKey('customer', email));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearBrokerDocsCache(email: string) {
+  try {
+    localStorage.removeItem(storageKey('broker', email));
+  } catch {
+    /* ignore */
+  }
 }
 
 /**

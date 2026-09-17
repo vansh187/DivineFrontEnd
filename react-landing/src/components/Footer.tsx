@@ -73,7 +73,7 @@ export function Footer() {
                 <li>
                   <button
                     type="button"
-                    onClick={logout}
+                    onClick={() => logout({ clearDocsCache: true })}
                     className="text-sm text-white/70 transition-colors hover:text-terracotta-light"
                   >
                     Log out
