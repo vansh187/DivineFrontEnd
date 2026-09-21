@@ -48,7 +48,7 @@ export interface JwtClaims {
 // the email the person types, so "log in with email" holds end to end.
 // Exported so other service modules (e.g. documentsApi) hit the same host.
 export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/+$/, '')
-  ?? 'https://divinevisioninfrabackend.onrender.com';
+  ?? 'https://divinevisioninfrabackend-301k.onrender.com';
 
 export class ApiError extends Error {
   status: number;

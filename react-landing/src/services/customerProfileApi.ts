@@ -46,9 +46,9 @@ export interface CustomerBookingInfo {
   payment_id?: string | null;
   booking_payment_id?: string | null;
   booking_payment_amount?: number | null;
-  payment_method?: 'razorpay' | 'cash' | string | null;
-  razorpay_order_id?: string | null;
-  razorpay_payment_id?: string | null;
+  payment_method?: 'zoho' | 'cash' | string | null;
+  zoho_payments_session_id?: string | null;
+  zoho_payment_id?: string | null;
   payment_created_date?: string | null;
   /** Optional server-computed schedule; the UI falls back to the default
    * 10/15/25/25/25 split against `total_consideration` when this is absent. */

@@ -32,8 +32,8 @@ export interface UploadGeneratedApplicationPdfInput {
   /** Inventory unit id of the booked plot. Safety-net for the booked lock - a
    * no-op when the booking payment already locked the plot. */
   inventoryId?: string | null;
-  razorpayOrderId?: string | null;
-  razorpayPaymentId?: string | null;
+  zohoPaymentsSessionId?: string | null;
+  zohoPaymentId?: string | null;
   formData: Record<string, string | number>;
 }
 
@@ -216,8 +216,8 @@ export function uploadGeneratedApplicationPdf(token: string, input: UploadGenera
   formData.append('payment_id', input.paymentId);
   if (input.inventoryId) formData.append('inventory_id', input.inventoryId);
   formData.append('form_data', JSON.stringify(input.formData));
-  if (input.razorpayOrderId) formData.append('razorpay_order_id', input.razorpayOrderId);
-  if (input.razorpayPaymentId) formData.append('razorpay_payment_id', input.razorpayPaymentId);
+  if (input.zohoPaymentsSessionId) formData.append('zoho_payments_session_id', input.zohoPaymentsSessionId);
+  if (input.zohoPaymentId) formData.append('zoho_payment_id', input.zohoPaymentId);
   return authedRequest<GeneratedDocument>('/documents/project-booking-application', token, {
     method: 'POST',
     body: formData,

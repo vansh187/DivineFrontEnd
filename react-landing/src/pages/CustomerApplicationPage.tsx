@@ -14,7 +14,7 @@ import { getDocument, uploadCancelledCheque, uploadGeneratedApplicationPdf } fro
 import { ApiError } from '../services/authApi';
 import { blobToDataUrl, downloadPdfBlob, generateApplicationPdf, generatePaymentReceiptPdf, openDataUrl, openPdfBlob } from '../services/applicationPdf';
 import { createPaymentOrder, recordCashPayment, verifyPayment } from '../services/paymentsApi';
-import { openRazorpayCheckout } from '../services/razorpayCheckout';
+import { openZohoCheckout } from '../services/zohoCheckout';
 import { amountToIndianWords } from '../utils/currency';
 import { formatAadhaarDob, mapAadhaarGender } from '../utils/aadhaar';
 import { listMyBookings } from '../services/bookingsApi';
@@ -801,20 +801,17 @@ export function CustomerApplicationPage() {
         purpose: 'plot_booking',
         inventoryId,
       });
-      const result = await openRazorpayCheckout({
-        keyId: order.razorpay_key_id,
-        amountPaise: order.amount_paise,
+      const result = await openZohoCheckout({
+        accountId: order.zoho_account_id,
+        amount: order.amount,
         currency: order.currency,
-        orderId: order.razorpay_order_id,
+        paymentsSessionId: order.zoho_payments_session_id,
         name: 'Divine Vision Infratech',
         description: 'Plot booking payment',
-        prefillEmail: session.email,
-        prefillName: docs.bookingApplication.formData.applicantName,
       });
       const record = await verifyPayment(session.token, {
-        razorpay_order_id: result.razorpay_order_id,
-        razorpay_payment_id: result.razorpay_payment_id,
-        razorpay_signature: result.razorpay_signature,
+        zoho_payments_session_id: result.zoho_payments_session_id,
+        zoho_payment_id: result.zoho_payment_id,
       });
       if (isShortPayment(record.amount)) {
         setPaymentError('Please correct the amount.');
@@ -827,8 +824,8 @@ export function CustomerApplicationPage() {
           amount: record.amount,
           status: record.verified ? 'paid' : 'failed',
           method: record.method,
-          razorpayOrderId: record.razorpay_order_id,
-          razorpayPaymentId: record.razorpay_payment_id,
+          zohoPaymentsSessionId: record.zoho_payments_session_id,
+          zohoPaymentId: record.zoho_payment_id,
           paidAt: record.verified ? new Date().toISOString() : null,
           inventoryStatus: record.inventory_status ?? null,
           inventoryConflictReason: record.inventory_conflict_reason ?? null,
@@ -877,8 +874,8 @@ export function CustomerApplicationPage() {
           amount: record.amount,
           status: 'paid',
           method: record.method,
-          razorpayOrderId: record.razorpay_order_id,
-          razorpayPaymentId: record.razorpay_payment_id,
+          zohoPaymentsSessionId: record.zoho_payments_session_id,
+          zohoPaymentId: record.zoho_payment_id,
           paidAt: new Date().toISOString(),
           inventoryStatus: record.inventory_status ?? null,
           inventoryConflictReason: record.inventory_conflict_reason ?? null,
@@ -935,8 +932,8 @@ export function CustomerApplicationPage() {
           amount: record.amount,
           status: 'paid',
           method: record.method,
-          razorpayOrderId: record.razorpay_order_id,
-          razorpayPaymentId: record.razorpay_payment_id,
+          zohoPaymentsSessionId: record.zoho_payments_session_id,
+          zohoPaymentId: record.zoho_payment_id,
           paidAt: new Date().toISOString(),
           inventoryStatus: record.inventory_status ?? null,
           inventoryConflictReason: record.inventory_conflict_reason ?? null,
@@ -1151,8 +1148,8 @@ export function CustomerApplicationPage() {
           projectId: docs.bookingApplication.formData.projectId,
           paymentId: docs.payment.paymentId,
           inventoryId: docs.bookingApplication.inventoryId,
-          razorpayOrderId: docs.payment.razorpayOrderId,
-          razorpayPaymentId: docs.payment.razorpayPaymentId,
+          zohoPaymentsSessionId: docs.payment.zohoPaymentsSessionId,
+          zohoPaymentId: docs.payment.zohoPaymentId,
           formData: serializeFormData(docs.bookingApplication.formData, hasCoApplicant),
         });
         persist({
@@ -1816,7 +1813,7 @@ export function CustomerApplicationPage() {
               <div>
                 <p className="font-semibold text-ink">Plot booking payment</p>
                 <p className="mt-1 text-xs leading-relaxed text-ink-muted">
-                  The booking instalment is fixed at 10% of the Total Plot Amount. Pay it online through Razorpay or
+                  The booking instalment is fixed at 10% of the Total Plot Amount. Pay it online through Zoho Pay or
                   record it as cash here — or enter cheque / DD / UTR details on the &ldquo;Fill application form&rdquo;
                   page. PDF generation unlocks once any of these is done.
                 </p>
@@ -1896,7 +1893,7 @@ export function CustomerApplicationPage() {
                 <div className="grid gap-4 md:grid-cols-3">
                   <div className="rounded-lg border border-hairline bg-surface p-4">
                     <p className="text-xs font-semibold text-ink">Online payment</p>
-                    <p className="mt-1 text-xs text-ink-muted">Razorpay, for the fixed booking instalment above.</p>
+                    <p className="mt-1 text-xs text-ink-muted">Zoho Pay, for the fixed booking instalment above.</p>
                     <button
                       type="button"
                       onClick={handlePayNow}

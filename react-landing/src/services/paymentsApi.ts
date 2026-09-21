@@ -1,11 +1,15 @@
 import { authedRequest as authedRequestBase } from './authApi';
 
+/** Contract with the backend's `POST /payments/create-order` for the Zoho Payments
+ * gateway - not yet implemented server-side as of this refactor (client-side switch
+ * from Razorpay). Backend should open a Zoho "Payment Session" and return its id
+ * alongside the Zoho account id the widget needs to open. */
 export interface PaymentOrder {
   payment_id: string;
-  razorpay_order_id: string;
-  razorpay_key_id: string;
+  zoho_payments_session_id: string;
+  zoho_account_id: string;
   amount: number;
-  amount_paise: number;
+  amount_minor_unit: number;
   currency: string;
   status: string;
 }
@@ -53,10 +57,10 @@ export interface PaymentRecord {
   amount: number;
   currency: string;
   status: string;
-  method: 'razorpay' | 'cash' | 'rtgs_neft';
+  method: 'zoho' | 'cash' | 'rtgs_neft';
   verified: boolean;
-  razorpay_order_id: string;
-  razorpay_payment_id: string | null;
+  zoho_payments_session_id: string;
+  zoho_payment_id: string | null;
   created_date: string;
   /** Present on a `plot_booking` payment - the unit the backend tried to lock. */
   inventory_id?: string | null;
@@ -71,9 +75,8 @@ export interface PaymentRecord {
 }
 
 export interface VerifyPaymentInput {
-  razorpay_order_id: string;
-  razorpay_payment_id: string;
-  razorpay_signature: string;
+  zoho_payments_session_id: string;
+  zoho_payment_id: string;
 }
 
 function messageForPaymentError(status: number, detail: unknown): string {
@@ -122,9 +125,9 @@ export function createPaymentOrder(
   });
 }
 
-/** Sends Razorpay's checkout callback fields (order id, payment id, signature) to the
- * backend to be cryptographically verified — the frontend never decides "paid" on its own,
- * only the backend's signature check (against Razorpay's key_secret) does. */
+/** Sends Zoho Payments' checkout callback fields (payment id + payments session id) to
+ * the backend to be confirmed server-side against Zoho's API — the frontend never decides
+ * "paid" on its own, only that backend confirmation does. */
 export function verifyPayment(token: string, input: VerifyPaymentInput): Promise<PaymentRecord> {
   return authedRequest<PaymentRecord>('/payments/verify', token, {
     method: 'POST',
@@ -134,7 +137,7 @@ export function verifyPayment(token: string, input: VerifyPaymentInput): Promise
 }
 
 /** Records cash (or an already-completed RTGS/NEFT transfer) collected outside
- * Razorpay — settles immediately server-side, no gateway involved (unlike
+ * Zoho Pay — settles immediately server-side, no gateway involved (unlike
  * createPaymentOrder/verifyPayment). `utrNumber` is required when
  * `method` is `'rtgs_neft'`; omit both for a plain cash record. */
 export function recordCashPayment(
