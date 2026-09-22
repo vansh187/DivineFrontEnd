@@ -35,6 +35,7 @@ const OurStoryPage = lazy(() => import('./pages/OurStoryPage').then((m) => ({ de
 const OurWorkPage = lazy(() => import('./pages/OurWorkPage').then((m) => ({ default: m.OurWorkPage })));
 const BookPlotPage = lazy(() => import('./pages/BookPlotPage').then((m) => ({ default: m.BookPlotPage })));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage })));
+const PaymentResultPage = lazy(() => import('./pages/PaymentResultPage').then((m) => ({ default: m.PaymentResultPage })));
 
 const roleHome: Record<Role, string> = {
   customer: '/customer',
@@ -124,6 +125,11 @@ function AppRoutes() {
             <Route path="*" element={<NotFoundPage />} />
           </Route>
           <Route path="/book-plots" element={<Navigate to="/book-plot" replace />} />
+          {/* Zoho Payments' hosted checkout redirects here (ZOHO_PAYMENTS_SUCCESS_URL /
+              ZOHO_PAYMENTS_FAILURE_URL) - not under SiteLayout/RoleRoute since both a
+              customer's and a broker's payment land on the exact same configured URL. */}
+          <Route path="/customer/payments/success" element={<PaymentResultPage outcome="success" />} />
+          <Route path="/customer/payments/failure" element={<PaymentResultPage outcome="failure" />} />
           <Route
             path="/customer"
             element={

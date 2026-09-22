@@ -13,8 +13,8 @@ import { clearPendingUnit } from '../services/pendingUnit';
 import { getDocument, uploadCancelledCheque, uploadGeneratedApplicationPdf } from '../services/documentsApi';
 import { ApiError } from '../services/authApi';
 import { blobToDataUrl, downloadPdfBlob, generateApplicationPdf, generatePaymentReceiptPdf, openDataUrl, openPdfBlob } from '../services/applicationPdf';
-import { createPaymentOrder, recordCashPayment, verifyPayment } from '../services/paymentsApi';
-import { openZohoCheckout } from '../services/zohoCheckout';
+import { createPaymentOrder, recordCashPayment } from '../services/paymentsApi';
+import { stashPendingZohoPayment } from '../services/pendingZohoPayment';
 import { amountToIndianWords } from '../utils/currency';
 import { formatAadhaarDob, mapAadhaarGender } from '../utils/aadhaar';
 import { listMyBookings } from '../services/bookingsApi';
@@ -801,47 +801,26 @@ export function CustomerApplicationPage() {
         purpose: 'plot_booking',
         inventoryId,
       });
-      const result = await openZohoCheckout({
-        accountId: order.zoho_account_id,
-        amount: order.amount,
-        currency: order.currency,
-        paymentsSessionId: order.zoho_payments_session_id,
-        name: 'Divine Vision Infratech',
-        description: 'Plot booking payment',
-      });
-      const record = await verifyPayment(session.token, {
-        zoho_payments_session_id: result.zoho_payments_session_id,
-        zoho_payment_id: result.zoho_payment_id,
-      });
-      if (isShortPayment(record.amount)) {
-        setPaymentError('Please correct the amount.');
+      if (!order.checkout_url) {
+        setPaymentError('Could not start the payment. Please try again or contact support.');
+        setPaying(false);
         return;
       }
-      persist({
-        ...docs,
-        payment: {
-          paymentId: record.id,
-          amount: record.amount,
-          status: record.verified ? 'paid' : 'failed',
-          method: record.method,
-          zohoPaymentsSessionId: record.zoho_payments_session_id,
-          zohoPaymentId: record.zoho_payment_id,
-          paidAt: record.verified ? new Date().toISOString() : null,
-          inventoryStatus: record.inventory_status ?? null,
-          inventoryConflictReason: record.inventory_conflict_reason ?? null,
-          error: record.verified ? null : 'Payment could not be verified. Please try again or contact support.',
-        },
+      // Hosted checkout is a full-page redirect (see ZOHO_PAYMENTS_SETUP.md) -
+      // nothing after this line runs. Zoho sends the browser back to
+      // ZOHO_PAYMENTS_SUCCESS_URL/FAILURE_URL, where PaymentResultPage calls
+      // /payments/verify and applies the same local update (including the
+      // isShortPayment guard below) this used to do synchronously right here.
+      stashPendingZohoPayment({
+        purpose: 'plot_booking',
+        email: session.email,
+        role: 'customer',
+        expectedAmount: amount,
+        returnPath: location.pathname,
       });
-      if (record.verified) {
-        // The booking is on record now — drop the "pending unit" so it can't
-        // keep re-seeding this plot or driving a stale "payment due" banner.
-        clearPendingUnit(session.email);
-      } else {
-        setPaymentError('Payment could not be verified. Please try again or contact support.');
-      }
+      window.location.href = order.checkout_url;
     } catch (err) {
       setPaymentError(describePaymentError(err));
-    } finally {
       setPaying(false);
     }
   };

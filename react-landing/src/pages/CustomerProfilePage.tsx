@@ -7,9 +7,9 @@ import { loadCustomerDocs, markInstallmentPaidLocally, saveCustomerDocs, type Pa
 import { usePaymentSchedule } from '../hooks/usePaymentSchedule';
 import { formatCurrencyINR, formatIndianDate } from '../utils/currency';
 import { PAY_WINDOW_DAYS, type MilestoneStatus, type ScheduleMilestone } from '../services/paymentSchedule';
-import { createPaymentOrder, recordCashPayment, verifyPayment } from '../services/paymentsApi';
+import { createPaymentOrder, recordCashPayment } from '../services/paymentsApi';
 import type { CashPaymentMethod } from '../services/paymentsApi';
-import { openZohoCheckout } from '../services/zohoCheckout';
+import { stashPendingZohoPayment } from '../services/pendingZohoPayment';
 import { townshipPricing } from '../data/townshipPricing';
 import {
   getCustomerProfileShared,
@@ -756,6 +756,10 @@ export function CustomerProfilePage() {
     }
   };
 
+  // Hosted checkout is a full-page redirect (see ZOHO_PAYMENTS_SETUP.md) - this
+  // never returns to its caller on the success path. Zoho sends the browser
+  // back to ZOHO_PAYMENTS_SUCCESS_URL/FAILURE_URL, where PaymentResultPage
+  // calls /payments/verify and applies markInstallmentPaidLocally itself.
   const handlePayInstallmentOnline = async (milestone: ScheduleMilestone) => {
     if (!session || milestone.amount == null) return;
     const order = await createPaymentOrder(session.token, milestone.amount, {
@@ -764,23 +768,18 @@ export function CustomerProfilePage() {
       installmentNo: milestone.no,
       dueDate: milestone.dueDateISO,
     });
-    const result = await openZohoCheckout({
-      accountId: order.zoho_account_id,
-      amount: order.amount,
-      currency: order.currency,
-      paymentsSessionId: order.zoho_payments_session_id,
-      name: 'Divine Vision Infratech',
-      description: `Instalment ${milestone.no} · ${milestone.label}`,
-    });
-    const record = await verifyPayment(session.token, {
-      zoho_payments_session_id: result.zoho_payments_session_id,
-      zoho_payment_id: result.zoho_payment_id,
-    });
-    if (!record.verified) {
-      setPayError('Payment could not be verified. Please try again or contact support.');
+    if (!order.checkout_url) {
+      setPayError('Could not start the payment. Please try again or contact support.');
       return;
     }
-    return record.amount;
+    stashPendingZohoPayment({
+      purpose: 'installment',
+      email: session.email,
+      role: 'customer',
+      installmentNo: milestone.no,
+      returnPath: location.pathname,
+    });
+    window.location.href = order.checkout_url;
   };
 
   // Cash and a confirmed NEFT/RTGS transfer both settle immediately server-side

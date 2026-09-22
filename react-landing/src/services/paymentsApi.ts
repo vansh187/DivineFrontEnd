@@ -1,15 +1,18 @@
 import { authedRequest as authedRequestBase } from './authApi';
 
-/** Contract with the backend's `POST /payments/create-order` for the Zoho Payments
- * gateway - not yet implemented server-side as of this refactor (client-side switch
- * from Razorpay). Backend should open a Zoho "Payment Session" and return its id
- * alongside the Zoho account id the widget needs to open. */
+/** Contract with the backend's `POST /payments/create-order` for Zoho Payments'
+ * *hosted checkout* - a full-page redirect, not an embedded widget. `checkout_url`
+ * is where the customer's browser must be sent (`window.location.href =
+ * checkout_url`) - it already embeds the access_key the backend also returns
+ * (`https://payments.zoho.in/hostedcheckout/<access_key>`), so the frontend
+ * never needs that field on its own. Zoho later redirects the browser back to
+ * whichever of ZOHO_PAYMENTS_SUCCESS_URL / ZOHO_PAYMENTS_FAILURE_URL applies,
+ * appending the fields `VerifyPaymentInput` expects as a query string. See
+ * ZOHO_PAYMENTS_SETUP.md. */
 export interface PaymentOrder {
   payment_id: string;
-  zoho_payments_session_id: string;
-  zoho_account_id: string;
+  checkout_url: string;
   amount: number;
-  amount_minor_unit: number;
   currency: string;
   status: string;
 }
@@ -74,9 +77,21 @@ export interface PaymentRecord {
   booking_id?: string | null;
 }
 
+/** The exact query-string fields Zoho's hosted checkout appends when it redirects
+ * the browser back to the success/failure URL - forwarded to the backend
+ * unchanged (see ZOHO_PAYMENTS_SETUP.md). `udf1`-`udf5` are only present if the
+ * backend set them when creating the order. */
 export interface VerifyPaymentInput {
-  zoho_payments_session_id: string;
-  zoho_payment_id: string;
+  payments_session_id: string;
+  payment_id: string;
+  payment_status: string;
+  amount: string;
+  signature: string;
+  udf1?: string;
+  udf2?: string;
+  udf3?: string;
+  udf4?: string;
+  udf5?: string;
 }
 
 function messageForPaymentError(status: number, detail: unknown): string {
