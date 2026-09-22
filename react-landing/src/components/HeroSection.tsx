@@ -1,7 +1,9 @@
 import { useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { HeroMedia } from './HeroMedia';
 import { useHeroScrollTimeline } from '../hooks/useHeroScrollTimeline';
 import { company } from '../data/company';
+import { prefetchRouteAssets } from '../utils/routePreload';
 
 type HeroSectionProps = {
   onBookVisit?: () => void;
@@ -64,12 +66,15 @@ export function HeroSection({ onBookVisit }: HeroSectionProps) {
           >
             Book a site visit
           </button>
-          <a
-            href="/residences"
+          <Link
+            to="/residences"
+            onMouseEnter={() => prefetchRouteAssets('/residences')}
+            onFocus={() => prefetchRouteAssets('/residences')}
+            onTouchStart={() => prefetchRouteAssets('/residences')}
             className="eyebrow-label rounded-none border border-white/55 bg-black/25 px-5 py-3.5 text-center text-white backdrop-blur-sm transition-colors duration-200 hover:border-white hover:bg-black/40 sm:px-7"
           >
             Explore residences
-          </a>
+          </Link>
         </div>
 
         <dl className="mt-4 grid w-full max-w-md grid-cols-2 gap-px overflow-hidden rounded-none border border-white/18 border-t-[3px] border-t-terracotta bg-white/14 backdrop-blur-md min-[440px]:grid-cols-3 sm:mt-7 sm:max-w-3xl sm:grid-cols-5">

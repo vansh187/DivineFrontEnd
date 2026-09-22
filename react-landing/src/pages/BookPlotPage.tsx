@@ -1,8 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Navbar } from '../components/Navbar';
-import { Footer } from '../components/Footer';
-import { SiteVisitDrawer } from '../components/SiteVisitDrawer';
 import { AvailablePlotsList } from '../components/AvailablePlotsList';
 import { useAuth } from '../hooks/useAuth';
 import type { InventoryUnit } from '../services/inventoryApi';
@@ -49,7 +46,6 @@ function clearPendingUnit() {
 export function BookPlotPage() {
   const navigate = useNavigate();
   const { session, openModal } = useAuth();
-  const [siteVisitOpen, setSiteVisitOpen] = useState(false);
 
   // Continue a booking that was started before signing in.
   useEffect(() => {
@@ -85,7 +81,6 @@ export function BookPlotPage() {
 
   return (
     <>
-      <Navbar onBookVisit={() => setSiteVisitOpen(true)} />
       <main className="bg-bg px-4 pb-20 pt-28 sm:px-10 sm:pt-32">
         <section className="mx-auto max-w-6xl">
           <p className="eyebrow-label text-terracotta">Available plots</p>
@@ -105,8 +100,6 @@ export function BookPlotPage() {
           <AvailablePlotsList actionLabel="Book Plot" onAction={handleBook} />
         </section>
       </main>
-      <Footer />
-      <SiteVisitDrawer open={siteVisitOpen} onClose={() => setSiteVisitOpen(false)} />
     </>
   );
 }

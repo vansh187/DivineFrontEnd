@@ -1,7 +1,8 @@
-import { useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { useScrolled } from '../hooks/useScrolled';
 import { navLinks } from '../data/navigation';
+import { prefetchRouteAssets } from '../utils/routePreload';
 import { LoginMenu } from './LoginMenu';
 import { DivineVisionLogo } from './DivineVisionLogo';
 
@@ -17,32 +18,52 @@ export function Navbar({ onBookVisit, transparentOnTop = false }: NavbarProps) {
   const glass = transparentOnTop && !scrolled;
   const links = pathname === '/' ? navLinks : [{ label: 'Home', href: '/' }, ...navLinks];
 
+  // transparentOnTop flips instantly with the route (home vs. every other
+  // page), not gradually like the scroll-driven glass effect - without this,
+  // `transition-all` animates a colour flash across the whole bar on every
+  // navigation. Suppress the transition for one frame right after the
+  // pathname changes; scroll-driven changes still fade normally.
+  const [skipTransition, setSkipTransition] = useState(false);
+  const prevPathname = useRef(pathname);
+  useLayoutEffect(() => {
+    if (prevPathname.current === pathname) return;
+    prevPathname.current = pathname;
+    setSkipTransition(true);
+    const id = requestAnimationFrame(() => setSkipTransition(false));
+    return () => cancelAnimationFrame(id);
+  }, [pathname]);
+
   return (
     <nav
-      className={`fixed inset-x-0 top-0 z-[90] flex min-w-0 items-center justify-between gap-2 border-b px-3 py-3 transition-all duration-300 sm:gap-3 sm:px-10 sm:py-4 ${
+      className={`fixed inset-x-0 top-0 z-[90] flex min-w-0 items-center justify-between gap-2 border-b px-3 py-3 sm:gap-3 sm:px-10 sm:py-4 ${
+        skipTransition ? '' : 'transition-all duration-300'
+      } ${
         glass
           ? 'border-transparent bg-transparent text-white shadow-none'
           : 'border-hairline bg-bg/94 text-ink shadow-none backdrop-blur-xl'
       }`}
     >
-      <a
-        href="/"
+      <Link
+        to="/"
         aria-label="Divine Vision home"
         className="shrink-0 text-current"
       >
         <DivineVisionLogo />
-      </a>
+      </Link>
 
       <div className="flex min-w-0 items-center gap-2 sm:gap-7">
         <div className="hidden gap-6 sm:flex">
           {links.map((link) => (
-            <a
+            <Link
               key={link.href}
-              href={link.href}
+              to={link.href}
+              onMouseEnter={() => prefetchRouteAssets(link.href)}
+              onFocus={() => prefetchRouteAssets(link.href)}
+              onTouchStart={() => prefetchRouteAssets(link.href)}
               className={`text-xs transition-colors hover:text-terracotta ${glass ? 'text-white/85' : 'text-ink/85'}`}
             >
               {link.label}
-            </a>
+            </Link>
           ))}
         </div>
 
@@ -78,14 +99,15 @@ export function Navbar({ onBookVisit, transparentOnTop = false }: NavbarProps) {
         <div className="absolute inset-x-4 top-[calc(100%+8px)] rounded-xl border border-white/10 bg-chrome px-4 py-3 shadow-[0_18px_44px_-22px_rgba(0,0,0,0.75)] sm:hidden">
           <div className="flex flex-col gap-2">
             {links.map((link) => (
-              <a
+              <Link
                 key={link.href}
-                href={link.href}
+                to={link.href}
                 onClick={() => setMobileOpen(false)}
+                onTouchStart={() => prefetchRouteAssets(link.href)}
                 className="rounded-lg px-2 py-2 text-sm font-semibold text-white/82 transition-colors hover:bg-white/8 hover:text-terracotta-light"
               >
                 {link.label}
-              </a>
+              </Link>
             ))}
           </div>
         </div>

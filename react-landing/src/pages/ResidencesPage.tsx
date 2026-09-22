@@ -1,20 +1,17 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Navbar } from '../components/Navbar';
-import { Footer } from '../components/Footer';
-import { SiteVisitDrawer } from '../components/SiteVisitDrawer';
+import { Link, useOutletContext } from 'react-router-dom';
 import { townshipPricing } from '../data/townshipPricing';
 import { journeyStops } from '../data/journeyStops';
 import { contact } from '../data/contact';
+import { prefetchProjectDetail } from '../utils/routePreload';
+import type { SiteOutletContext } from '../components/SiteLayout';
 
 const activeTownships = journeyStops.filter((stop) => stop.chips?.some((chip) => chip.includes('sq yd')));
 
 export function ResidencesPage() {
-  const [siteVisitOpen, setSiteVisitOpen] = useState(false);
+  const { onBookVisit } = useOutletContext<SiteOutletContext>();
 
   return (
     <>
-      <Navbar onBookVisit={() => setSiteVisitOpen(true)} />
       <main className="bg-bg px-4 pb-20 pt-28 sm:px-10 sm:pt-32">
         <section className="mx-auto max-w-6xl">
           <p className="eyebrow-label text-terracotta">Residences</p>
@@ -37,7 +34,13 @@ export function ResidencesPage() {
                 key={township.id}
                 className="overflow-hidden rounded-lg border border-hairline bg-surface shadow-[0_20px_54px_-34px_rgba(6,31,45,0.3)]"
               >
-                <Link to={`/residences/${township.id}`} className="block">
+                <Link
+                  to={`/residences/${township.id}`}
+                  className="block"
+                  onMouseEnter={prefetchProjectDetail}
+                  onFocus={prefetchProjectDetail}
+                  onTouchStart={prefetchProjectDetail}
+                >
                   <div className="relative aspect-[4/3] overflow-hidden sm:aspect-[16/9]">
                     <img src={township.image.src} alt={township.image.alt} className="h-full w-full object-cover" />
                     <span className="eyebrow-label absolute left-4 top-4 rounded bg-bg/95 px-2.5 py-1.5 text-[10px] text-ink/80 shadow-sm">
@@ -73,7 +76,7 @@ export function ResidencesPage() {
                       </Link>
                       <button
                         type="button"
-                        onClick={() => setSiteVisitOpen(true)}
+                        onClick={onBookVisit}
                         className="rounded-full bg-green px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-green-soft"
                       >
                         Book a site visit
@@ -94,8 +97,6 @@ export function ResidencesPage() {
           </a>
         </section>
       </main>
-      <Footer />
-      <SiteVisitDrawer open={siteVisitOpen} onClose={() => setSiteVisitOpen(false)} />
     </>
   );
 }

@@ -91,7 +91,14 @@ export function ConnectivityList({ items, className = '' }: ConnectivityListProp
                   role="tooltip"
                   onPointerEnter={() => openCard(item.label)}
                   onPointerLeave={() => scheduleClose(item.label)}
-                  className="absolute left-full top-1/2 z-30 ml-3 w-64 max-w-[70vw] -translate-y-1/2 overflow-hidden rounded-xl border border-hairline bg-surface shadow-[0_24px_60px_-24px_rgba(6,31,45,0.4)]"
+                  // Below `sm`, this is tap-triggered (touch bypasses the
+                  // hover-only pointer handlers above) rather than
+                  // hover-triggered, and `left-full` anchored to a row near
+                  // the left edge of the page could push a long label's card
+                  // past the right edge of the screen. Fixed + viewport-
+                  // centered there instead; the original hover-anchored
+                  // positioning is unchanged from `sm` up.
+                  className="fixed inset-x-4 top-1/2 z-30 -translate-y-1/2 overflow-hidden rounded-xl border border-hairline bg-surface shadow-[0_24px_60px_-24px_rgba(6,31,45,0.4)] sm:absolute sm:inset-x-auto sm:left-full sm:top-1/2 sm:ml-3 sm:w-64 sm:max-w-[70vw] sm:-translate-y-1/2"
                 >
                 {photoBroken ? (
                   <div className="flex h-32 w-full items-center justify-center bg-bg text-xs font-medium text-ink-muted/70">
