@@ -13,6 +13,14 @@ export interface DashboardStory {
  *  browser blocks it) since the viewer is opened by a tap. */
 export const dashboardStories: DashboardStory[] = [
   {
+    id: 'ops-divine-intro',
+    label: 'Divine Greens',
+    poster: '/stories/ops-divine-intro-poster.jpg',
+    video: '/stories/ops-divine-intro.mp4',
+    eyebrow: 'Now selling',
+    headline: 'Introducing OPS Divine Greens.',
+  },
+  {
     id: 'drone-entrance',
     label: 'The entrance',
     poster: '/stories/drone-entrance-poster.jpg',
@@ -83,14 +91,6 @@ export const dashboardStories: DashboardStory[] = [
     video: '/stories/drone-gate.mp4',
     eyebrow: 'On ground',
     headline: 'The entrance gate and avenue, standing today.',
-  },
-  {
-    id: 'ops-divine-intro',
-    label: 'Divine Greens',
-    poster: '/stories/ops-divine-intro-poster.jpg',
-    video: '/stories/ops-divine-intro.mp4',
-    eyebrow: 'Now selling',
-    headline: 'Introducing OPS Divine Greens.',
   },
   {
     id: 'garden-life',

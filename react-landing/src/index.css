@@ -96,6 +96,31 @@ svg {
   background: var(--color-chrome);
 }
 
+/* Horizontal scrollbar for the stories strip: a slim orange pill on a faint
+   track, sized to sit under the avatars on the dark card. */
+.stories-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(230, 126, 34, 0.75) rgba(255, 255, 255, 0.1);
+}
+
+.stories-scrollbar::-webkit-scrollbar {
+  height: 6px;
+}
+
+.stories-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+}
+
+.stories-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(90deg, #e67e22, #f0a860);
+  border-radius: 999px;
+}
+
+.stories-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #f0a860;
+}
+
 /* Guardian labels use Lato, uppercase spacing, and solid weight. */
 .eyebrow-label {
   font-family: var(--font-sans);
