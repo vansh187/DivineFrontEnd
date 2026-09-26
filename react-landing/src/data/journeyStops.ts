@@ -26,8 +26,8 @@ export const journeyStops: JourneyStop[] = [
     heroSrc: '/townships/suraksha-hero.jpg',
     chips: ['120–180 sq yd', 'RERA approved', '24-hr security', 'Yoga podium', 'Community centre'],
     image: {
-      src: '/site-progress/suraksha/suraksha-gate-arch.jpg',
-      alt: 'Welcome arch at the entrance to Divine City, where Suraksha Enclave is built',
+      src: '/site-progress/suraksha/suraksha-enclave-gate.jpg',
+      alt: 'Suraksha Enclave entrance gate, Sector 15, Ganaur',
       tag: 'Actual site',
     },
   },

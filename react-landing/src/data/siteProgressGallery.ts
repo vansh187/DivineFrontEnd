@@ -17,6 +17,13 @@ export type SiteProgressPhoto = {
 export const siteProgressGalleryByTownship: Record<string, SiteProgressPhoto[]> = {
   'suraksha-enclave': [
     {
+      src: '/site-progress/suraksha/suraksha-enclave-gate.jpg',
+      alt: 'Suraksha Enclave entrance gate, Sector 15, Ganaur',
+      label: 'Township entrance',
+      title: 'Suraksha Enclave, named at the gate',
+      note: 'The entrance gate of Suraksha Enclave itself, on Sector 15 in Ganaur — not a render, the actual street frontage.',
+    },
+    {
       src: '/site-progress/suraksha/suraksha-gate-arch.jpg',
       alt: 'Welcome arch at the entrance to Divine City, where Suraksha Enclave is built',
       label: 'Township entrance',
@@ -36,6 +43,27 @@ export const siteProgressGalleryByTownship: Record<string, SiteProgressPhoto[]> 
       label: 'Plotted layout',
       title: 'Blocks, roads and plots — laid out',
       note: 'Internal roads and block signage inside the township, the plotted layout Suraksha Enclave shares.',
+    },
+    {
+      src: '/site-progress/suraksha/suraksha-plotted-road.jpg',
+      alt: 'Tree-lined internal road with streetlights and hedges inside Suraksha Enclave',
+      label: 'Plotted layout',
+      title: 'Wide roads, already lit and landscaped',
+      note: 'A finished internal road with streetlights, kerbing and hedge planting — infrastructure in place, not on paper.',
+    },
+    {
+      src: '/site-progress/suraksha/suraksha-aerial-layout.jpg',
+      alt: 'Elevated view over the plotted road network and demarcated plots at Suraksha Enclave',
+      label: 'Plotted layout',
+      title: 'The layout, seen from above',
+      note: 'An elevated view over the finished road grid and demarcated plots — the scale of what is already on ground.',
+    },
+    {
+      src: '/site-progress/suraksha/suraksha-sales-office.jpg',
+      alt: 'Suraksha Enclave sales office building with ground-floor retail',
+      label: 'Commercial plaza',
+      title: 'A sales office you can walk into',
+      note: "Suraksha Enclave's own sales office and ground-floor retail, standing on site rather than a rendered lobby.",
     },
     {
       src: '/site-progress/suraksha/suraksha-commercial-plaza.jpg',
@@ -71,6 +99,20 @@ export const siteProgressGalleryByTownship: Record<string, SiteProgressPhoto[]> 
       label: 'Community spaces',
       title: 'Landscaped courtyards in daily use',
       note: 'A shared courtyard and play area between residential blocks, framed by mature landscaping.',
+    },
+    {
+      src: '/site-progress/suraksha/suraksha-park-pathway.jpg',
+      alt: 'Checkerboard-tiled pathway through manicured hedges leading into a landscaped lawn',
+      label: 'Community spaces',
+      title: 'A park, not a promise',
+      note: 'A finished walkway through manicured hedges into the community lawn — landscaping that already exists on site.',
+    },
+    {
+      src: '/site-progress/suraksha/suraksha-park-plaza.jpg',
+      alt: 'Elevated paved plaza overlooking a landscaped lawn with garden benches',
+      label: 'Community spaces',
+      title: 'A green space built for evenings out',
+      note: 'A tiered plaza opening onto the community lawn, with garden benches and mature tree cover already in place.',
     },
   ],
   'ops-divine-greens': [

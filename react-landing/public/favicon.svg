@@ -1,6 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Divine Vision">
-  <rect width="64" height="64" fill="#f2f7fa"/>
-  <path d="M8 12h18c12 0 20 8 20 20s-8 20-20 20H8V12Zm10 9v22h7.5C32 43 36 39 36 32s-4-11-10.5-11H18Z" fill="#061f2d"/>
-  <path d="M43 12h12L43 52H30L18 12h12l6.5 27.5L43 12Z" fill="#061f2d"/>
-  <rect x="48" y="44" width="8" height="8" fill="#e67e22"/>
+  <rect x="1" y="1" width="62" height="62" rx="14" fill="#eef1f3" stroke="#d7dde0" stroke-width="2"/>
+  <path fill="#1f2f40" fill-rule="evenodd" d="M8 16h11c8 0 13 6 13 16s-5 16-13 16H8Zm6 5v22h4.5c4.5 0 7-3.5 7-11s-2.5-11-7-11Z"/>
+  <path fill="#1f2f40" d="M33 16h7l5.5 23L51 16h7l-9 32h-7Z"/>
 </svg>

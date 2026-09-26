@@ -23,10 +23,10 @@ export const projectDetails: ProjectDetail[] = [
       'Sewage treatment plant',
     ],
     specs: [
+      { label: 'RERA no.', value: 'HRERA-PKL-KRL-621-2024' },
+      { label: 'Total plots', value: '368 plots' },
       { label: 'Plot sizes', value: '125–180 sq yd' },
-      { label: 'Total plots', value: '368' },
-      { label: 'Launched', value: 'March 2023' },
-      { label: 'Main road', value: '24 metres' },
+      { label: 'Total area', value: '22 acres' },
     ],
   },
   {
@@ -40,9 +40,10 @@ export const projectDetails: ProjectDetail[] = [
       'Shopping arcade',
     ],
     specs: [
+      { label: 'RERA no.', value: 'HRERA-PKL-SNP-972-2026' },
+      { label: 'Total plots', value: '700 plots' },
       { label: 'Plot sizes', value: '120–180 sq yd' },
-      { label: 'Approval', value: 'RERA' },
-      { label: 'From NH-1', value: '250 metres' },
+      { label: 'Total area', value: '29 acres' },
     ],
   },
 ];

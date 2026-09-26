@@ -1,11 +1,18 @@
 import { authedRequest as authedRequestBase } from './authApi';
 
+/** Contract with the backend's `POST /payments/create-order` for Zoho Payments'
+ * *hosted checkout* - a full-page redirect, not an embedded widget. `checkout_url`
+ * is where the customer's browser must be sent (`window.location.href =
+ * checkout_url`) - it already embeds the access_key the backend also returns
+ * (`https://payments.zoho.in/hostedcheckout/<access_key>`), so the frontend
+ * never needs that field on its own. Zoho later redirects the browser back to
+ * whichever of ZOHO_PAYMENTS_SUCCESS_URL / ZOHO_PAYMENTS_FAILURE_URL applies,
+ * appending the fields `VerifyPaymentInput` expects as a query string. See
+ * ZOHO_PAYMENTS_SETUP.md. */
 export interface PaymentOrder {
   payment_id: string;
-  razorpay_order_id: string;
-  razorpay_key_id: string;
+  checkout_url: string;
   amount: number;
-  amount_paise: number;
   currency: string;
   status: string;
 }
@@ -53,10 +60,10 @@ export interface PaymentRecord {
   amount: number;
   currency: string;
   status: string;
-  method: 'razorpay' | 'cash' | 'rtgs_neft';
+  method: 'zoho' | 'cash' | 'rtgs_neft';
   verified: boolean;
-  razorpay_order_id: string;
-  razorpay_payment_id: string | null;
+  zoho_payments_session_id: string;
+  zoho_payment_id: string | null;
   created_date: string;
   /** Present on a `plot_booking` payment - the unit the backend tried to lock. */
   inventory_id?: string | null;
@@ -70,10 +77,21 @@ export interface PaymentRecord {
   booking_id?: string | null;
 }
 
+/** The exact query-string fields Zoho's hosted checkout appends when it redirects
+ * the browser back to the success/failure URL - forwarded to the backend
+ * unchanged (see ZOHO_PAYMENTS_SETUP.md). `udf1`-`udf5` are only present if the
+ * backend set them when creating the order. */
 export interface VerifyPaymentInput {
-  razorpay_order_id: string;
-  razorpay_payment_id: string;
-  razorpay_signature: string;
+  payments_session_id: string;
+  payment_id: string;
+  payment_status: string;
+  amount: string;
+  signature: string;
+  udf1?: string;
+  udf2?: string;
+  udf3?: string;
+  udf4?: string;
+  udf5?: string;
 }
 
 function messageForPaymentError(status: number, detail: unknown): string {
@@ -122,9 +140,9 @@ export function createPaymentOrder(
   });
 }
 
-/** Sends Razorpay's checkout callback fields (order id, payment id, signature) to the
- * backend to be cryptographically verified — the frontend never decides "paid" on its own,
- * only the backend's signature check (against Razorpay's key_secret) does. */
+/** Sends Zoho Payments' checkout callback fields (payment id + payments session id) to
+ * the backend to be confirmed server-side against Zoho's API — the frontend never decides
+ * "paid" on its own, only that backend confirmation does. */
 export function verifyPayment(token: string, input: VerifyPaymentInput): Promise<PaymentRecord> {
   return authedRequest<PaymentRecord>('/payments/verify', token, {
     method: 'POST',
@@ -134,7 +152,7 @@ export function verifyPayment(token: string, input: VerifyPaymentInput): Promise
 }
 
 /** Records cash (or an already-completed RTGS/NEFT transfer) collected outside
- * Razorpay — settles immediately server-side, no gateway involved (unlike
+ * Zoho Pay — settles immediately server-side, no gateway involved (unlike
  * createPaymentOrder/verifyPayment). `utrNumber` is required when
  * `method` is `'rtgs_neft'`; omit both for a plain cash record. */
 export function recordCashPayment(

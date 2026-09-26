@@ -99,7 +99,6 @@ function StatusBadge({ status }: { status: string | null }) {
 
 function UnitCard({ unit, onOpen, compact = false }: { unit: InventoryUnit; onOpen: (unit: InventoryUnit) => void; compact?: boolean }) {
   const isSold = (unit.status ?? '').toLowerCase() === 'sold';
-  const priceOnRequest = unit.estimated_price === null || unit.estimated_price === undefined;
   return (
     <div className={`rounded-lg border border-hairline bg-surface p-3 ${isSold ? 'opacity-65' : ''}`}>
       <button
@@ -120,11 +119,12 @@ function UnitCard({ unit, onOpen, compact = false }: { unit: InventoryUnit; onOp
           {unit.area_sqyd !== null && <span className="rounded-full bg-bg px-2 py-1">{compactNumber(unit.area_sqyd)} sq yd</span>}
           {!compact && unit.area_sqmt !== null && <span className="rounded-full bg-bg px-2 py-1">{compactNumber(unit.area_sqmt)} sq m</span>}
         </div>
-        <p className="mt-3 text-sm font-bold text-terracotta">{formatPrice(unit.estimated_price)}</p>
+        {/* Pricing is never shown on the public site/chatbot - always send the
+         * visitor to call/WhatsApp instead, even when the backend has an
+         * estimated_price on file. */}
+        <p className="mt-3 text-sm font-bold text-terracotta">Contact for pricing</p>
       </button>
-      {priceOnRequest && !isSold && (
-        <ContactActions unit={unit} className="mt-3" />
-      )}
+      {!isSold && <ContactActions unit={unit} className="mt-3" />}
     </div>
   );
 }

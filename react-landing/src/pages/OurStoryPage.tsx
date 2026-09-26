@@ -1,9 +1,9 @@
-import { useState } from 'react';
-import { Navbar } from '../components/Navbar';
-import { Footer } from '../components/Footer';
-import { SiteVisitDrawer } from '../components/SiteVisitDrawer';
+import { Link, useOutletContext } from 'react-router-dom';
 import { deliveredRecords } from '../data/deliveredRecords';
 import { company } from '../data/company';
+import type { SiteOutletContext } from '../components/SiteLayout';
+
+const HERO_IMAGE = '/founder/himashu-luthra.jpg';
 
 function StandardIcon({ path }: { path: string }) {
   return (
@@ -76,11 +76,14 @@ const timeline = [
 ];
 
 export function OurStoryPage() {
-  const [siteVisitOpen, setSiteVisitOpen] = useState(false);
+  const { onBookVisit } = useOutletContext<SiteOutletContext>();
 
   return (
     <>
-      <Navbar onBookVisit={() => setSiteVisitOpen(true)} />
+      {/* Preloaded at high priority so the founder portrait is already
+          decoded by the time the hero paints. React 19 hoists this <link>
+          into <head> automatically. */}
+      <link rel="preload" as="image" href={HERO_IMAGE} fetchPriority="high" />
       <main className="bg-bg">
         {/* Hero — full-bleed dark, founder portrait carrying the weight the
             copy alone can't: this is a name behind the brand, not a logo. */}
@@ -100,17 +103,17 @@ export function OurStoryPage() {
               <div className="mt-8 flex flex-wrap items-center gap-4">
                 <button
                   type="button"
-                  onClick={() => setSiteVisitOpen(true)}
+                  onClick={onBookVisit}
                   className="rounded-none border border-terracotta bg-terracotta px-6 py-3.5 text-sm font-semibold uppercase tracking-[0.04em] text-white transition-colors hover:border-white hover:bg-white hover:text-chrome"
                 >
                   Book a site visit
                 </button>
-                <a
-                  href="/residences"
+                <Link
+                  to="/residences"
                   className="rounded-none border border-white/40 px-6 py-3.5 text-sm font-semibold uppercase tracking-[0.04em] text-white transition-colors hover:border-white"
                 >
                   Explore residences
-                </a>
+                </Link>
               </div>
 
               <div className="mt-10 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-white/12 bg-white/12 max-w-md">
@@ -131,8 +134,11 @@ export function OurStoryPage() {
               <div className="overflow-hidden rounded-2xl border border-white/18 bg-white/[0.04] shadow-[0_50px_120px_-40px_rgba(0,0,0,0.7)]">
                 <div className="relative aspect-square w-full overflow-hidden bg-black">
                   <img
-                    src="/founder/himashu-luthra.jpg"
+                    src={HERO_IMAGE}
                     alt="Himashu Luthra, Director of Divine Vision Infratech"
+                    loading="eager"
+                    decoding="async"
+                    fetchPriority="high"
                     className="h-full w-full object-cover"
                   />
                   <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(6,31,45,0.05)_0%,transparent_30%,rgba(6,31,45,0.25)_100%)]" />
@@ -284,7 +290,7 @@ export function OurStoryPage() {
                   </p>
                   <button
                     type="button"
-                    onClick={() => setSiteVisitOpen(true)}
+                    onClick={onBookVisit}
                     className="mt-6 rounded-none border border-terracotta-light bg-terracotta-light px-6 py-3 text-sm font-semibold uppercase tracking-[0.04em] text-chrome transition-colors hover:border-white hover:bg-white"
                   >
                     Book a site visit
@@ -314,8 +320,6 @@ export function OurStoryPage() {
         </section>
 
       </main>
-      <Footer />
-      <SiteVisitDrawer open={siteVisitOpen} onClose={() => setSiteVisitOpen(false)} />
     </>
   );
 }

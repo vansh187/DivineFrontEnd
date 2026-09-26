@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { navLinks } from '../data/navigation';
 import { contact, socialLinks } from '../data/contact';
 import { company } from '../data/company';
@@ -21,13 +22,13 @@ export function Footer() {
 
       <div className="grid grid-cols-1 gap-8 border-b border-hairline-dark pb-10 sm:grid-cols-2 lg:grid-cols-[1.6fr_1fr_1fr_1fr_1fr]">
         <div>
-          <a
-            href="/"
+          <Link
+            to="/"
             aria-label="Divine Vision home"
             className="inline-flex max-w-full"
           >
             <DivineVisionLogo variant="footer" />
-          </a>
+          </Link>
           <p className="mt-3.5 max-w-[28ch] text-sm text-white/70">{company.tagline}</p>
 
           <div className="mt-5 flex items-center gap-2.5">
@@ -54,9 +55,9 @@ export function Footer() {
           <ul className="flex flex-col gap-2.5">
             {navLinks.map((link) => (
               <li key={link.href}>
-                <a href={link.href} className="text-sm text-white/70 transition-colors hover:text-terracotta-light">
+                <Link to={link.href} className="text-sm text-white/70 transition-colors hover:text-terracotta-light">
                   {link.label}
-                </a>
+                </Link>
               </li>
             ))}
           </ul>

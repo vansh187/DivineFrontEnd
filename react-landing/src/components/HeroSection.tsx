@@ -1,7 +1,9 @@
 import { useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { HeroMedia } from './HeroMedia';
 import { useHeroScrollTimeline } from '../hooks/useHeroScrollTimeline';
 import { company } from '../data/company';
+import { prefetchRouteAssets } from '../utils/routePreload';
 
 type HeroSectionProps = {
   onBookVisit?: () => void;
@@ -12,7 +14,8 @@ const heroStats = [
   { value: '2005', label: 'Established' },
   { value: '7', label: 'Townships' },
   { value: '3', label: 'Districts' },
-  { value: '368', label: 'Plots at OPS Greens' },
+  { value: '6000+', label: 'Happy Customers' },
+  { value: '5 Million+', label: 'Sq. Ft. Delivered', long: true },
   { value: company.compliance.join(' & '), label: 'Approved', compact: true },
 ];
 
@@ -64,19 +67,22 @@ export function HeroSection({ onBookVisit }: HeroSectionProps) {
           >
             Book a site visit
           </button>
-          <a
-            href="/residences"
+          <Link
+            to="/residences"
+            onMouseEnter={() => prefetchRouteAssets('/residences')}
+            onFocus={() => prefetchRouteAssets('/residences')}
+            onTouchStart={() => prefetchRouteAssets('/residences')}
             className="eyebrow-label rounded-none border border-white/55 bg-black/25 px-5 py-3.5 text-center text-white backdrop-blur-sm transition-colors duration-200 hover:border-white hover:bg-black/40 sm:px-7"
           >
             Explore residences
-          </a>
+          </Link>
         </div>
 
-        <dl className="mt-4 grid w-full max-w-md grid-cols-2 gap-px overflow-hidden rounded-none border border-white/18 border-t-[3px] border-t-terracotta bg-white/14 backdrop-blur-md min-[440px]:grid-cols-3 sm:mt-7 sm:max-w-3xl sm:grid-cols-5">
+        <dl className="mt-4 grid w-full max-w-md grid-cols-2 gap-px overflow-hidden rounded-none border border-white/18 border-t-[3px] border-t-terracotta bg-white/14 backdrop-blur-md min-[440px]:grid-cols-3 sm:mt-7 sm:max-w-4xl sm:grid-cols-6">
           {heroStats.map((stat) => (
             <div
               key={stat.label}
-              className="flex flex-col-reverse items-center justify-center gap-1.5 bg-black/45 px-2 py-4 text-center last:col-span-full sm:gap-2 sm:px-4 sm:py-6 sm:last:col-span-1"
+              className="flex flex-col-reverse items-center justify-center gap-1.5 bg-black/45 px-2 py-4 text-center sm:gap-2 sm:px-2 sm:py-6"
             >
               <dt className="eyebrow-label text-[8.5px] leading-tight text-white/72 sm:text-[11px]">
                 {stat.label}
@@ -85,7 +91,9 @@ export function HeroSection({ onBookVisit }: HeroSectionProps) {
                 className={`font-display font-bold leading-none text-white [text-shadow:0_2px_18px_rgba(0,0,0,0.55)] ${
                   stat.compact
                     ? 'text-[clamp(14px,3.2vw,20px)] leading-tight tracking-[0.02em]'
-                    : 'text-[clamp(30px,7.4vw,52px)]'
+                    : stat.long
+                      ? 'whitespace-nowrap text-[clamp(22px,5.4vw,40px)] sm:text-[clamp(20px,2.6vw,28px)]'
+                      : 'text-[clamp(30px,7.4vw,52px)] sm:text-[clamp(30px,4vw,44px)]'
                 }`}
               >
                 {stat.value}

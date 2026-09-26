@@ -285,7 +285,7 @@ function projectWordmark(project: ApplicationProject): { head: string; tail: str
 }
 
 function receiptNumber(project: ApplicationProject, paymentInfo: PaymentStatus | null | undefined): string {
-  const raw = paymentInfo?.paymentId || paymentInfo?.razorpayPaymentId || paymentInfo?.razorpayOrderId || '';
+  const raw = paymentInfo?.paymentId || paymentInfo?.zohoPaymentId || paymentInfo?.zohoPaymentsSessionId || '';
   const tail = raw.replace(/[^A-Za-z0-9]/g, '').slice(-8).toUpperCase();
   return `RCPT/${projectMonogram(project)}/${tail || String(Date.now()).slice(-8)}`;
 }
@@ -337,6 +337,7 @@ function formatDateOnlyIN(value: string | null | undefined): string {
 }
 
 function formatPaymentMethod(value: PaymentStatus['method']): string {
+  if (value === 'zoho') return 'Online payment - Zoho Pay';
   if (value === 'razorpay') return 'Online payment - Razorpay';
   if (value === 'cash') return 'Cash payment';
   if (value === 'rtgs_neft') return 'Bank transfer - NEFT / RTGS';

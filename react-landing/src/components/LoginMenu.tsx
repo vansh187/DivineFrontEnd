@@ -165,7 +165,14 @@ export function LoginMenu({ light = false }: { light?: boolean }) {
       {open && (
         <div
           role="menu"
-          className={`absolute right-0 top-[calc(100%+16px)] z-20 w-[280px] overflow-hidden rounded-2xl border border-hairline bg-surface shadow-[0_30px_70px_-20px_rgba(19,21,17,0.35)] transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+          // Below `sm`, this is fixed to the viewport (inset-x-4) instead of
+          // anchored to the trigger button's right edge - the trigger sits
+          // well left of the true screen edge on mobile (a "Visit" button and
+          // the hamburger icon are to its right), so a fixed-width panel
+          // anchored via `right-0` to the trigger ran off the left edge of
+          // the screen. From `sm` up there's enough room for the original,
+          // trigger-anchored positioning.
+          className={`fixed inset-x-4 top-16 z-20 overflow-hidden rounded-2xl border border-hairline bg-surface shadow-[0_30px_70px_-20px_rgba(19,21,17,0.35)] transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] sm:absolute sm:inset-x-auto sm:right-0 sm:top-[calc(100%+16px)] sm:w-[280px] ${
             entered ? 'translate-y-0 scale-100 opacity-100' : '-translate-y-1 scale-[0.97] opacity-0'
           }`}
         >

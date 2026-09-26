@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Navbar } from '../components/Navbar';
-import { Footer } from '../components/Footer';
-import { SiteVisitDrawer } from '../components/SiteVisitDrawer';
+import { useOutletContext } from 'react-router-dom';
 import { siteProgressGalleryByTownship } from '../data/siteProgressGallery';
 import { journeyStops } from '../data/journeyStops';
+import type { SiteOutletContext } from '../components/SiteLayout';
+
+const HERO_POSTER = '/townships/ops-hero.jpg';
 
 type FilterId = 'all' | keyof typeof siteProgressGalleryByTownship;
 
@@ -23,8 +24,8 @@ const filters: { id: FilterId; label: string }[] = [
 ];
 
 export function OurWorkPage() {
+  const { onBookVisit } = useOutletContext<SiteOutletContext>();
   const heroFilmRef = useRef<HTMLVideoElement>(null);
-  const [siteVisitOpen, setSiteVisitOpen] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterId>('all');
   const [heroFilmMuted, setHeroFilmMuted] = useState(false);
 
@@ -64,7 +65,11 @@ export function OurWorkPage() {
 
   return (
     <>
-      <Navbar onBookVisit={() => setSiteVisitOpen(true)} />
+      {/* Preloaded at high priority so the hero poster is already decoded by
+          the time this section paints, instead of starting its fetch only
+          after the rest of the page has mounted. React 19 hoists this <link>
+          into <head> automatically. */}
+      <link rel="preload" as="image" href={HERO_POSTER} fetchPriority="high" />
       <main className="bg-bg">
         {/* Hero — full-bleed dark, the same register as the founder page and
             hero video, so "Our Work" reads as a flagship page, not a folder
@@ -98,14 +103,14 @@ export function OurWorkPage() {
             </div>
             </div>
 
-            <div className="relative hidden lg:block">
-              <div className="absolute -inset-5 rounded-[2rem] border border-terracotta-light/20 bg-white/[0.03]" />
-              <div className="relative overflow-hidden rounded-[1.75rem] border border-white/15 bg-black shadow-[0_44px_120px_-42px_rgba(0,0,0,0.78)]">
+            <div className="relative mt-8 lg:mt-0">
+              <div className="absolute -inset-3 rounded-[1.5rem] border border-terracotta-light/20 bg-white/[0.03] sm:-inset-4 lg:-inset-5 lg:rounded-[2rem]" />
+              <div className="relative overflow-hidden rounded-[1.25rem] border border-white/15 bg-black shadow-[0_44px_120px_-42px_rgba(0,0,0,0.78)] sm:rounded-[1.75rem]">
                 <video
                   ref={heroFilmRef}
-                  className="aspect-[4/5] h-[520px] w-full object-cover"
+                  className="aspect-[4/5] w-full object-cover lg:max-h-[520px]"
                   src="/our-work/ops-divine-premium.mp4"
-                  poster="/townships/ops-hero.jpg"
+                  poster={HERO_POSTER}
                   autoPlay
                   muted={heroFilmMuted}
                   loop
@@ -148,6 +153,9 @@ export function OurWorkPage() {
                 <img
                   src={featured.src}
                   alt={featured.alt}
+                  loading="eager"
+                  decoding="async"
+                  fetchPriority="high"
                   className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
                 />
                 <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(0deg,rgba(6,31,45,0.88)_0%,rgba(6,31,45,0.25)_45%,transparent_75%)]" />
@@ -227,7 +235,7 @@ export function OurWorkPage() {
             </p>
             <button
               type="button"
-              onClick={() => setSiteVisitOpen(true)}
+              onClick={onBookVisit}
               className="mt-7 rounded-none border border-terracotta-light bg-terracotta-light px-7 py-3.5 text-sm font-semibold uppercase tracking-[0.04em] text-chrome transition-colors hover:border-white hover:bg-white"
             >
               Book a site visit
@@ -235,8 +243,6 @@ export function OurWorkPage() {
           </div>
         </section>
       </main>
-      <Footer />
-      <SiteVisitDrawer open={siteVisitOpen} onClose={() => setSiteVisitOpen(false)} />
     </>
   );
 }

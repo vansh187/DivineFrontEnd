@@ -1,8 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, Navigate, useParams } from 'react-router-dom';
-import { Navbar } from '../components/Navbar';
-import { Footer } from '../components/Footer';
-import { SiteVisitDrawer } from '../components/SiteVisitDrawer';
+import { Link, Navigate, useOutletContext, useParams } from 'react-router-dom';
 import { journeyStops } from '../data/journeyStops';
 import { townshipLocations } from '../data/locationConnectivity';
 import { ConnectivityList } from '../components/ConnectivityList';
@@ -14,10 +11,11 @@ import { brochureByTownshipId } from '../data/brochures';
 import { useAuth } from '../hooks/useAuth';
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 import { loadSavedTownships, toggleSavedTownship } from '../services/savedTownships';
+import type { SiteOutletContext } from '../components/SiteLayout';
 
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const [siteVisitOpen, setSiteVisitOpen] = useState(false);
+  const { onBookVisit } = useOutletContext<SiteOutletContext>();
   const { session, openModal } = useAuth();
   const reducedMotion = usePrefersReducedMotion();
   const email = session?.email ?? null;
@@ -55,8 +53,6 @@ export function ProjectDetailPage() {
 
   return (
     <>
-      <Navbar onBookVisit={() => setSiteVisitOpen(true)} />
-
       <header className="relative flex min-h-[52svh] items-end overflow-hidden pt-24">
         <img src={township.image.src} alt={township.image.alt} className="absolute inset-0 h-full w-full object-cover" />
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(44,62,80,0.35)_0%,rgba(44,62,80,0.2)_40%,rgba(44,62,80,0.86)_100%)]" />
@@ -169,7 +165,7 @@ export function ProjectDetailPage() {
               </p>
               <button
                 type="button"
-                onClick={() => setSiteVisitOpen(true)}
+                onClick={onBookVisit}
                 className="mt-5 w-full rounded-none border border-terracotta bg-terracotta px-5 py-3 text-sm font-semibold tracking-[0.04em] text-white uppercase transition-colors hover:border-white hover:bg-white hover:text-chrome"
               >
                 Book a site visit
@@ -262,7 +258,7 @@ export function ProjectDetailPage() {
                     </p>
                     <button
                       type="button"
-                      onClick={() => setSiteVisitOpen(true)}
+                      onClick={onBookVisit}
                       className="mt-5 w-full rounded-none border border-chrome bg-chrome px-5 py-3 text-sm font-semibold uppercase tracking-[0.04em] text-white transition-colors hover:border-terracotta hover:bg-terracotta"
                     >
                       Book a site visit
@@ -299,9 +295,6 @@ export function ProjectDetailPage() {
           </section>
         )}
       </main>
-
-      <Footer />
-      <SiteVisitDrawer open={siteVisitOpen} onClose={() => setSiteVisitOpen(false)} />
     </>
   );
 }

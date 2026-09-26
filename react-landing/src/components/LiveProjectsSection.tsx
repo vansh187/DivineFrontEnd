@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { prefetchProjectDetail } from '../utils/routePreload';
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 import { journeyStops } from '../data/journeyStops';
 import { townshipLocations } from '../data/locationConnectivity';
@@ -95,6 +96,9 @@ export function LiveProjectsSection() {
 
       <Link
         to={detailHref}
+        onMouseEnter={prefetchProjectDetail}
+        onFocus={prefetchProjectDetail}
+        onTouchStart={prefetchProjectDetail}
         className="group mt-8 grid overflow-hidden rounded-2xl border border-hairline bg-surface shadow-[0_30px_80px_-40px_rgba(6,31,45,0.2)] transition-shadow hover:shadow-[0_36px_90px_-40px_rgba(6,31,45,0.32)] lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]"
       >
         <div className="relative min-h-[260px] overflow-hidden lg:min-h-[440px]">

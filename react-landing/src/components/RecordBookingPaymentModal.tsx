@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import type { InventoryUnit } from '../services/inventoryApi';
-import { createPaymentOrder, recordCashPayment, verifyPayment, type PaymentRecord } from '../services/paymentsApi';
-import { openRazorpayCheckout } from '../services/razorpayCheckout';
+import { createPaymentOrder, recordCashPayment, type PaymentRecord } from '../services/paymentsApi';
+import { stashPendingZohoPayment } from '../services/pendingZohoPayment';
 import { ApiError } from '../services/authApi';
 import { amountToIndianWords, formatCurrencyINR } from '../utils/currency';
 
@@ -24,6 +25,7 @@ function parseAmount(value: string): number {
 
 export function RecordBookingPaymentModal({ unit, onClose, onBooked }: RecordBookingPaymentModalProps) {
   const { session } = useAuth();
+  const location = useLocation();
   const [totalPlotAmount, setTotalPlotAmount] = useState(
     unit.estimated_price != null ? String(Math.round(unit.estimated_price)) : '',
   );
@@ -87,24 +89,26 @@ export function RecordBookingPaymentModal({ unit, onClose, onBooked }: RecordBoo
         purpose: 'plot_booking',
         inventoryId: unit.id,
       });
-      const result = await openRazorpayCheckout({
-        keyId: order.razorpay_key_id,
-        amountPaise: order.amount_paise,
-        currency: order.currency,
-        orderId: order.razorpay_order_id,
-        name: 'Divine Vision Infratech',
-        description: `Booking payment · ${unit.project_name}${unit.unit_number ? ` · Plot ${unit.unit_number}` : ''}`,
-        prefillEmail: session.email,
+      if (!order.checkout_url) {
+        setError('Could not start the payment. Please try again or contact support.');
+        setBusy(null);
+        return;
+      }
+      // Hosted checkout is a full-page redirect (see ZOHO_PAYMENTS_SETUP.md) -
+      // this modal's state (and the onBooked callback) can't survive that, so
+      // there's nothing left to do here but send the browser to Zoho.
+      // PaymentResultPage confirms the payment on return; the broker lands
+      // back on /broker/plots, which re-fetches and reflects the booked plot
+      // on its own.
+      stashPendingZohoPayment({
+        purpose: 'plot_booking',
+        email: session.email,
+        role: 'broker',
+        returnPath: location.pathname,
       });
-      const record = await verifyPayment(session.token, {
-        razorpay_order_id: result.razorpay_order_id,
-        razorpay_payment_id: result.razorpay_payment_id,
-        razorpay_signature: result.razorpay_signature,
-      });
-      finish(record, true);
+      window.location.href = order.checkout_url;
     } catch (err) {
       setError(describeError(err));
-    } finally {
       setBusy(null);
     }
   };
@@ -156,7 +160,7 @@ export function RecordBookingPaymentModal({ unit, onClose, onBooked }: RecordBoo
             disabled={bookingAmount <= 0 || busy !== null}
             className="w-full rounded-full bg-green px-4 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {busy === 'online' ? 'Processing…' : 'Pay online (Razorpay)'}
+            {busy === 'online' ? 'Processing…' : 'Pay online (Zoho Pay)'}
           </button>
           <button
             type="button"

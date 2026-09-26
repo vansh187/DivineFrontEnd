@@ -15,7 +15,7 @@ export function StoriesBar() {
     <>
       <div className="rounded-2xl bg-chrome p-5 shadow-[0_30px_80px_-48px_rgba(6,31,45,0.55)] sm:p-6">
         <p className="eyebrow-label text-terracotta-light">Stories</p>
-        <div className="mt-4 flex gap-5 overflow-x-auto pb-1">
+        <div className="stories-scrollbar mt-4 flex gap-5 overflow-x-auto pb-3">
           {dashboardStories.map((story, index) => (
             <button
               key={story.id}
