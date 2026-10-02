@@ -121,6 +121,42 @@ svg {
   background: #f0a860;
 }
 
+/* Plain-document typography for the Privacy Policy / Terms & Conditions
+   sections — styled once via descendant selectors so the content in those
+   pages can stay as ordinary <p>/<ul>/<strong> JSX. */
+.legal-prose p + p,
+.legal-prose ul + p,
+.legal-prose p + ul {
+  margin-top: 0.85em;
+}
+
+.legal-prose ul {
+  list-style: disc;
+  padding-left: 1.25em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+}
+
+.legal-prose strong {
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.legal-prose a {
+  color: var(--color-terracotta);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.legal-prose h3 {
+  margin-top: 1.1em;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.95em;
+  color: var(--color-ink);
+}
+
 /* Guardian labels use Lato, uppercase spacing, and solid weight. */
 .eyebrow-label {
   font-family: var(--font-sans);

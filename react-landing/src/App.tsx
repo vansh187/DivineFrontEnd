@@ -36,6 +36,9 @@ const OurWorkPage = lazy(() => import('./pages/OurWorkPage').then((m) => ({ defa
 const BookPlotPage = lazy(() => import('./pages/BookPlotPage').then((m) => ({ default: m.BookPlotPage })));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage })));
 const PaymentResultPage = lazy(() => import('./pages/PaymentResultPage').then((m) => ({ default: m.PaymentResultPage })));
+const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage').then((m) => ({ default: m.PrivacyPolicyPage })));
+const TermsPage = lazy(() => import('./pages/TermsPage').then((m) => ({ default: m.TermsPage })));
+const FaqPage = lazy(() => import('./pages/FaqPage').then((m) => ({ default: m.FaqPage })));
 
 const roleHome: Record<Role, string> = {
   customer: '/customer',
@@ -93,11 +96,31 @@ function ScrollToRouteTop() {
 
   useLayoutEffect(() => {
     if (hash) {
-      const target = document.getElementById(hash.slice(1));
+      const id = hash.slice(1);
+      const target = document.getElementById(id);
       if (target) {
         target.scrollIntoView({ block: 'start' });
         return;
       }
+      // The hash target can be inside a route that's still behind Suspense
+      // (e.g. a lazy-loaded page reached via a cross-page #anchor link, before
+      // its chunk has finished loading) - watch for it to mount instead of
+      // silently falling back to scrollTo(0, 0). Bounded so a genuinely
+      // missing/stale id doesn't leave an observer running forever.
+      window.scrollTo(0, 0);
+      const observer = new MutationObserver(() => {
+        const lateTarget = document.getElementById(id);
+        if (lateTarget) {
+          lateTarget.scrollIntoView({ block: 'start' });
+          observer.disconnect();
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+      const timeout = window.setTimeout(() => observer.disconnect(), 4000);
+      return () => {
+        observer.disconnect();
+        window.clearTimeout(timeout);
+      };
     }
     window.scrollTo(0, 0);
   }, [pathname, hash]);
@@ -122,6 +145,9 @@ function AppRoutes() {
             <Route path="/our-story" element={<OurStoryPage />} />
             <Route path="/our-work" element={<OurWorkPage />} />
             <Route path="/book-plot" element={<BookPlotPage />} />
+            <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+            <Route path="/terms-conditions" element={<TermsPage />} />
+            <Route path="/faq" element={<FaqPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
           <Route path="/book-plots" element={<Navigate to="/book-plot" replace />} />
