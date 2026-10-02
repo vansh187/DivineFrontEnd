@@ -4,6 +4,7 @@ import { contact, socialLinks } from '../data/contact';
 import { company } from '../data/company';
 import { getGoogleMapsSearchHref, siteMapLocations } from '../data/mapLocations';
 import { useAuth, getDisplayName } from '../hooks/useAuth';
+import { prefetchRouteAssets } from '../utils/routePreload';
 import { DivineVisionLogo } from './DivineVisionLogo';
 import { socialIconById } from './SocialIcons';
 
@@ -144,6 +145,36 @@ export function Footer() {
             ))}
           </ul>
         </div>
+      </div>
+
+      <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 border-b border-hairline-dark pb-6 sm:justify-start">
+        <Link
+          to="/privacy-policy"
+          onMouseEnter={() => prefetchRouteAssets('/privacy-policy')}
+          onFocus={() => prefetchRouteAssets('/privacy-policy')}
+          onTouchStart={() => prefetchRouteAssets('/privacy-policy')}
+          className="eyebrow-label text-[10px] text-white/60 transition-colors hover:text-terracotta-light"
+        >
+          Privacy Policy
+        </Link>
+        <Link
+          to="/terms-conditions"
+          onMouseEnter={() => prefetchRouteAssets('/terms-conditions')}
+          onFocus={() => prefetchRouteAssets('/terms-conditions')}
+          onTouchStart={() => prefetchRouteAssets('/terms-conditions')}
+          className="eyebrow-label text-[10px] text-white/60 transition-colors hover:text-terracotta-light"
+        >
+          Terms &amp; Conditions
+        </Link>
+        <Link
+          to="/faq"
+          onMouseEnter={() => prefetchRouteAssets('/faq')}
+          onFocus={() => prefetchRouteAssets('/faq')}
+          onTouchStart={() => prefetchRouteAssets('/faq')}
+          className="eyebrow-label text-[10px] text-white/60 transition-colors hover:text-terracotta-light"
+        >
+          FAQs
+        </Link>
       </div>
 
       <div className="mt-6 flex flex-wrap justify-between gap-4">

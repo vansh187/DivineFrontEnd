@@ -9,6 +9,9 @@ const publicRouteImporters: Record<string, Importer> = {
   '/our-story': () => import('../pages/OurStoryPage'),
   '/our-work': () => import('../pages/OurWorkPage'),
   '/book-plot': () => import('../pages/BookPlotPage'),
+  '/privacy-policy': () => import('../pages/PrivacyPolicyPage'),
+  '/terms-conditions': () => import('../pages/TermsPage'),
+  '/faq': () => import('../pages/FaqPage'),
 };
 
 const customerRouteImporters: Importer[] = [
