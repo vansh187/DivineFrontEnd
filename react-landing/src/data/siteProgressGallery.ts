@@ -131,6 +131,13 @@ export const siteProgressGalleryByTownship: Record<string, SiteProgressPhoto[]> 
       note: 'The circular entrance plaza and fountain, with the main boulevard running straight into the plotted layout beyond.',
     },
     {
+      src: '/site-progress/divine-greens/divine-greens-sales-office-plaza.jpg',
+      alt: 'Aerial view of the OPS Divine Greens sales office beside the entrance plaza, with customer cars parked outside',
+      label: 'Commercial plaza',
+      title: 'A sales office you can walk into',
+      note: 'The on-site sales office next to the entrance fountain plaza, with visitor cars parked outside — standing on site, not a rendered lobby.',
+    },
+    {
       src: '/site-progress/divine-greens/divine-greens-boulevard.jpg',
       alt: 'Aerial view of the main boulevard at OPS Divine Greens with plotted sectors on both sides',
       label: 'Plotted layout',
