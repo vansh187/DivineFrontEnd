@@ -33,7 +33,7 @@ export const townshipLocations: TownshipLocation[] = [
   {
     id: 'ops-divine-greens',
     label: 'OPS Divine Greens',
-    subtitle: 'Sector 16, Karnal · Bang on NH-1',
+    subtitle: 'NH-1 Karnal Extension · Bang on NH-1',
     mapQuery:
       'OPS Divine Greens, Village Gangar and Shamgarh, Tehsil Nilokheri, Sec-16, Taraori, Karnal, Haryana 132116',
     connectivity: [
