@@ -27,7 +27,7 @@ function specsFor(id: string, reraId?: string): ProjectSpec[] {
 function tabLabel(id: string, fallback: string) {
   const loc = townshipLocations.find((item) => item.id === id);
   if (!loc) return fallback;
-  // subtitle is "Sector 16, Karnal · Bang on NH-1" — pull the town name out.
+  // subtitle is "NH-1 Karnal Extension · Bang on NH-1" — pull the town name out.
   const town = loc.subtitle.split('·')[0].split(',').pop()?.trim();
   return town ? `${loc.label} · ${town}` : loc.label;
 }
