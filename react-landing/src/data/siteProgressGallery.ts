@@ -115,7 +115,57 @@ export const siteProgressGalleryByTownship: Record<string, SiteProgressPhoto[]> 
       note: 'A tiered plaza opening onto the community lawn, with garden benches and mature tree cover already in place.',
     },
   ],
-  'ops-divine-greens': [],
+  'ops-divine-greens': [
+    {
+      src: '/site-progress/divine-greens/divine-greens-entrance-signage.jpg',
+      alt: 'OPS Divine Greens entrance signage in front of the township sales office',
+      label: 'Township entrance',
+      title: 'OPS Divine Greens, named at the gate',
+      note: 'The township sign and sales office standing on site, photographed from above — not a render.',
+    },
+    {
+      src: '/site-progress/divine-greens/divine-greens-entrance-fountain.jpg',
+      alt: 'Aerial view of the circular entrance plaza and fountain at OPS Divine Greens',
+      label: 'Township entrance',
+      title: 'A grand arrival, already built',
+      note: 'The circular entrance plaza and fountain, with the main boulevard running straight into the plotted layout beyond.',
+    },
+    {
+      src: '/site-progress/divine-greens/divine-greens-boulevard.jpg',
+      alt: 'Aerial view of the main boulevard at OPS Divine Greens with plotted sectors on both sides',
+      label: 'Plotted layout',
+      title: 'The main boulevard, laid and lit',
+      note: 'A finished central boulevard with street lighting and a landscaped median, flanked by demarcated plots on both sides.',
+    },
+    {
+      src: '/site-progress/divine-greens/divine-greens-structure-grid.jpg',
+      alt: 'Column footings under construction beside the plotted road grid at OPS Divine Greens',
+      label: 'Structure stage',
+      title: 'Foundations going in',
+      note: 'Column footings and reinforcement visible beside the finished road grid — the build advancing plot by plot.',
+    },
+    {
+      src: '/site-progress/divine-greens/divine-greens-community-park.jpg',
+      alt: 'Aerial view of a landscaped park and pool feature between plotted sectors at OPS Divine Greens',
+      label: 'Community spaces',
+      title: 'A park at the heart of the layout',
+      note: 'A landscaped park and reflecting pool set between plotted sectors, with palm-lined walkways already in place.',
+    },
+    {
+      src: '/site-progress/divine-greens/divine-greens-active-build-1.jpg',
+      alt: 'Excavator and tractor-trolley working on the internal road at OPS Divine Greens',
+      label: 'Active build',
+      title: 'Visible work on ground',
+      note: 'An excavator and tractor-trolley at work on the internal road, with the finished boulevard and entrance visible beyond.',
+    },
+    {
+      src: '/site-progress/divine-greens/divine-greens-active-build-2.jpg',
+      alt: 'Multiple construction vehicles and crew working on plots at OPS Divine Greens',
+      label: 'Active build',
+      title: 'Crew and machinery on site',
+      note: 'Excavator, tractor-trolley and crew working plot-side — ongoing development alongside the completed sections.',
+    },
+  ],
 };
 
 export function siteProgressGalleryFor(townshipId: string | undefined): SiteProgressPhoto[] {
