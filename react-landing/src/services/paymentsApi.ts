@@ -1,5 +1,8 @@
 import { authedRequest as authedRequestBase } from './authApi';
 
+/** Keep online checkout disabled until the payment gateway dashboard is confirmed. */
+export const ONLINE_PAYMENTS_ENABLED = false;
+
 /** Contract with the backend's `POST /payments/create-order` for Zoho Payments'
  * *hosted checkout* - a full-page redirect, not an embedded widget. `checkout_url`
  * is where the customer's browser must be sent (`window.location.href =
@@ -77,6 +80,16 @@ export interface PaymentRecord {
   booking_id?: string | null;
 }
 
+export interface OfflineInstallmentSubmission {
+  id: string;
+  amount: number;
+  method: CashPaymentMethod;
+  status: 'pending_review' | 'approved' | 'rejected';
+  installment_no: number;
+  utr_number?: string | null;
+  created_date: string;
+}
+
 /** The exact query-string fields Zoho's hosted checkout appends when it redirects
  * the browser back to the success/failure URL - forwarded to the backend
  * unchanged (see ZOHO_PAYMENTS_SETUP.md). `udf1`-`udf5` are only present if the
@@ -127,6 +140,9 @@ export function createPaymentOrder(
   amount: number,
   opts: BookingPaymentOptions = {},
 ): Promise<PaymentOrder> {
+  if (!ONLINE_PAYMENTS_ENABLED) {
+    return Promise.reject(new Error('Online payments are temporarily unavailable while the payment gateway dashboard is being confirmed.'));
+  }
   return authedRequest<PaymentOrder>('/payments/create-order', token, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -175,6 +191,30 @@ export function recordCashPayment(
       ...(opts.inventoryId ? { inventory_id: opts.inventoryId } : {}),
       ...(opts.installmentNo != null ? { installment_no: opts.installmentNo } : {}),
       ...(opts.dueDate ? { due_date: opts.dueDate } : {}),
+    }),
+  });
+}
+
+/** Submits a customer-reported cash or NEFT/RTGS instalment for admin review.
+ * The backend must leave the schedule unpaid until an admin approves it. */
+export function submitOfflineInstallmentPayment(
+  token: string,
+  amount: number,
+  installmentNo: number,
+  dueDate: string | null,
+  method: CashPaymentMethod,
+  utrNumber?: string | null,
+): Promise<OfflineInstallmentSubmission> {
+  return authedRequest<OfflineInstallmentSubmission>('/payments/offline-submissions', token, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      amount,
+      purpose: 'installment',
+      installment_no: installmentNo,
+      due_date: dueDate,
+      method,
+      ...(utrNumber ? { utr_number: utrNumber } : {}),
     }),
   });
 }

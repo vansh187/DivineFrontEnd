@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import type { InventoryUnit } from '../services/inventoryApi';
-import { createPaymentOrder, recordCashPayment, type PaymentRecord } from '../services/paymentsApi';
+import { createPaymentOrder, ONLINE_PAYMENTS_ENABLED, recordCashPayment, type PaymentRecord } from '../services/paymentsApi';
 import { stashPendingZohoPayment } from '../services/pendingZohoPayment';
 import { ApiError } from '../services/authApi';
 import { amountToIndianWords, formatCurrencyINR } from '../utils/currency';
@@ -81,6 +81,10 @@ export function RecordBookingPaymentModal({ unit, onClose, onBooked }: RecordBoo
   };
 
   const handleOnline = async () => {
+    if (!ONLINE_PAYMENTS_ENABLED) {
+      setError('Online payments are temporarily unavailable while the payment gateway dashboard is being confirmed. Please record cash.');
+      return;
+    }
     if (!session || bookingAmount <= 0) return;
     setBusy('online');
     setError('');
@@ -157,10 +161,10 @@ export function RecordBookingPaymentModal({ unit, onClose, onBooked }: RecordBoo
           <button
             type="button"
             onClick={handleOnline}
-            disabled={bookingAmount <= 0 || busy !== null}
+            disabled={!ONLINE_PAYMENTS_ENABLED || bookingAmount <= 0 || busy !== null}
             className="w-full rounded-full bg-green px-4 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {busy === 'online' ? 'Processing…' : 'Pay online (Zoho Pay)'}
+            {ONLINE_PAYMENTS_ENABLED ? (busy === 'online' ? 'Processing…' : 'Pay online') : 'Online payment temporarily unavailable'}
           </button>
           <button
             type="button"

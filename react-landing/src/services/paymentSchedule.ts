@@ -31,7 +31,7 @@ const DEFAULT_SPLIT: Array<{ label: string; share: number; days: number }> = [
   { label: 'Within 270 days of booking', share: 0.25, days: 270 },
 ];
 
-export type MilestoneStatus = 'paid' | 'overdue' | 'due-soon' | 'upcoming';
+export type MilestoneStatus = 'paid' | 'pending-review' | 'overdue' | 'due-soon' | 'upcoming';
 
 export interface ScheduleMilestone {
   /** 1-based position in the plan — used to attribute an instalment payment. */
@@ -158,6 +158,7 @@ export function deriveSchedule(input: DeriveScheduleInput): ScheduleMilestone[] 
 
     let status: MilestoneStatus;
     if (paid) status = 'paid';
+    else if (base[i].rawStatus === 'pending_review' || base[i].rawStatus === 'pending-review') status = 'pending-review';
     else if (daysUntilDue == null) status = 'upcoming';
     else if (daysUntilDue < 0) status = 'overdue';
     else if (daysUntilDue <= REMINDER_LEAD_DAYS) status = 'due-soon';
@@ -167,6 +168,7 @@ export function deriveSchedule(input: DeriveScheduleInput): ScheduleMilestone[] 
     const payable =
       isNext &&
       !paid &&
+      status !== 'pending-review' &&
       daysUntilDue != null &&
       daysUntilDue <= PAY_WINDOW_DAYS &&
       row.amount != null &&
@@ -198,7 +200,7 @@ export interface PaymentReminder {
  *  date, or already overdue. `null` when nothing is due soon. */
 export function paymentReminder(milestones: ScheduleMilestone[]): PaymentReminder | null {
   const next = milestones.find((m) => m.isNext);
-  if (!next || next.status === 'paid' || next.daysUntilDue == null) return null;
+  if (!next || next.status === 'paid' || next.status === 'pending-review' || next.daysUntilDue == null) return null;
   if (next.daysUntilDue > REMINDER_LEAD_DAYS) return null;
   return { milestone: next, daysUntilDue: next.daysUntilDue, overdue: next.daysUntilDue < 0 };
 }

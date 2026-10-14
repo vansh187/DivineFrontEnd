@@ -3,11 +3,11 @@ import { useLocation } from 'react-router-dom';
 import { useAuth, getDisplayName } from '../hooks/useAuth';
 import { DashboardLayout } from '../components/DashboardLayout';
 import { IconBadge, FileIcon, RupeeIcon } from '../components/DashboardIcons';
-import { loadCustomerDocs, markInstallmentPaidLocally, saveCustomerDocs, type PaymentStatus } from '../services/documentStore';
+import { loadCustomerDocs, saveCustomerDocs, type PaymentStatus } from '../services/documentStore';
 import { usePaymentSchedule } from '../hooks/usePaymentSchedule';
 import { formatCurrencyINR, formatIndianDate } from '../utils/currency';
 import { PAY_WINDOW_DAYS, type MilestoneStatus, type ScheduleMilestone } from '../services/paymentSchedule';
-import { createPaymentOrder, recordCashPayment } from '../services/paymentsApi';
+import { createPaymentOrder, ONLINE_PAYMENTS_ENABLED, submitOfflineInstallmentPayment } from '../services/paymentsApi';
 import type { CashPaymentMethod } from '../services/paymentsApi';
 import { stashPendingZohoPayment } from '../services/pendingZohoPayment';
 import { townshipPricing } from '../data/townshipPricing';
@@ -43,6 +43,7 @@ const formatDateObj = formatIndianDate;
 
 const STATUS_LABEL: Record<MilestoneStatus, string> = {
   paid: 'Paid',
+  'pending-review': 'Awaiting approval',
   overdue: 'Overdue',
   'due-soon': 'Due soon',
   upcoming: 'Upcoming',
@@ -50,6 +51,7 @@ const STATUS_LABEL: Record<MilestoneStatus, string> = {
 
 const STATUS_CLASS: Record<MilestoneStatus, string> = {
   paid: 'bg-green/10 text-green',
+  'pending-review': 'bg-amber-50 text-amber-800',
   overdue: 'bg-red-50 text-red-700',
   'due-soon': 'bg-amber-50 text-amber-800',
   upcoming: 'bg-bg text-ink-muted',
@@ -249,6 +251,7 @@ export function CustomerProfilePage() {
   // milestone.no since every open instalment picks independently.
   const [installmentMethod, setInstallmentMethod] = useState<Record<number, 'zoho' | CashPaymentMethod>>({});
   const [installmentUtr, setInstallmentUtr] = useState<Record<number, string>>({});
+  const [pendingInstallmentNos, setPendingInstallmentNos] = useState<number[]>([]);
 
   useEffect(() => {
     if (!session) return;
@@ -761,6 +764,10 @@ export function CustomerProfilePage() {
   // back to ZOHO_PAYMENTS_SUCCESS_URL/FAILURE_URL, where PaymentResultPage
   // calls /payments/verify and applies markInstallmentPaidLocally itself.
   const handlePayInstallmentOnline = async (milestone: ScheduleMilestone) => {
+    if (!ONLINE_PAYMENTS_ENABLED) {
+      setPayError('Online payments are temporarily unavailable while the payment gateway dashboard is being confirmed. Please use cash or NEFT/RTGS.');
+      return;
+    }
     if (!session || milestone.amount == null) return;
     const order = await createPaymentOrder(session.token, milestone.amount, {
       purpose: 'installment',
@@ -782,30 +789,27 @@ export function CustomerProfilePage() {
     window.location.href = order.checkout_url;
   };
 
-  // Cash and a confirmed NEFT/RTGS transfer both settle immediately server-side
-  // via the same endpoint (see recordCashPayment) - only the method label and,
-  // for rtgs_neft, the UTR number differ from the online (Zoho Pay) path above.
+  // Customer-entered cash and bank transfer details are claims for review,
+  // not confirmed receipts. Only the admin approval flow marks the milestone paid.
   const handlePayInstallmentOffline = async (milestone: ScheduleMilestone, method: CashPaymentMethod, utrNumber?: string) => {
     if (!session || milestone.amount == null) return;
-    const record = await recordCashPayment(
+    await submitOfflineInstallmentPayment(
       session.token,
       milestone.amount,
-      `${method === 'cash' ? 'Cash' : 'NEFT/RTGS'} recorded for instalment ${milestone.no} from the profile page.`,
-      {
-        purpose: 'installment',
-        inventoryId: profile.selectedBooking?.inventory_id ?? null,
-        installmentNo: milestone.no,
-        dueDate: milestone.dueDateISO,
-      },
+      milestone.no,
+      milestone.dueDateISO,
       method,
       utrNumber,
     );
-    return record.amount;
+    setPendingInstallmentNos((previous) => [...new Set([...previous, milestone.no])]);
+    setInstallmentUtr((previous) => ({ ...previous, [milestone.no]: '' }));
+    setPaySuccess(`Your ${method === 'cash' ? 'cash payment' : 'NEFT/RTGS transfer'} for instalment ${milestone.no} was submitted. It will be marked paid after admin approval.`);
+    schedule.refresh();
   };
 
   const handlePayInstallment = async (milestone: ScheduleMilestone) => {
     if (!session || milestone.amount == null || milestone.amount <= 0) return;
-    const method = installmentMethod[milestone.no] ?? 'zoho';
+    const method = installmentMethod[milestone.no] ?? (ONLINE_PAYMENTS_ENABLED ? 'zoho' : 'cash');
     const utrNumber = installmentUtr[milestone.no]?.trim() ?? '';
     if (method === 'rtgs_neft' && !utrNumber) {
       setPayError('Enter the NEFT / RTGS UTR number before confirming.');
@@ -815,15 +819,11 @@ export function CustomerProfilePage() {
     setPayError('');
     setPaySuccess('');
     try {
-      const paidAmount =
-        method === 'zoho'
-          ? await handlePayInstallmentOnline(milestone)
-          : await handlePayInstallmentOffline(milestone, method, method === 'rtgs_neft' ? utrNumber : undefined);
-      if (paidAmount == null) return;
-      markInstallmentPaidLocally(session.email, milestone.no, paidAmount);
-      setPaySuccess(`Instalment ${milestone.no} paid — ${formatINR(paidAmount)} received.`);
-      setInstallmentUtr((prev) => ({ ...prev, [milestone.no]: '' }));
-      schedule.refresh();
+      if (method === 'zoho') {
+        await handlePayInstallmentOnline(milestone);
+      } else {
+        await handlePayInstallmentOffline(milestone, method, method === 'rtgs_neft' ? utrNumber : undefined);
+      }
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         logout();
@@ -922,7 +922,7 @@ export function CustomerProfilePage() {
           <h2 className="mt-2 font-display text-2xl font-bold text-ink">What you pay, and when</h2>
           <p className="mt-2 max-w-[60ch] text-sm leading-[1.65] text-ink-muted">
             Your plot cost is split across these milestones. Payment for the next instalment opens {PAY_WINDOW_DAYS} days
-            before its due date — once it does, choose to pay online, in cash, or by NEFT/RTGS transfer.
+            before its due date — once it does, record cash or NEFT/RTGS. Online payment is temporarily unavailable while the payment gateway dashboard is being confirmed.
           </p>
           {profile.bookingOptions.length > 1 && <div className="mt-5">{renderBookingSelector('profile-booking-payments')}</div>}
 
@@ -975,10 +975,12 @@ export function CustomerProfilePage() {
                         {milestone.amount != null ? formatINR(milestone.amount) : '-'}
                       </td>
                       <td className="px-5 py-3.5">
-                        <MilestoneStatusPill status={milestone.status} />
+                        <MilestoneStatusPill status={pendingInstallmentNos.includes(milestone.no) ? 'pending-review' : milestone.status} />
                       </td>
                       <td className="px-5 py-3.5 text-right">
-                        {milestone.status === 'paid' ? (
+                        {pendingInstallmentNos.includes(milestone.no) || milestone.status === 'pending-review' ? (
+                          <span className="text-xs font-semibold text-amber-800">Awaiting admin approval</span>
+                        ) : milestone.status === 'paid' ? (
                           <span className="text-xs font-semibold text-green">Paid</span>
                         ) : !milestone.payable ? (
                           <div className="flex flex-col items-end gap-1">
@@ -994,7 +996,7 @@ export function CustomerProfilePage() {
                           </div>
                         ) : (
                           (() => {
-                            const method = installmentMethod[milestone.no] ?? 'zoho';
+                            const method = installmentMethod[milestone.no] ?? (ONLINE_PAYMENTS_ENABLED ? 'zoho' : 'cash');
                             const paying = payingNo === milestone.no;
                             const amountLabel = milestone.amount != null ? formatINR(milestone.amount) : 'now';
                             const actionLabel = paying
@@ -1017,7 +1019,7 @@ export function CustomerProfilePage() {
                                   disabled={payingNo !== null}
                                   className="rounded-lg border border-hairline bg-bg px-2 py-1.5 text-xs text-ink outline-none focus:border-green disabled:cursor-not-allowed disabled:opacity-60"
                                 >
-                                  <option value="zoho">Online (Zoho Pay)</option>
+                                    <option value="zoho" disabled={!ONLINE_PAYMENTS_ENABLED}>Online payment temporarily unavailable</option>
                                   <option value="cash">Cash</option>
                                   <option value="rtgs_neft">NEFT / RTGS</option>
                                 </select>
