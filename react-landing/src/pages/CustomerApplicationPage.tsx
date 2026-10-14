@@ -13,7 +13,7 @@ import { clearPendingUnit } from '../services/pendingUnit';
 import { getDocument, uploadCancelledCheque, uploadGeneratedApplicationPdf } from '../services/documentsApi';
 import { ApiError } from '../services/authApi';
 import { blobToDataUrl, downloadPdfBlob, generateApplicationPdf, generatePaymentReceiptPdf, openDataUrl, openPdfBlob } from '../services/applicationPdf';
-import { createPaymentOrder, recordCashPayment } from '../services/paymentsApi';
+import { createPaymentOrder, ONLINE_PAYMENTS_ENABLED, recordCashPayment } from '../services/paymentsApi';
 import { stashPendingZohoPayment } from '../services/pendingZohoPayment';
 import { amountToIndianWords } from '../utils/currency';
 import { formatAadhaarDob, mapAadhaarGender } from '../utils/aadhaar';
@@ -781,6 +781,10 @@ export function CustomerApplicationPage() {
   };
 
   const handlePayNow = async () => {
+    if (!ONLINE_PAYMENTS_ENABLED) {
+      setPaymentError('Online payments are temporarily unavailable while the payment gateway dashboard is being confirmed. Please use cash or bank transfer.');
+      return;
+    }
     const amount = bookingDueAmount;
     if (amount <= 0) {
       setPaymentError('Enter the Total Plot Amount on the Pricing page first — the booking amount is 10% of it.');
@@ -1792,8 +1796,7 @@ export function CustomerApplicationPage() {
               <div>
                 <p className="font-semibold text-ink">Plot booking payment</p>
                 <p className="mt-1 text-xs leading-relaxed text-ink-muted">
-                  The booking instalment is fixed at 10% of the Total Plot Amount. Pay it online through Zoho Pay or
-                  record it as cash here — or enter cheque / DD / UTR details on the &ldquo;Fill application form&rdquo;
+                  The booking instalment is fixed at 10% of the Total Plot Amount. Online payment is temporarily unavailable while the payment gateway dashboard is being confirmed. Record cash here or enter cheque / DD / UTR details on the &ldquo;Fill application form&rdquo;
                   page. PDF generation unlocks once any of these is done.
                 </p>
               </div>
@@ -1871,15 +1874,15 @@ export function CustomerApplicationPage() {
                 </div>
                 <div className="grid gap-4 md:grid-cols-3">
                   <div className="rounded-lg border border-hairline bg-surface p-4">
-                    <p className="text-xs font-semibold text-ink">Online payment</p>
-                    <p className="mt-1 text-xs text-ink-muted">Zoho Pay, for the fixed booking instalment above.</p>
+                    <p className="text-xs font-semibold text-ink">Online payment temporarily unavailable</p>
+                    <p className="mt-1 text-xs text-ink-muted">Available again once the payment gateway dashboard is confirmed.</p>
                     <button
                       type="button"
                       onClick={handlePayNow}
-                      disabled={paying || bookingDueAmount <= 0}
+                      disabled={!ONLINE_PAYMENTS_ENABLED || paying || bookingDueAmount <= 0}
                       className="mt-3 rounded-full bg-green px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {paying ? 'Processing...' : 'Pay Now'}
+                      {ONLINE_PAYMENTS_ENABLED ? (paying ? 'Processing...' : 'Pay Now') : 'Temporarily unavailable'}
                     </button>
                   </div>
                   <div className="rounded-lg border border-hairline bg-surface p-4">

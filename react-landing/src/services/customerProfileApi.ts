@@ -62,7 +62,7 @@ export interface CustomerScheduleRow {
   /** ISO 8601 date, if the server resolves it against the booking date. */
   due_date?: string | null;
   amount?: number | null;
-  /** Milestone state: `paid` | `due` | `overdue` | `upcoming` (free text — the
+  /** Milestone state: `paid` | `pending_review` | `due` | `overdue` | `upcoming` (free text — the
    * UI also re-derives it from `due_date` so older values stay safe). */
   status?: string | null;
   /** Stable id for this milestone. Sent back as `installment_no` context when the
