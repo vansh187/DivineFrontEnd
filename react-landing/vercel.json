@@ -1,5 +1,18 @@
 {
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/residences", "destination": "/residences/index.html" },
+    { "source": "/residences/ops-divine-greens", "destination": "/residences/ops-divine-greens/index.html" },
+    { "source": "/residences/suraksha-enclave", "destination": "/residences/suraksha-enclave/index.html" },
+    { "source": "/our-story", "destination": "/our-story/index.html" },
+    { "source": "/our-work", "destination": "/our-work/index.html" },
+    { "source": "/book-plot", "destination": "/book-plot/index.html" },
+    { "source": "/book-plots", "destination": "/book-plot/index.html" },
+    { "source": "/privacy-policy", "destination": "/privacy-policy/index.html" },
+    { "source": "/terms-conditions", "destination": "/terms-conditions/index.html" },
+    { "source": "/faq", "destination": "/faq/index.html" },
+    { "source": "/customer", "destination": "/index.html" },
+    { "source": "/customer/(.*)", "destination": "/index.html" },
+    { "source": "/broker", "destination": "/index.html" },
+    { "source": "/broker/(.*)", "destination": "/index.html" }
   ]
 }

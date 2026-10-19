@@ -38,24 +38,22 @@ export function HeroMedia() {
   const reducedMotion = usePrefersReducedMotion();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [muted, setMuted] = useState(true);
+  const [videoReady, setVideoReady] = useState(false);
 
   useEffect(() => {
     if (reducedMotion) return;
+    // Paint the hero poster and page copy before fetching decorative footage.
+    const timer = window.setTimeout(() => setVideoReady(true), 1800);
+    return () => window.clearTimeout(timer);
+  }, [reducedMotion]);
+
+  useEffect(() => {
+    if (reducedMotion || !videoReady) return;
     const video = videoRef.current;
     if (!video) return;
-
-    // Try to play with sound on first — most browsers only block this on a
-    // visitor's very first, no-interaction visit. If that gets rejected,
-    // fall back to muted autoplay (which is never blocked) instead of
-    // leaving the hero frozen on its poster frame.
-    video.muted = false;
-    setMuted(false);
-    video.play().catch(() => {
-      video.muted = true;
-      setMuted(true);
-      video.play().catch(() => {});
-    });
-  }, [reducedMotion]);
+    video.muted = true;
+    video.play().catch(() => {});
+  }, [reducedMotion, videoReady]);
 
   if (reducedMotion) {
     return (
@@ -82,15 +80,15 @@ export function HeroMedia() {
       <video
         ref={videoRef}
         className="absolute inset-0 h-full w-full object-cover"
-        autoPlay
         loop
         playsInline
-        preload="metadata"
+        preload="none"
+        muted
         poster="/hero/hero-loop-poster.jpg"
         aria-label="Cinematic fly-through of OPS Divine Greens and Suraksha Enclave, with background score — entrance gates, aerial township views, amenities and clubhouses"
       >
-        <source src="/hero/hero-loop.webm" type="video/webm" />
-        <source src="/hero/hero-loop.mp4" type="video/mp4" />
+        {videoReady && <source src="/hero/hero-loop.webm" type="video/webm" />}
+        {videoReady && <source src="/hero/hero-loop.mp4" type="video/mp4" />}
       </video>
 
       <button

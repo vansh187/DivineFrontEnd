@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+
+# Customer and broker account areas are private and are not search landing pages.
+Disallow: /customer
+Disallow: /broker
+
+# Payment return pages are transactional and may contain session/order details.
+Disallow: /customer/payments/
+
+Sitemap: https://divinevisioninfra.com/sitemap.xml

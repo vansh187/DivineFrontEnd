@@ -51,7 +51,7 @@ export function LiveProjectsSection() {
           observer.disconnect();
         }
       },
-      { rootMargin: '400px' },
+      { rootMargin: '0px' },
     );
     observer.observe(el);
     return () => observer.disconnect();

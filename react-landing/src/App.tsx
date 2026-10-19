@@ -12,6 +12,7 @@ import { RoleRoute } from './components/RoleRoute';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import { idlePrefetchForRole } from './utils/routePreload';
 import type { Role } from './services/authApi';
+import seoPages from './data/seo-pages.json';
 
 // Only the landing page ships in the initial bundle. Every other route is
 // fetched on navigation so a first-time visitor isn't downloading the whole
@@ -44,6 +45,43 @@ const roleHome: Record<Role, string> = {
   customer: '/customer',
   broker: '/broker',
 };
+
+const pageMetadataByPath = Object.fromEntries(seoPages.map(({ path, title, description }) => [path, { title, description }]));
+
+function RouteMetadata() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const normalizedPath = pathname.replace(/\/$/, '') || '/';
+    const metadata = pageMetadataByPath[normalizedPath];
+    const noindex = !metadata;
+    document.title = metadata?.title ?? 'Page not found | Divine Vision Infratech';
+    const setMeta = (selector: string, attribute: string, value: string) => {
+      let element = document.head.querySelector<HTMLMetaElement>(selector);
+      if (!element) { element = document.createElement('meta'); document.head.appendChild(element); }
+      element.setAttribute(attribute, value);
+    };
+    setMeta('meta[name="description"]', 'name', 'description');
+    document.head.querySelector('meta[name="description"]')?.setAttribute('content', metadata?.description ?? '');
+    setMeta('meta[name="robots"]', 'name', 'robots');
+    document.head.querySelector('meta[name="robots"]')?.setAttribute('content', noindex ? 'noindex, nofollow' : 'index, follow');
+    setMeta('meta[property="og:title"]', 'property', 'og:title');
+    document.head.querySelector('meta[property="og:title"]')?.setAttribute('content', metadata?.title ?? 'Page not found');
+    setMeta('meta[property="og:description"]', 'property', 'og:description');
+    document.head.querySelector('meta[property="og:description"]')?.setAttribute('content', metadata?.description ?? '');
+    setMeta('meta[property="og:url"]', 'property', 'og:url');
+    document.head.querySelector('meta[property="og:url"]')?.setAttribute('content', `https://divinevisioninfra.com${noindex ? '/' : pathname}`);
+    setMeta('meta[name="twitter:card"]', 'name', 'twitter:card');
+    document.head.querySelector('meta[name="twitter:card"]')?.setAttribute('content', 'summary_large_image');
+    setMeta('meta[name="twitter:title"]', 'name', 'twitter:title');
+    document.head.querySelector('meta[name="twitter:title"]')?.setAttribute('content', metadata?.title ?? 'Page not found');
+    setMeta('meta[name="twitter:description"]', 'name', 'twitter:description');
+    document.head.querySelector('meta[name="twitter:description"]')?.setAttribute('content', metadata?.description ?? '');
+    let canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+    if (!canonical) { canonical = document.createElement('link'); canonical.rel = 'canonical'; document.head.appendChild(canonical); }
+    canonical.href = `https://divinevisioninfra.com${noindex ? '/' : pathname}`;
+  }, [pathname]);
+  return null;
+}
 
 // A browser-restored scroll position (e.g. hitting back) fights with the
 // synchronous reset in ScrollToRouteTop below - taking manual control keeps
@@ -243,6 +281,7 @@ function App() {
         <RoutePreloader />
         <BrowserRouter>
           <ScrollToRouteTop />
+          <RouteMetadata />
           <BackButton />
           <AppRoutes />
           <AuthModal />

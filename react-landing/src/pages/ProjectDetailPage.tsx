@@ -133,11 +133,11 @@ export function ProjectDetailPage() {
                     className="h-56 w-full object-cover"
                     src={detailVideo}
                     poster={township.heroSrc}
-                    autoPlay
                     muted
                     loop
                     playsInline
-                    preload="metadata"
+                    controls
+                    preload="none"
                     aria-label={township.image.alt}
                   />
                 ) : (
