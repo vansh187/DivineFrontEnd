@@ -1,47 +1,46 @@
-import { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { faqCategories } from '../data/faqContent';
 import { contact } from '../data/contact';
 import type { SiteOutletContext } from '../components/SiteLayout';
 
-function ChevronIcon({ open }: { open: boolean }) {
+function ChevronIcon() {
   return (
     <svg
       viewBox="0 0 20 20"
       aria-hidden="true"
-      className={`h-4 w-4 shrink-0 text-terracotta transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+      className="h-4 w-4 shrink-0 text-terracotta transition-transform duration-200 group-open:rotate-180"
     >
       <path d="M5 7.5 10 12.5 15 7.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
-function FaqAccordionItem({ q, a, open, onToggle }: { q: string; a: string; open: boolean; onToggle: () => void }) {
+function FaqAccordionItem({ q, a }: { q: string; a: string }) {
   return (
-    <div className="border-b border-hairline last:border-b-0">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        className="flex w-full items-center justify-between gap-4 py-4 text-left"
-      >
-        <span className="font-display text-base font-semibold text-ink sm:text-lg">{q}</span>
-        <ChevronIcon open={open} />
-      </button>
-      {open && <p className="pb-4 text-[15px] leading-[1.75] text-ink-muted">{a}</p>}
-    </div>
+    <details className="group border-b border-hairline last:border-b-0">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-left font-display text-base font-semibold text-ink marker:hidden sm:text-lg">
+        {q}<ChevronIcon />
+      </summary>
+      <p className="pb-4 text-[15px] leading-[1.75] text-ink-muted">{a}</p>
+    </details>
   );
 }
 
 export function FaqPage() {
   const { onBookVisit } = useOutletContext<SiteOutletContext>();
-  const [activeCategory, setActiveCategory] = useState(faqCategories[0].id);
-  const [openKey, setOpenKey] = useState<string | null>(`${faqCategories[0].id}-0`);
-
-  const active = faqCategories.find((category) => category.id === activeCategory) ?? faqCategories[0];
-
   return (
     <main className="bg-bg px-4 pb-20 pt-28 sm:px-10 sm:pt-32">
+      <script type="application/ld+json">
+        {JSON.stringify({
+          '@context': 'https://schema.org',
+          '@type': 'FAQPage',
+          mainEntity: faqCategories.flatMap((category) => category.items).map(({ q, a }) => ({
+            '@type': 'Question',
+            name: q,
+            acceptedAnswer: { '@type': 'Answer', text: a },
+          })),
+        })}
+      </script>
       <section className="mx-auto max-w-6xl">
         <p className="eyebrow-label text-terracotta">Help</p>
         <h1 className="mt-3 font-display text-balance text-4xl font-bold leading-tight text-ink sm:text-6xl">
@@ -54,39 +53,15 @@ export function FaqPage() {
       </section>
 
       <section className="mx-auto mt-10 max-w-6xl">
-        <div className="flex flex-wrap gap-2">
+        <div className="mt-6 space-y-8">
           {faqCategories.map((category) => (
-            <button
-              key={category.id}
-              type="button"
-              onClick={() => {
-                setActiveCategory(category.id);
-                setOpenKey(`${category.id}-0`);
-              }}
-              className={`rounded-full border px-4 py-2 text-xs font-semibold transition-colors ${
-                activeCategory === category.id
-                  ? 'border-chrome bg-chrome text-white'
-                  : 'border-hairline bg-surface text-ink-muted hover:border-terracotta hover:text-terracotta'
-              }`}
-            >
-              {category.label}
-            </button>
+            <section key={category.id} aria-labelledby={`faq-${category.id}`}>
+              <h2 id={`faq-${category.id}`} className="mb-3 font-display text-xl font-bold text-ink">{category.label}</h2>
+              <div className="rounded-2xl border border-hairline bg-surface px-5 sm:px-7">
+                {category.items.map((item) => <FaqAccordionItem key={item.q} q={item.q} a={item.a} />)}
+              </div>
+            </section>
           ))}
-        </div>
-
-        <div className="mt-6 rounded-2xl border border-hairline bg-surface px-5 sm:px-7">
-          {active.items.map((item, index) => {
-            const key = `${active.id}-${index}`;
-            return (
-              <FaqAccordionItem
-                key={key}
-                q={item.q}
-                a={item.a}
-                open={openKey === key}
-                onToggle={() => setOpenKey((current) => (current === key ? null : key))}
-              />
-            );
-          })}
         </div>
       </section>
 

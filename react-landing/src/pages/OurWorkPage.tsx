@@ -27,7 +27,8 @@ export function OurWorkPage() {
   const { onBookVisit } = useOutletContext<SiteOutletContext>();
   const heroFilmRef = useRef<HTMLVideoElement>(null);
   const [activeFilter, setActiveFilter] = useState<FilterId>('all');
-  const [heroFilmMuted, setHeroFilmMuted] = useState(false);
+  const [heroFilmMuted, setHeroFilmMuted] = useState(true);
+  const [heroFilmReady, setHeroFilmReady] = useState(false);
 
   const entries = Object.entries(siteProgressGalleryByTownship) as [
     keyof typeof siteProgressGalleryByTownship,
@@ -40,17 +41,17 @@ export function OurWorkPage() {
   const showFeatured = activeFilter === 'all' || activeFilter === featured?.townshipId;
 
   useEffect(() => {
+    const timer = window.setTimeout(() => setHeroFilmReady(true), 1800);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!heroFilmReady) return;
     const video = heroFilmRef.current;
     if (!video) return;
-
-    video.muted = false;
-    setHeroFilmMuted(false);
-    video.play().catch(() => {
-      video.muted = true;
-      setHeroFilmMuted(true);
-      video.play().catch(() => {});
-    });
-  }, []);
+    video.muted = true;
+    video.play().catch(() => {});
+  }, [heroFilmReady]);
 
   const toggleHeroFilmSound = () => {
     const video = heroFilmRef.current;
@@ -109,13 +110,12 @@ export function OurWorkPage() {
                 <video
                   ref={heroFilmRef}
                   className="aspect-[4/5] w-full object-cover lg:max-h-[520px]"
-                  src="/our-work/ops-divine-premium.mp4"
                   poster={HERO_POSTER}
-                  autoPlay
+                  src={heroFilmReady ? '/our-work/ops-divine-premium.mp4' : undefined}
                   muted={heroFilmMuted}
                   loop
                   playsInline
-                  preload="metadata"
+                  preload="none"
                   aria-label="Premium on-site video from OPS Divine Greens"
                 />
                 <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(6,31,45,0.08)_0%,rgba(6,31,45,0.2)_52%,rgba(6,31,45,0.78)_100%)]" />
