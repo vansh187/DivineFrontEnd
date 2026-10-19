@@ -62,8 +62,8 @@ const sections: LegalSection[] = [
           </li>
           <li>
             <strong>Payment information</strong> — the amount, purpose and status of a payment, and identifiers
-            returned by our payment gateway (Zoho Payments). We do not collect or store your card, UPI or bank
-            account details ourselves — these are handled directly by Zoho Payments, an RBI-regulated payment
+            returned by our payment gateway (Razorpay). We do not collect or store your card, UPI or bank
+            account details ourselves — these are handled directly by Razorpay, our payment
             aggregator.
           </li>
           <li>
@@ -161,7 +161,7 @@ const sections: LegalSection[] = [
         <p>We do not sell your personal data. We share it only where necessary to run the Platform or meet the law:</p>
         <ul>
           <li>
-            <strong>Zoho Payments</strong>, to process a payment you initiate — governed by Zoho&rsquo;s own privacy
+            <strong>Razorpay</strong>, to process a payment you initiate — governed by Razorpay&rsquo;s own privacy
             terms for the payment details you enter on their hosted checkout page.
           </li>
           <li>

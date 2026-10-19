@@ -1,9 +1,8 @@
 import { useMemo, useState } from 'react';
-import { useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import type { InventoryUnit } from '../services/inventoryApi';
-import { createPaymentOrder, ONLINE_PAYMENTS_ENABLED, recordCashPayment, type PaymentRecord } from '../services/paymentsApi';
-import { stashPendingZohoPayment } from '../services/pendingZohoPayment';
+import { createPaymentOrder, ONLINE_PAYMENTS_ENABLED, recordCashPayment, verifyRazorpayPayment, type PaymentRecord } from '../services/paymentsApi';
+import { openRazorpayCheckout } from '../services/razorpayCheckout';
 import { ApiError } from '../services/authApi';
 import { amountToIndianWords, formatCurrencyINR } from '../utils/currency';
 
@@ -25,7 +24,6 @@ function parseAmount(value: string): number {
 
 export function RecordBookingPaymentModal({ unit, onClose, onBooked }: RecordBookingPaymentModalProps) {
   const { session } = useAuth();
-  const location = useLocation();
   const [totalPlotAmount, setTotalPlotAmount] = useState(
     unit.estimated_price != null ? String(Math.round(unit.estimated_price)) : '',
   );
@@ -82,7 +80,7 @@ export function RecordBookingPaymentModal({ unit, onClose, onBooked }: RecordBoo
 
   const handleOnline = async () => {
     if (!ONLINE_PAYMENTS_ENABLED) {
-      setError('Online payments are temporarily unavailable while the payment gateway dashboard is being confirmed. Please record cash.');
+      setError('Online payments are temporarily unavailable while Razorpay is being configured. Please record cash.');
       return;
     }
     if (!session || bookingAmount <= 0) return;
@@ -93,24 +91,20 @@ export function RecordBookingPaymentModal({ unit, onClose, onBooked }: RecordBoo
         purpose: 'plot_booking',
         inventoryId: unit.id,
       });
-      if (!order.checkout_url) {
-        setError('Could not start the payment. Please try again or contact support.');
-        setBusy(null);
-        return;
+      if (!order.razorpay_key_id || !order.razorpay_order_id || !Number.isSafeInteger(order.amount_paise) || order.amount_paise <= 0) {
+        throw new Error('Razorpay is not configured on the payment server yet.');
       }
-      // Hosted checkout is a full-page redirect (see ZOHO_PAYMENTS_SETUP.md) -
-      // this modal's state (and the onBooked callback) can't survive that, so
-      // there's nothing left to do here but send the browser to Zoho.
-      // PaymentResultPage confirms the payment on return; the broker lands
-      // back on /broker/plots, which re-fetches and reflects the booked plot
-      // on its own.
-      stashPendingZohoPayment({
-        purpose: 'plot_booking',
-        email: session.email,
-        role: 'broker',
-        returnPath: location.pathname,
+      const result = await openRazorpayCheckout({
+        keyId: order.razorpay_key_id,
+        amountPaise: order.amount_paise,
+        currency: order.currency,
+        orderId: order.razorpay_order_id,
+        name: 'Divine Vision Infratech',
+        description: 'Plot booking payment',
+        prefillEmail: session.email,
       });
-      window.location.href = order.checkout_url;
+      const record = await verifyRazorpayPayment(session.token, result);
+      finish(record, true);
     } catch (err) {
       setError(describeError(err));
       setBusy(null);
@@ -164,7 +158,7 @@ export function RecordBookingPaymentModal({ unit, onClose, onBooked }: RecordBoo
             disabled={!ONLINE_PAYMENTS_ENABLED || bookingAmount <= 0 || busy !== null}
             className="w-full rounded-full bg-green px-4 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {ONLINE_PAYMENTS_ENABLED ? (busy === 'online' ? 'Processing…' : 'Pay online') : 'Online payment temporarily unavailable'}
+            {ONLINE_PAYMENTS_ENABLED ? (busy === 'online' ? 'Processing…' : 'Pay with Razorpay') : 'Razorpay temporarily unavailable'}
           </button>
           <button
             type="button"

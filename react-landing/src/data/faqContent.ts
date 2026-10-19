@@ -59,11 +59,11 @@ export const faqCategories: FaqCategory[] = [
     items: [
       {
         q: 'What payment methods are accepted?',
-        a: 'Online payment through Zoho Payments (our RBI-regulated payment gateway), cash collected by our team or channel partner, or bank transfer via NEFT/RTGS with a UTR number for confirmation.',
+        a: 'Online payment through Razorpay, cash collected by our team or channel partner, or bank transfer via NEFT/RTGS with a UTR number for confirmation.',
       },
       {
         q: 'What happens after I pay online?',
-        a: 'You’re taken to Zoho’s secure hosted checkout page to complete payment, then brought back to the site, where we confirm the payment with Zoho before marking it paid. We never see or store your card or bank details ourselves.',
+        a: 'You complete your payment through Razorpay Checkout. Our server verifies the payment with Razorpay before marking it paid. We never see or store your card or bank details ourselves.',
       },
       {
         q: 'What if my payment doesn’t go through, or I was charged the wrong amount?',
