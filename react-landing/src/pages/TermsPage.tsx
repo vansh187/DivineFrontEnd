@@ -80,7 +80,7 @@ const sections: LegalSection[] = [
           booking first, your payment is safe and will be refunded or adjusted, and our team will contact you.
         </p>
         <p>
-          Online payments are processed through <strong>Zoho Payments</strong>; we also accept cash and bank
+          Online payments are processed through <strong>Razorpay</strong>; we also accept cash and bank
           transfer (NEFT/RTGS) collected and recorded by our team or your channel partner. A payment is treated as
           received only once our backend receives confirmation from the payment gateway or, for cash/bank transfer, once
           it is recorded against your account. The full payment plan, due dates and consequences of a missed
@@ -174,7 +174,7 @@ const sections: LegalSection[] = [
     heading: 'Third-party services and links',
     body: (
       <p>
-        The Platform uses or links to third-party services — including Zoho Payments, Google Maps, and WhatsApp —
+        The Platform uses or links to third-party services — including Razorpay, Google Maps, and WhatsApp —
         each governed by that provider&rsquo;s own terms and privacy policy. We are not responsible for the content,
         accuracy or practices of third-party services, and including a link does not mean we endorse it.
       </p>

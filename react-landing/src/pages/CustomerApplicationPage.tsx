@@ -13,8 +13,8 @@ import { clearPendingUnit } from '../services/pendingUnit';
 import { getDocument, uploadCancelledCheque, uploadGeneratedApplicationPdf } from '../services/documentsApi';
 import { ApiError } from '../services/authApi';
 import { blobToDataUrl, downloadPdfBlob, generateApplicationPdf, generatePaymentReceiptPdf, openDataUrl, openPdfBlob } from '../services/applicationPdf';
-import { createPaymentOrder, ONLINE_PAYMENTS_ENABLED, recordCashPayment } from '../services/paymentsApi';
-import { stashPendingZohoPayment } from '../services/pendingZohoPayment';
+import { createPaymentOrder, ONLINE_PAYMENTS_ENABLED, recordCashPayment, verifyRazorpayPayment } from '../services/paymentsApi';
+import { openRazorpayCheckout } from '../services/razorpayCheckout';
 import { amountToIndianWords } from '../utils/currency';
 import { formatAadhaarDob, mapAadhaarGender } from '../utils/aadhaar';
 import { listMyBookings } from '../services/bookingsApi';
@@ -782,7 +782,7 @@ export function CustomerApplicationPage() {
 
   const handlePayNow = async () => {
     if (!ONLINE_PAYMENTS_ENABLED) {
-      setPaymentError('Online payments are temporarily unavailable while the payment gateway dashboard is being confirmed. Please use cash or bank transfer.');
+      setPaymentError('Online payments are temporarily unavailable while Razorpay is being configured. Please use cash or bank transfer.');
       return;
     }
     const amount = bookingDueAmount;
@@ -805,26 +805,44 @@ export function CustomerApplicationPage() {
         purpose: 'plot_booking',
         inventoryId,
       });
-      if (!order.checkout_url) {
-        setPaymentError('Could not start the payment. Please try again or contact support.');
-        setPaying(false);
+      if (!order.razorpay_key_id || !order.razorpay_order_id || !Number.isSafeInteger(order.amount_paise) || order.amount_paise <= 0) {
+        throw new Error('Razorpay is not configured on the payment server yet.');
+      }
+      const result = await openRazorpayCheckout({
+        keyId: order.razorpay_key_id,
+        amountPaise: order.amount_paise,
+        currency: order.currency,
+        orderId: order.razorpay_order_id,
+        name: 'Divine Vision Infratech',
+        description: 'Plot booking payment',
+        prefillEmail: session.email,
+        prefillName: docs.bookingApplication.formData.applicantName,
+      });
+      const record = await verifyRazorpayPayment(session.token, result);
+      if (isShortPayment(record.amount)) {
+        setPaymentError('Please correct the amount.');
         return;
       }
-      // Hosted checkout is a full-page redirect (see ZOHO_PAYMENTS_SETUP.md) -
-      // nothing after this line runs. Zoho sends the browser back to
-      // ZOHO_PAYMENTS_SUCCESS_URL/FAILURE_URL, where PaymentResultPage calls
-      // /payments/verify and applies the same local update (including the
-      // isShortPayment guard below) this used to do synchronously right here.
-      stashPendingZohoPayment({
-        purpose: 'plot_booking',
-        email: session.email,
-        role: 'customer',
-        expectedAmount: amount,
-        returnPath: location.pathname,
+      persist({
+        ...docs,
+        payment: {
+          paymentId: record.id,
+          amount: record.amount,
+          status: record.verified ? 'paid' : 'failed',
+          method: record.method,
+          razorpayOrderId: record.razorpay_order_id ?? result.razorpay_order_id,
+          razorpayPaymentId: record.razorpay_payment_id ?? result.razorpay_payment_id,
+          paidAt: record.verified ? new Date().toISOString() : null,
+          inventoryStatus: record.inventory_status ?? null,
+          inventoryConflictReason: record.inventory_conflict_reason ?? null,
+          error: record.verified ? null : 'Payment could not be verified. Please try again or contact support.',
+        },
       });
-      window.location.href = order.checkout_url;
+      if (record.verified) clearPendingUnit(session.email);
+      else setPaymentError('Payment could not be verified. Please try again or contact support.');
     } catch (err) {
       setPaymentError(describePaymentError(err));
+    } finally {
       setPaying(false);
     }
   };
@@ -857,8 +875,8 @@ export function CustomerApplicationPage() {
           amount: record.amount,
           status: 'paid',
           method: record.method,
-          zohoPaymentsSessionId: record.zoho_payments_session_id,
-          zohoPaymentId: record.zoho_payment_id,
+          razorpayOrderId: record.razorpay_order_id ?? null,
+          razorpayPaymentId: record.razorpay_payment_id ?? null,
           paidAt: new Date().toISOString(),
           inventoryStatus: record.inventory_status ?? null,
           inventoryConflictReason: record.inventory_conflict_reason ?? null,
@@ -915,8 +933,8 @@ export function CustomerApplicationPage() {
           amount: record.amount,
           status: 'paid',
           method: record.method,
-          zohoPaymentsSessionId: record.zoho_payments_session_id,
-          zohoPaymentId: record.zoho_payment_id,
+          razorpayOrderId: record.razorpay_order_id ?? null,
+          razorpayPaymentId: record.razorpay_payment_id ?? null,
           paidAt: new Date().toISOString(),
           inventoryStatus: record.inventory_status ?? null,
           inventoryConflictReason: record.inventory_conflict_reason ?? null,
@@ -1131,8 +1149,8 @@ export function CustomerApplicationPage() {
           projectId: docs.bookingApplication.formData.projectId,
           paymentId: docs.payment.paymentId,
           inventoryId: docs.bookingApplication.inventoryId,
-          zohoPaymentsSessionId: docs.payment.zohoPaymentsSessionId,
-          zohoPaymentId: docs.payment.zohoPaymentId,
+          razorpayOrderId: docs.payment.razorpayOrderId,
+          razorpayPaymentId: docs.payment.razorpayPaymentId,
           formData: serializeFormData(docs.bookingApplication.formData, hasCoApplicant),
         });
         persist({
@@ -1882,7 +1900,7 @@ export function CustomerApplicationPage() {
                       disabled={!ONLINE_PAYMENTS_ENABLED || paying || bookingDueAmount <= 0}
                       className="mt-3 rounded-full bg-green px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {ONLINE_PAYMENTS_ENABLED ? (paying ? 'Processing...' : 'Pay Now') : 'Temporarily unavailable'}
+                      {ONLINE_PAYMENTS_ENABLED ? (paying ? 'Processing...' : 'Pay with Razorpay') : 'Razorpay temporarily unavailable'}
                     </button>
                   </div>
                   <div className="rounded-lg border border-hairline bg-surface p-4">

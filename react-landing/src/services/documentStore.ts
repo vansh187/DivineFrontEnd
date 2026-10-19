@@ -97,19 +97,16 @@ export interface GeneratedDocStatus {
   signedUrlExpiresAt: number | null;
 }
 
-/** A payment (online via Zoho Pay, or cash recorded in person) - "paid" is only ever set
- * after the backend confirms it (Zoho's server-side confirmation check, or the cash-entry
+/** A payment (online via Razorpay or cash recorded in person) - "paid" is only ever set
+ * after the backend confirms it (gateway server-side confirmation check, or the cash-entry
  * response itself since cash settles immediately), never from client-side say-so. */
 export interface PaymentStatus {
   paymentId: string | null;
   amount: number | null;
   status: 'created' | 'paid' | 'failed' | null;
-  /** 'razorpay' only ever appears on a booking paid before the Zoho Pay migration -
-   * never written by any current payment flow, kept purely so old receipts still
-   * show the gateway that was actually used instead of being mislabeled. */
-  method: 'zoho' | 'razorpay' | 'cash' | 'rtgs_neft' | null;
-  zohoPaymentsSessionId: string | null;
-  zohoPaymentId: string | null;
+  method: 'razorpay' | 'cash' | 'rtgs_neft' | null;
+  razorpayOrderId: string | null;
+  razorpayPaymentId: string | null;
   paidAt: string | null;
   /** Inventory lock outcome the backend returned on this booking payment:
    *  - `pending_kyc_review` — the plot is held while an admin reviews KYC docs
@@ -129,8 +126,8 @@ export function emptyPaymentStatus(): PaymentStatus {
     amount: null,
     status: null,
     method: null,
-    zohoPaymentsSessionId: null,
-    zohoPaymentId: null,
+    razorpayOrderId: null,
+    razorpayPaymentId: null,
     paidAt: null,
     inventoryStatus: null,
     inventoryConflictReason: null,

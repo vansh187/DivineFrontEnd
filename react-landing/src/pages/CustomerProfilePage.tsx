@@ -3,13 +3,13 @@ import { useLocation } from 'react-router-dom';
 import { useAuth, getDisplayName } from '../hooks/useAuth';
 import { DashboardLayout } from '../components/DashboardLayout';
 import { IconBadge, FileIcon, RupeeIcon } from '../components/DashboardIcons';
-import { loadCustomerDocs, saveCustomerDocs, type PaymentStatus } from '../services/documentStore';
+import { loadCustomerDocs, saveCustomerDocs, markInstallmentPaidLocally, type PaymentStatus } from '../services/documentStore';
 import { usePaymentSchedule } from '../hooks/usePaymentSchedule';
 import { formatCurrencyINR, formatIndianDate } from '../utils/currency';
 import { PAY_WINDOW_DAYS, type MilestoneStatus, type ScheduleMilestone } from '../services/paymentSchedule';
-import { createPaymentOrder, ONLINE_PAYMENTS_ENABLED, submitOfflineInstallmentPayment } from '../services/paymentsApi';
+import { createPaymentOrder, ONLINE_PAYMENTS_ENABLED, submitOfflineInstallmentPayment, verifyRazorpayPayment } from '../services/paymentsApi';
 import type { CashPaymentMethod } from '../services/paymentsApi';
-import { stashPendingZohoPayment } from '../services/pendingZohoPayment';
+import { openRazorpayCheckout } from '../services/razorpayCheckout';
 import { townshipPricing } from '../data/townshipPricing';
 import {
   getCustomerProfileShared,
@@ -246,10 +246,10 @@ export function CustomerProfilePage() {
   const [payingNo, setPayingNo] = useState<number | null>(null);
   const [payError, setPayError] = useState('');
   const [paySuccess, setPaySuccess] = useState('');
-  // Per-milestone payment method choice ('zoho' | 'cash' | 'rtgs_neft') and
+  // Per-milestone payment method choice ('razorpay' | 'cash' | 'rtgs_neft') and
   // the UTR number typed for an NEFT/RTGS confirmation - both keyed by
   // milestone.no since every open instalment picks independently.
-  const [installmentMethod, setInstallmentMethod] = useState<Record<number, 'zoho' | CashPaymentMethod>>({});
+  const [installmentMethod, setInstallmentMethod] = useState<Record<number, 'razorpay' | CashPaymentMethod>>({});
   const [installmentUtr, setInstallmentUtr] = useState<Record<number, string>>({});
   const [pendingInstallmentNos, setPendingInstallmentNos] = useState<number[]>([]);
 
@@ -491,9 +491,7 @@ export function CustomerProfilePage() {
             paymentId: receiptPaymentId,
             amount: receiptAmount,
             status: 'paid',
-            // rb.payment_method is a raw backend string, not the narrower PaymentStatus
-            // union - 'razorpay' is preserved rather than folded into 'zoho' so a
-            // pre-migration booking's receipt still names the gateway it actually used.
+            // Preserve the backend's payment method so receipts identify the provider used.
             method:
               rb.payment_method === 'cash'
                 ? 'cash'
@@ -501,9 +499,9 @@ export function CustomerProfilePage() {
                   ? 'rtgs_neft'
                   : rb.payment_method === 'razorpay'
                     ? 'razorpay'
-                    : 'zoho',
-            zohoPaymentsSessionId: rb.zoho_payments_session_id ?? null,
-            zohoPaymentId: rb.zoho_payment_id ?? null,
+                    : null,
+            razorpayOrderId: rb.razorpay_order_id ?? null,
+            razorpayPaymentId: rb.razorpay_payment_id ?? null,
             paidAt: rb.payment_created_date ?? rb.booking_date ?? null,
             inventoryStatus: null,
             inventoryConflictReason: null,
@@ -759,13 +757,10 @@ export function CustomerProfilePage() {
     }
   };
 
-  // Hosted checkout is a full-page redirect (see ZOHO_PAYMENTS_SETUP.md) - this
-  // never returns to its caller on the success path. Zoho sends the browser
-  // back to ZOHO_PAYMENTS_SUCCESS_URL/FAILURE_URL, where PaymentResultPage
-  // calls /payments/verify and applies markInstallmentPaidLocally itself.
+  // A milestone is marked paid only after the backend verifies Razorpay's signature.
   const handlePayInstallmentOnline = async (milestone: ScheduleMilestone) => {
     if (!ONLINE_PAYMENTS_ENABLED) {
-      setPayError('Online payments are temporarily unavailable while the payment gateway dashboard is being confirmed. Please use cash or NEFT/RTGS.');
+      setPayError('Online payments are temporarily unavailable while Razorpay is being configured. Please use cash or NEFT/RTGS.');
       return;
     }
     if (!session || milestone.amount == null) return;
@@ -775,18 +770,23 @@ export function CustomerProfilePage() {
       installmentNo: milestone.no,
       dueDate: milestone.dueDateISO,
     });
-    if (!order.checkout_url) {
-      setPayError('Could not start the payment. Please try again or contact support.');
-      return;
+    if (!order.razorpay_key_id || !order.razorpay_order_id || !Number.isSafeInteger(order.amount_paise) || order.amount_paise <= 0) {
+      throw new Error('Razorpay is not configured on the payment server yet.');
     }
-    stashPendingZohoPayment({
-      purpose: 'installment',
-      email: session.email,
-      role: 'customer',
-      installmentNo: milestone.no,
-      returnPath: location.pathname,
+    const result = await openRazorpayCheckout({
+      keyId: order.razorpay_key_id,
+      amountPaise: order.amount_paise,
+      currency: order.currency,
+      orderId: order.razorpay_order_id,
+      name: 'Divine Vision Infratech',
+      description: `Instalment ${milestone.no}`,
+      prefillEmail: session.email,
     });
-    window.location.href = order.checkout_url;
+    const record = await verifyRazorpayPayment(session.token, result);
+    if (!record.verified) throw new Error('Payment could not be verified. Please contact support before retrying.');
+    markInstallmentPaidLocally(session.email, milestone.no, record.amount);
+    setPaySuccess(`Payment for instalment ${milestone.no} was verified successfully.`);
+    schedule.refresh();
   };
 
   // Customer-entered cash and bank transfer details are claims for review,
@@ -809,7 +809,7 @@ export function CustomerProfilePage() {
 
   const handlePayInstallment = async (milestone: ScheduleMilestone) => {
     if (!session || milestone.amount == null || milestone.amount <= 0) return;
-    const method = installmentMethod[milestone.no] ?? (ONLINE_PAYMENTS_ENABLED ? 'zoho' : 'cash');
+    const method = installmentMethod[milestone.no] ?? (ONLINE_PAYMENTS_ENABLED ? 'razorpay' : 'cash');
     const utrNumber = installmentUtr[milestone.no]?.trim() ?? '';
     if (method === 'rtgs_neft' && !utrNumber) {
       setPayError('Enter the NEFT / RTGS UTR number before confirming.');
@@ -819,7 +819,7 @@ export function CustomerProfilePage() {
     setPayError('');
     setPaySuccess('');
     try {
-      if (method === 'zoho') {
+      if (method === 'razorpay') {
         await handlePayInstallmentOnline(milestone);
       } else {
         await handlePayInstallmentOffline(milestone, method, method === 'rtgs_neft' ? utrNumber : undefined);
@@ -996,7 +996,7 @@ export function CustomerProfilePage() {
                           </div>
                         ) : (
                           (() => {
-                            const method = installmentMethod[milestone.no] ?? (ONLINE_PAYMENTS_ENABLED ? 'zoho' : 'cash');
+                            const method = installmentMethod[milestone.no] ?? (ONLINE_PAYMENTS_ENABLED ? 'razorpay' : 'cash');
                             const paying = payingNo === milestone.no;
                             const amountLabel = milestone.amount != null ? formatINR(milestone.amount) : 'now';
                             const actionLabel = paying
@@ -1013,13 +1013,13 @@ export function CustomerProfilePage() {
                                   onChange={(event) =>
                                     setInstallmentMethod((prev) => ({
                                       ...prev,
-                                      [milestone.no]: event.target.value as 'zoho' | CashPaymentMethod,
+                                      [milestone.no]: event.target.value as 'razorpay' | CashPaymentMethod,
                                     }))
                                   }
                                   disabled={payingNo !== null}
                                   className="rounded-lg border border-hairline bg-bg px-2 py-1.5 text-xs text-ink outline-none focus:border-green disabled:cursor-not-allowed disabled:opacity-60"
                                 >
-                                    <option value="zoho" disabled={!ONLINE_PAYMENTS_ENABLED}>Online payment temporarily unavailable</option>
+                                    <option value="razorpay" disabled={!ONLINE_PAYMENTS_ENABLED}>{ONLINE_PAYMENTS_ENABLED ? 'Razorpay' : 'Razorpay temporarily unavailable'}</option>
                                   <option value="cash">Cash</option>
                                   <option value="rtgs_neft">NEFT / RTGS</option>
                                 </select>
