@@ -1,7 +1,7 @@
 import { authedRequest as authedRequestBase } from './authApi';
 
-/** Keep online checkout disabled until the backend is configured for Razorpay. */
-export const ONLINE_PAYMENTS_ENABLED = false;
+/** Enable Razorpay checkout for payment-flow testing. */
+export const ONLINE_PAYMENTS_ENABLED = true;
 
 /** Contract with POST /payments/create-order for Razorpay Checkout. */
 export interface PaymentOrder {
