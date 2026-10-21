@@ -29,10 +29,9 @@ function SpeakerOnIcon() {
  * clubhouse → family park → gardens → aerial) — with a background score.
  * Swaps to a still frame when the user prefers reduced motion.
  *
- * Autoplay-with-sound is blocked by most browsers on first visit, so we
- * try unmuted first and silently fall back to muted playback; the toggle
- * lets a visitor turn the score on with one click regardless of which
- * path we landed on.
+ * Autoplay with sound is blocked by most browsers, so the reel starts muted.
+ * The sound toggle becomes available once the video source is attached, so a
+ * tap always reaches a playable media element.
  */
 export function HeroMedia() {
   const reducedMotion = usePrefersReducedMotion();
@@ -51,9 +50,10 @@ export function HeroMedia() {
     if (reducedMotion || !videoReady) return;
     const video = videoRef.current;
     if (!video) return;
-    video.muted = true;
+    // Respect a sound choice made after the control became available.
+    video.muted = muted;
     video.play().catch(() => {});
-  }, [reducedMotion, videoReady]);
+  }, [reducedMotion, videoReady, muted]);
 
   if (reducedMotion) {
     return (
@@ -68,7 +68,7 @@ export function HeroMedia() {
   const toggleMute = () => {
     const video = videoRef.current;
     if (!video) return;
-    const next = !video.muted;
+    const next = !muted;
     video.volume = 1;
     video.muted = next;
     setMuted(next);
@@ -83,7 +83,7 @@ export function HeroMedia() {
         loop
         playsInline
         preload="none"
-        muted
+        muted={muted}
         poster="/hero/hero-loop-poster.jpg"
         aria-label="Cinematic fly-through of OPS Divine Greens and Suraksha Enclave, with background score — entrance gates, aerial township views, amenities and clubhouses"
       >
@@ -94,9 +94,10 @@ export function HeroMedia() {
       <button
         type="button"
         onClick={toggleMute}
+        disabled={!videoReady}
         aria-pressed={!muted}
         aria-label={muted ? 'Unmute background music' : 'Mute background music'}
-        className="absolute right-6 top-24 z-20 flex h-11 w-11 items-center justify-center rounded-full border border-white/30 bg-black/45 text-white backdrop-blur-sm transition-colors duration-200 hover:bg-black/65 sm:right-8"
+        className="absolute right-6 top-24 z-20 flex h-11 w-11 items-center justify-center rounded-full border border-white/30 bg-black/45 text-white backdrop-blur-sm transition-colors duration-200 hover:bg-black/65 disabled:cursor-wait disabled:opacity-60 sm:right-8"
       >
         {muted ? <SpeakerMutedIcon /> : <SpeakerOnIcon />}
       </button>
