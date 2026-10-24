@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { HeroMedia } from './HeroMedia';
+import { HeroMedia, HeroSoundToggle, useHeroSound } from './HeroMedia';
 import { useHeroScrollTimeline } from '../hooks/useHeroScrollTimeline';
 import { company } from '../data/company';
 import { prefetchRouteAssets } from '../utils/routePreload';
@@ -23,6 +23,7 @@ export function HeroSection({ onBookVisit }: HeroSectionProps) {
   const sectionRef = useRef<HTMLElement>(null);
   const canvasWrapRef = useRef<HTMLDivElement>(null);
   const copyRef = useRef<HTMLDivElement>(null);
+  const sound = useHeroSound();
 
   useHeroScrollTimeline({ sectionRef, canvasWrapRef, copyRef });
 
@@ -32,7 +33,7 @@ export function HeroSection({ onBookVisit }: HeroSectionProps) {
       className="relative flex min-h-[max(100svh,700px)] flex-col items-center justify-center overflow-x-hidden px-4 pb-10 pt-24 text-center sm:min-h-svh sm:px-6 sm:pb-0 sm:pt-20"
     >
       <div ref={canvasWrapRef} className="absolute inset-0 overflow-hidden">
-        <HeroMedia />
+        <HeroMedia sound={sound} />
         {/*
           Full-bleed darkening pass keeps copy legible whether the crop
           underneath is bright sky or dark foliage.
@@ -44,7 +45,14 @@ export function HeroSection({ onBookVisit }: HeroSectionProps) {
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[22%] bg-gradient-to-t from-bg via-bg/25 to-transparent" />
       </div>
 
-      <div ref={copyRef} className="relative z-10 mx-auto flex w-full max-w-4xl flex-col items-center gap-5 sm:gap-6">
+      {/*
+        Kept outside the transformed media wrapper: its transform creates a
+        stacking context that would trap the toggle beneath the copy column.
+      */}
+      <HeroSoundToggle sound={sound} />
+
+      {/* Click-through on empty space; interactive children opt back in. */}
+      <div ref={copyRef} className="pointer-events-none relative z-10 mx-auto flex w-full max-w-4xl flex-col items-center gap-5 sm:gap-6">
         <span className="eyebrow-label max-w-[min(100%,19rem)] rounded-none border border-white/32 bg-black/22 px-3 py-1.5 text-center text-[10px] leading-relaxed text-white/92 backdrop-blur-sm sm:max-w-full sm:px-4 sm:text-xs">
           <span className="sm:hidden">Established {company.foundedYear} | NH-1 corridor</span>
           <span className="hidden sm:inline">Established {company.foundedYear} | NH-1 Delhi-Chandigarh corridor</span>
@@ -63,7 +71,7 @@ export function HeroSection({ onBookVisit }: HeroSectionProps) {
           <button
             type="button"
             onClick={onBookVisit}
-            className="rounded-none border border-terracotta bg-terracotta px-5 py-3.5 text-sm font-semibold tracking-[0.04em] text-white uppercase transition-all duration-200 hover:border-green hover:bg-green sm:px-7"
+            className="pointer-events-auto rounded-none border border-terracotta bg-terracotta px-5 py-3.5 text-sm font-semibold tracking-[0.04em] text-white uppercase transition-all duration-200 hover:border-green hover:bg-green sm:px-7"
           >
             Book a site visit
           </button>
@@ -72,7 +80,7 @@ export function HeroSection({ onBookVisit }: HeroSectionProps) {
             onMouseEnter={() => prefetchRouteAssets('/residences')}
             onFocus={() => prefetchRouteAssets('/residences')}
             onTouchStart={() => prefetchRouteAssets('/residences')}
-            className="eyebrow-label rounded-none border border-white/55 bg-black/25 px-5 py-3.5 text-center text-white backdrop-blur-sm transition-colors duration-200 hover:border-white hover:bg-black/40 sm:px-7"
+            className="pointer-events-auto eyebrow-label rounded-none border border-white/55 bg-black/25 px-5 py-3.5 text-center text-white backdrop-blur-sm transition-colors duration-200 hover:border-white hover:bg-black/40 sm:px-7"
           >
             Explore residences
           </Link>

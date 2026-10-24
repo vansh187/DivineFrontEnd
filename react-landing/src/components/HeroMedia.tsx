@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 
 function SpeakerMutedIcon() {
@@ -23,17 +23,23 @@ function SpeakerOnIcon() {
   );
 }
 
+export type HeroSound = {
+  videoRef: RefObject<HTMLVideoElement | null>;
+  reducedMotion: boolean;
+  videoReady: boolean;
+  muted: boolean;
+  toggleMute: () => void;
+};
+
 /**
- * Cinematic crossfade reel of both live townships — OPS Divine Greens
- * (gate → aerial → amenities → clubhouse) into Suraksha Enclave (gate →
- * clubhouse → family park → gardens → aerial) — with a background score.
- * Swaps to a still frame when the user prefers reduced motion.
+ * Shared state for the hero reel and its sound toggle. The toggle is rendered
+ * outside the transformed media wrapper (see HeroSection) so its z-index isn't
+ * trapped in that wrapper's stacking context, so both pieces read from here.
  *
  * Autoplay with sound is blocked by most browsers, so the reel starts muted.
- * The sound toggle becomes available once the video source is attached, so a
- * tap always reaches a playable media element.
+ * Unmuting happens only inside the tap handler, which iOS requires for audio.
  */
-export function HeroMedia() {
+export function useHeroSound(): HeroSound {
   const reducedMotion = usePrefersReducedMotion();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [muted, setMuted] = useState(true);
@@ -50,10 +56,37 @@ export function HeroMedia() {
     if (reducedMotion || !videoReady) return;
     const video = videoRef.current;
     if (!video) return;
-    // Respect a sound choice made after the control became available.
-    video.muted = muted;
+    // Initial muted autoplay only; sound changes are driven by the tap handler.
+    video.muted = true;
     video.play().catch(() => {});
-  }, [reducedMotion, videoReady, muted]);
+  }, [reducedMotion, videoReady]);
+
+  const toggleMute = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    const nextMuted = !muted;
+    video.muted = nextMuted;
+    if (!nextMuted) {
+      video.play().catch((err) => {
+        video.muted = true;
+        setMuted(true);
+        console.warn('unmute blocked', err);
+      });
+    }
+    setMuted(nextMuted);
+  };
+
+  return { videoRef, reducedMotion, videoReady, muted, toggleMute };
+}
+
+/**
+ * Cinematic crossfade reel of both live townships — OPS Divine Greens
+ * (gate → aerial → amenities → clubhouse) into Suraksha Enclave (gate →
+ * clubhouse → family park → gardens → aerial) — with a background score.
+ * Swaps to a still frame when the user prefers reduced motion.
+ */
+export function HeroMedia({ sound }: { sound: HeroSound }) {
+  const { videoRef, reducedMotion, videoReady, muted } = sound;
 
   if (reducedMotion) {
     return (
@@ -65,42 +98,39 @@ export function HeroMedia() {
     );
   }
 
-  const toggleMute = () => {
-    const video = videoRef.current;
-    if (!video) return;
-    const next = !muted;
-    video.volume = 1;
-    video.muted = next;
-    setMuted(next);
-    if (!next) video.play().catch(() => {});
-  };
+  return (
+    <video
+      ref={videoRef}
+      className="absolute inset-0 h-full w-full object-cover"
+      loop
+      playsInline
+      preload="none"
+      muted={muted}
+      poster="/hero/hero-loop-poster.jpg"
+      aria-label="Cinematic fly-through of OPS Divine Greens and Suraksha Enclave, with background score — entrance gates, aerial township views, amenities and clubhouses"
+    >
+      {/* MP4 first so iOS Safari picks H.264/AAC; WebM audio can be silent there. */}
+      {videoReady && <source src="/hero/hero-loop.mp4" type="video/mp4" />}
+      {videoReady && <source src="/hero/hero-loop.webm" type="video/webm" />}
+    </video>
+  );
+}
+
+/** Sound toggle for the hero reel; render it as a direct child of the hero section. */
+export function HeroSoundToggle({ sound }: { sound: HeroSound }) {
+  const { reducedMotion, videoReady, muted, toggleMute } = sound;
+  if (reducedMotion) return null;
 
   return (
-    <>
-      <video
-        ref={videoRef}
-        className="absolute inset-0 h-full w-full object-cover"
-        loop
-        playsInline
-        preload="none"
-        muted={muted}
-        poster="/hero/hero-loop-poster.jpg"
-        aria-label="Cinematic fly-through of OPS Divine Greens and Suraksha Enclave, with background score — entrance gates, aerial township views, amenities and clubhouses"
-      >
-        {videoReady && <source src="/hero/hero-loop.webm" type="video/webm" />}
-        {videoReady && <source src="/hero/hero-loop.mp4" type="video/mp4" />}
-      </video>
-
-      <button
-        type="button"
-        onClick={toggleMute}
-        disabled={!videoReady}
-        aria-pressed={!muted}
-        aria-label={muted ? 'Unmute background music' : 'Mute background music'}
-        className="absolute right-6 top-24 z-20 flex h-11 w-11 items-center justify-center rounded-full border border-white/30 bg-black/45 text-white backdrop-blur-sm transition-colors duration-200 hover:bg-black/65 disabled:cursor-wait disabled:opacity-60 sm:right-8"
-      >
-        {muted ? <SpeakerMutedIcon /> : <SpeakerOnIcon />}
-      </button>
-    </>
+    <button
+      type="button"
+      onClick={toggleMute}
+      disabled={!videoReady}
+      aria-pressed={!muted}
+      aria-label={muted ? 'Unmute background music' : 'Mute background music'}
+      className="absolute right-4 top-20 z-30 flex h-11 w-11 touch-manipulation items-center justify-center rounded-full border border-white/30 bg-black/45 text-white backdrop-blur-sm transition-colors duration-200 hover:bg-black/65 active:bg-black/65 disabled:cursor-wait disabled:opacity-60 sm:right-8 sm:top-24"
+    >
+      {muted ? <SpeakerMutedIcon /> : <SpeakerOnIcon />}
+    </button>
   );
 }
