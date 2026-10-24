@@ -93,7 +93,7 @@ export function OurStoryPage() {
             <div>
               <span className="eyebrow-label text-terracotta-light">Our story</span>
               <h1 className="mt-4 max-w-[14ch] font-display text-balance text-4xl font-bold leading-[1.08] text-white sm:text-6xl">
-                We don&rsquo;t sell plots. We deliver on a director&rsquo;s word.
+                Honouring Our Legacy. Securing Your Family&rsquo;s Tomorrow.
               </h1>
               <p className="mt-6 max-w-[54ch] text-[15px] leading-[1.85] text-white/72 sm:text-[16px]">
                 Divine Vision Infratech has spent {new Date().getFullYear() - company.foundedYear}+ years turning
@@ -135,7 +135,7 @@ export function OurStoryPage() {
                 <div className="relative aspect-square w-full overflow-hidden bg-black">
                   <img
                     src={HERO_IMAGE}
-                    alt="Himashu Luthra, Director of Divine Vision Infratech"
+                    alt="Himashu Luthra, Managing Director of Divine Vision Infratech"
                     loading="eager"
                     decoding="async"
                     fetchPriority="high"
@@ -146,7 +146,7 @@ export function OurStoryPage() {
                 <div className="flex items-center justify-between gap-3 border-t border-white/12 bg-white/[0.06] px-5 py-4">
                   <div>
                     <p className="text-sm font-bold text-white">Himashu Luthra</p>
-                    <p className="mt-0.5 text-xs text-white/62">Director, Divine Vision Infratech</p>
+                    <p className="mt-0.5 text-xs text-white/62">Managing Director, Divine Vision Infratech</p>
                   </div>
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-terracotta text-xs font-bold text-white">
                     HL
@@ -162,7 +162,7 @@ export function OurStoryPage() {
         <section className="border-b border-hairline bg-surface px-4 pb-16 pt-10 sm:px-10 sm:pb-24 sm:pt-14">
           <div className="mx-auto max-w-6xl grid gap-10 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
             <div>
-              <span className="eyebrow-label text-terracotta">Director&rsquo;s vision</span>
+              <span className="eyebrow-label text-terracotta">Managing Director&rsquo;s vision</span>
               <h2 className="mt-4 max-w-[20ch] font-display text-balance text-3xl font-bold leading-[1.12] text-ink sm:text-4xl">
                 A township should feel complete before a family ever moves in.
               </h2>
@@ -173,7 +173,7 @@ export function OurStoryPage() {
                   buyer can verify it, not just trust it.
                 </p>
                 <p className="mt-4 text-xs font-semibold uppercase tracking-[0.08em] text-chrome">
-                  Himashu Luthra, Director
+                  Himashu Luthra, Managing Director
                 </p>
               </div>
             </div>
