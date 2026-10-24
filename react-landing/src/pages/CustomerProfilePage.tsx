@@ -3,7 +3,14 @@ import { useLocation } from 'react-router-dom';
 import { useAuth, getDisplayName } from '../hooks/useAuth';
 import { DashboardLayout } from '../components/DashboardLayout';
 import { IconBadge, FileIcon, RupeeIcon } from '../components/DashboardIcons';
-import { loadCustomerDocs, saveCustomerDocs, markInstallmentPaidLocally, type PaymentStatus } from '../services/documentStore';
+import {
+  loadApplicantContactSnapshot,
+  loadCustomerDocs,
+  loadCustomerProfilePhoto,
+  saveCustomerProfilePhoto,
+  markInstallmentPaidLocally,
+  type PaymentStatus,
+} from '../services/documentStore';
 import { usePaymentSchedule } from '../hooks/usePaymentSchedule';
 import { formatCurrencyINR, formatIndianDate } from '../utils/currency';
 import { PAY_WINDOW_DAYS, type MilestoneStatus, type ScheduleMilestone } from '../services/paymentSchedule';
@@ -338,18 +345,16 @@ export function CustomerProfilePage() {
     getLatestDocumentByType(session.token, 'applicant_photo')
       .then((doc) => {
         if (cancelled) return;
-        const docs = loadCustomerDocs(session.email);
-        saveCustomerDocs(session.email, {
-          ...docs,
-          applicantPhoto: {
-            ...docs.applicantPhoto,
-            dataUrl: docs.applicantPhoto.documentId === doc.id ? docs.applicantPhoto.dataUrl : null,
-            uploadedAt: doc.created_date,
-            documentId: doc.id,
-            signedUrl: doc.signed_url,
-            signedUrlExpiresAt: Date.now() + doc.signed_url_expires_in * 1000,
-            error: null,
-          },
+        // Avatar cache only; the booking's applicantPhoto is uploaded per booking.
+        const photo = loadCustomerProfilePhoto(session.email);
+        saveCustomerProfilePhoto(session.email, {
+          ...photo,
+          dataUrl: photo.documentId === doc.id ? photo.dataUrl : null,
+          uploadedAt: doc.created_date,
+          documentId: doc.id,
+          signedUrl: doc.signed_url,
+          signedUrlExpiresAt: Date.now() + doc.signed_url_expires_in * 1000,
+          error: null,
         });
         window.dispatchEvent(new Event('dvi-profile-photo-changed'));
         setPhotoVersion((version) => version + 1);
@@ -373,6 +378,9 @@ export function CustomerProfilePage() {
     const docs = loadCustomerDocs(session.email);
     const form = docs.bookingApplication.formData;
     const aadhaar = docs.aadhar;
+    // A new plot booking starts with an empty form, so the applicant details
+    // from the last submitted application back the fallbacks below.
+    const lastApplicant = loadApplicantContactSnapshot(session.email);
     const r = remote ?? {};
     const bookings = visibleBookings;
     const selectedBooking = selectedBookingFrom(bookings, selectedBookingKey);
@@ -389,13 +397,17 @@ export function CustomerProfilePage() {
         [r.first_name, r.last_name].filter(Boolean).join(' '),
         hasRemote ? '' : form.applicantName,
         hasRemote ? '' : aadhaar.name,
+        hasRemote ? '' : lastApplicant.applicantName,
       ) ||
       getDisplayName(session);
-    const gender = titleCase(firstText(r.gender, hasRemote ? '' : form.gender, hasRemote ? '' : aadhaar.gender)) || unknown;
+    const gender =
+      titleCase(
+        firstText(r.gender, hasRemote ? '' : form.gender, hasRemote ? '' : aadhaar.gender, hasRemote ? '' : lastApplicant.gender),
+      ) || unknown;
     const age =
       ageFromYears(r.age) ||
       (r.date_of_birth ? ageFromDob(r.date_of_birth) : '') ||
-      (hasRemote ? unknown : ageFromDob(form.dob || aadhaar.dob || ''));
+      (hasRemote ? unknown : ageFromDob(form.dob || aadhaar.dob || lastApplicant.dob || ''));
     const address =
       firstText(
         r.address_text,
@@ -403,6 +415,7 @@ export function CustomerProfilePage() {
         hasRemote ? '' : form.permanentAddress,
         hasRemote ? '' : form.correspondenceAddress,
         hasRemote ? '' : aadhaar.address,
+        hasRemote ? '' : lastApplicant.address,
       ) || unknown;
     const email = firstText(r.email) || session.email;
     // Unlike name/address/etc., the phone has no KYC-derived source (Aadhaar QR
@@ -410,7 +423,7 @@ export function CustomerProfilePage() {
     // locally cached application form is the *only* other place a customer ever
     // typed their number, so use it even when hasRemote is true rather than
     // showing "-" for a number we actually have on this device.
-    const phone = firstText(r.phone, form.mobile, form.phone) || unknown;
+    const phone = firstText(r.phone, form.mobile, form.phone, lastApplicant.mobile, lastApplicant.phone) || unknown;
     const customerId = firstText(r.customer_id) || (hasRemote ? unknown : session.userId || unknown);
     const township =
       firstText(rb.township_label, rb.project_name) ||
@@ -455,7 +468,8 @@ export function CustomerProfilePage() {
       ? serverScheduleRows(letterScheduleRows)
       : localScheduleRows(totalAmount);
 
-    const photo = docs.applicantPhoto.dataUrl || freshSignedUrl(docs.applicantPhoto.signedUrl, docs.applicantPhoto.signedUrlExpiresAt);
+    const profilePhoto = loadCustomerProfilePhoto(session.email);
+    const photo = profilePhoto.dataUrl || freshSignedUrl(profilePhoto.signedUrl, profilePhoto.signedUrlExpiresAt);
     const backendDocumentId = bookingDocumentId(selectedBooking) ?? docs.bookingApplication.backendDocumentId;
     const receiptPaymentId = firstText(rb.booking_payment_id, rb.payment_id);
     const receiptAmount =
@@ -620,51 +634,41 @@ export function CustomerProfilePage() {
     setPhotoUploading(true);
     try {
       const dataUrl = await blobToDataUrl(file);
-      const docs = loadCustomerDocs(session.email);
-      const optimistic = {
-        ...docs,
-        applicantPhoto: {
-          ...docs.applicantPhoto,
-          fileName: file.name,
-          fileSize: file.size,
-          uploadedAt: new Date().toISOString(),
-          dataUrl,
-          documentId: null,
-          signedUrl: null,
-          signedUrlExpiresAt: null,
-          error: null,
-        },
-      };
-      saveCustomerDocs(session.email, optimistic);
+      const photo = loadCustomerProfilePhoto(session.email);
+      saveCustomerProfilePhoto(session.email, {
+        ...photo,
+        fileName: file.name,
+        fileSize: file.size,
+        uploadedAt: new Date().toISOString(),
+        dataUrl,
+        documentId: null,
+        signedUrl: null,
+        signedUrlExpiresAt: null,
+        error: null,
+      });
       window.dispatchEvent(new Event('dvi-profile-photo-changed'));
       setPhotoVersion((version) => version + 1);
 
       try {
         const uploaded = await uploadApplicantPhoto(session.token, file);
-        const fresh = loadCustomerDocs(session.email);
-        saveCustomerDocs(session.email, {
+        const fresh = loadCustomerProfilePhoto(session.email);
+        saveCustomerProfilePhoto(session.email, {
           ...fresh,
-          applicantPhoto: {
-            ...fresh.applicantPhoto,
-            fileName: file.name,
-            fileSize: file.size,
-            uploadedAt: uploaded.created_date,
-            dataUrl,
-            documentId: uploaded.id,
-            signedUrl: uploaded.signed_url,
-            signedUrlExpiresAt: Date.now() + uploaded.signed_url_expires_in * 1000,
-            error: null,
-          },
+          fileName: file.name,
+          fileSize: file.size,
+          uploadedAt: uploaded.created_date,
+          dataUrl,
+          documentId: uploaded.id,
+          signedUrl: uploaded.signed_url,
+          signedUrlExpiresAt: Date.now() + uploaded.signed_url_expires_in * 1000,
+          error: null,
         });
         window.dispatchEvent(new Event('dvi-profile-photo-changed'));
         setPhotoVersion((version) => version + 1);
       } catch (err) {
         const message = err instanceof ApiError ? err.message : 'Photo saved locally, but upload failed. Please try again.';
-        const fresh = loadCustomerDocs(session.email);
-        saveCustomerDocs(session.email, {
-          ...fresh,
-          applicantPhoto: { ...fresh.applicantPhoto, error: message },
-        });
+        const fresh = loadCustomerProfilePhoto(session.email);
+        saveCustomerProfilePhoto(session.email, { ...fresh, error: message });
         setPhotoError(message);
         if (err instanceof ApiError && err.status === 401) {
           logout();

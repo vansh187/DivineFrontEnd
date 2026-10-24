@@ -3,6 +3,19 @@ import type { ReactNode } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '../components/DashboardLayout';
 import { useAuth } from '../hooks/useAuth';
+import { useAccountCustomerDocs } from '../hooks/useAccountCustomerDocs';
+import {
+  BLOCKED_NEW_PLOT_MESSAGE,
+  applyIdentityDocRefresh,
+  applySubmissionResult,
+  decideIncomingUnit,
+  findUnusableIdentityDocs,
+  hasCurrentAadhaarVerification,
+  kycDocumentIdsFor,
+  refreshStaleIdentityDocs,
+  resetIdentityDocs,
+  startNewPlotBooking,
+} from '../services/bookingFlow';
 import * as store from '../services/documentStore';
 import type { BookingApplicationFormData, CustomerDocState, SignatureStatus } from '../services/documentStore';
 import { applicationProjects } from '../data/applicationProjects';
@@ -422,9 +435,11 @@ export function CustomerApplicationPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const email = session?.email ?? '';
-  const [docs, setDocs] = useState<CustomerDocState>(() => store.loadCustomerDocs(email));
+  const [docs, setDocs] = useAccountCustomerDocs(email, session?.userId);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Wizard-level message shown above every page (e.g. why a new plot was refused). */
+  const [notice, setNotice] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [pageDirection, setPageDirection] = useState<'forward' | 'back'>('forward');
   const [paying, setPaying] = useState(false);
@@ -475,41 +490,19 @@ export function CustomerApplicationPage() {
 
     const booking = docs.bookingApplication;
 
-    // Is this the same plot the wizard already holds? Match on inventory id, and
-    // fall back to the unit number for bookings created before the id was bound.
-    const incomingUnitLabel = unit.unit_number ?? '';
-    const currentUnitLabel = booking.inventoryUnitNumber ?? booking.formData.unitNo ?? '';
-    const isSamePlot =
-      (!!unit.id && !!booking.inventoryId && unit.id === booking.inventoryId) ||
-      (!!incomingUnitLabel && incomingUnitLabel === currentUnitLabel);
-    const hasActiveBooking = !!booking.inventoryId || !!booking.formData.projectId;
     // The wizard holds one booking at a time (single per-customer record). When
-    // the customer deliberately picks a *different* plot — whether the previous
-    // booking is finished (paid / packet generated) or was abandoned half-filled
-    // — start a clean booking for the new plot, carrying only the applicant /
-    // co-applicant identity forward. Without this, a second plot silently
-    // re-opened the first booking and could not be booked at all.
-    if (hasActiveBooking && !isSamePlot) {
-      const matchedProject = applicationProjects.find(
-        (project) => unit.project_name && project.label.toLowerCase().includes(unit.project_name.toLowerCase()),
-      );
-      persist({
-        ...docs,
-        bookingApplication: {
-          ...store.emptyBookingApplicationStatus(),
-          formData: {
-            ...store.startNextBookingApplication(booking.formData),
-            ...(matchedProject ? { projectId: matchedProject.id } : {}),
-            unitNo: unit.unit_number ?? '',
-            plotAreaSqYd: unit.area_sqyd != null ? String(unit.area_sqyd) : '',
-            plotAreaSqMtr: unit.area_sqmt != null ? String(unit.area_sqmt) : '',
-            unitType: unit.unit_type ?? '',
-          },
-          inventoryId: unit.id ?? null,
-          inventoryUnitNumber: unit.unit_number ?? null,
-        },
-        payment: store.emptyPaymentStatus(),
-      });
+    // the customer deliberately picks a *different* plot, start a completely
+    // clean booking: nothing from the previous one carries over, so Aadhaar is
+    // verified again, every document re-uploaded and the details re-entered.
+    // A paid booking that was never submitted is protected instead.
+    const decision = decideIncomingUnit(docs, unit);
+    if (decision === 'blocked') {
+      setNotice(BLOCKED_NEW_PLOT_MESSAGE);
+      navigate(location.pathname, { replace: true, state: {} });
+      return;
+    }
+    if (decision === 'new-booking') {
+      persist(startNewPlotBooking(docs, unit));
       setCurrentPage(0);
       navigate(location.pathname, { replace: true, state: {} });
       return;
@@ -552,57 +545,27 @@ export function CustomerApplicationPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Aadhaar / PAN / photos are uploaded once and reused for every plot booking.
-  // Their signed URLs expire, and the base64 copy is dropped from localStorage
-  // to save space — so on a *later* booking the generated PDF would embed a
-  // "please re-upload" placeholder instead of the real image. On entry, re-fetch
-  // a fresh signed URL for any identity doc that has a backend id but no usable
-  // source left, so "upload once, book many" keeps working.
+  // Uploads stored on this device lose their base64 copy once synced, and their
+  // signed URLs expire — refresh only those links on entry (ownership and type
+  // are re-checked for each), so the PDF can still embed the real images. Every
+  // upload is verified again with the server right before submission.
   useEffect(() => {
     if (!session) return;
-    const { token, email } = session;
+    const { token, email, userId } = session;
     let cancelled = false;
 
-    const IDENTITY_KEYS = ['aadharFront', 'aadharBack', 'pan', 'applicantPhoto', 'coApplicantPhoto', 'cancelledCheque'] as const;
-    const isStale = (doc: {
-      documentId: string | null;
-      dataUrl: string | null;
-      signedUrl: string | null;
-      signedUrlExpiresAt: number | null;
-    }) =>
-      !!doc.documentId &&
-      !doc.dataUrl &&
-      (!doc.signedUrl || !doc.signedUrlExpiresAt || doc.signedUrlExpiresAt <= Date.now() + 60_000);
-
-    const stored = store.loadCustomerDocs(email);
-    const staleKeys = IDENTITY_KEYS.filter((key) => isStale(stored[key]));
-    if (!staleKeys.length) return;
-
     void (async () => {
-      const refreshed = await Promise.all(
-        staleKeys.map(async (key) => {
-          try {
-            return [key, await getDocument(token, stored[key].documentId as string)] as const;
-          } catch {
-            return [key, null] as const;
-          }
-        }),
+      const refreshes = await refreshStaleIdentityDocs(
+        store.loadCustomerDocs(email),
+        userId,
+        (documentId) => getDocument(token, documentId),
+        Date.now(),
       );
-      if (cancelled) return;
-      const latest = store.loadCustomerDocs(email);
-      let changed = false;
-      for (const [key, doc] of refreshed) {
-        if (!doc) continue;
-        const target = latest[key];
-        target.signedUrl = doc.signed_url;
-        target.signedUrlExpiresAt = Date.now() + doc.signed_url_expires_in * 1000;
-        target.error = null;
-        changed = true;
-      }
-      if (changed) {
-        store.saveCustomerDocs(email, latest);
-        setDocs({ ...latest });
-      }
+      if (cancelled || !refreshes.length) return;
+      const next = applyIdentityDocRefresh(store.loadCustomerDocs(email), refreshes);
+      if (!next) return;
+      store.saveCustomerDocs(email, next);
+      setDocs(next);
     })();
 
     return () => {
@@ -650,7 +613,7 @@ export function CustomerApplicationPage() {
     return () => {
       cancelled = true;
     };
-  }, [docs.cancelledCheque.dataUrl, docs.cancelledCheque.documentId, docs.cancelledCheque.fileName, session]);
+  }, [docs.cancelledCheque.dataUrl, docs.cancelledCheque.documentId, docs.cancelledCheque.fileName, session, setDocs]);
 
   useEffect(() => {
     if (!session) {
@@ -669,6 +632,15 @@ export function CustomerApplicationPage() {
       cancelled = true;
     };
   }, [session]);
+
+  // OPS Divine Greens is sold out (see isSoldOut below) — keep the wizard on the
+  // project page. Declared before the early return so the hook order is stable.
+  const soldOutProjectSelected = docs.bookingApplication.formData.projectId === 'ops-divine-greens';
+  useEffect(() => {
+    if (soldOutProjectSelected && currentPage !== 0) {
+      setCurrentPage(0);
+    }
+  }, [soldOutProjectSelected, currentPage]);
 
   if (!session) return <Navigate to="/" replace />;
 
@@ -990,10 +962,14 @@ export function CustomerApplicationPage() {
     // customer doesn't read a routine "accept this checkbox" prompt as a
     // KYC-related failure.
     const kycReminder =
-      pdfHeldForKyc && !docs.bookingApplication.pdfDataUrl
+      onlinePaymentComplete && !applicationSubmitted
         ? ' This step is required to submit your application for KYC review — the filled PDF stays locked for download until our team verifies your KYC, even after you submit it.'
         : '';
     const fail = (message: string) => setError(message + kycReminder);
+    if (!session || !hasCurrentAadhaarVerification(docs, session.userId)) {
+      fail('Verify Aadhaar for this plot booking using the currently signed-in account before submitting the application.');
+      return;
+    }
     if (!onlinePaymentComplete && !offlinePaymentEntered) {
       fail(
         'Complete the plot booking payment (online, cash, or a confirmed NEFT/RTGS transfer), or enter the cheque / DD / other payment mode, reference number and amount on the "Fill application form" page, before generating the application PDF.',
@@ -1059,6 +1035,15 @@ export function CustomerApplicationPage() {
     setGenerating(true);
     setError(null);
     try {
+      const unusable = await findUnusableIdentityDocs(docs, hasCoApplicant, session.userId, (documentId) =>
+        getDocument(session.token, documentId),
+      );
+      if (unusable.length) {
+        persist(resetIdentityDocs(docs, unusable.map(({ key }) => key)));
+        setError(`These uploads are no longer available on this account: ${unusable.map(({ label }) => label).join(', ')}. Upload them again before submitting for KYC review.`);
+        return;
+      }
+
       const blob = await generateApplicationPdf({
         formData: docs.bookingApplication.formData,
         applicantSignatureDataUrl: applicantSignature,
@@ -1124,6 +1109,7 @@ export function CustomerApplicationPage() {
             error: null,
           },
         });
+        store.saveApplicantContactSnapshot(session.email, docs);
         openPdfBlob(blob);
         return;
       }
@@ -1151,27 +1137,21 @@ export function CustomerApplicationPage() {
           inventoryId: docs.bookingApplication.inventoryId,
           razorpayOrderId: docs.payment.razorpayOrderId,
           razorpayPaymentId: docs.payment.razorpayPaymentId,
+          aadhaarVerificationId: docs.aadhar.verificationId as string,
+          kycDocumentIds: kycDocumentIdsFor(docs, hasCoApplicant),
           formData: serializeFormData(docs.bookingApplication.formData, hasCoApplicant),
         });
-        persist({
-          ...docs,
-          bookingApplication: {
-            ...docs.bookingApplication,
-            generatedAt: new Date().toISOString(),
-            pdfFileName: fileName,
-            pdfDataUrl,
-            backendDocumentId: backendDoc.id,
-            signedUrl: backendDoc.signed_url,
-            signedUrlExpiresAt: Date.now() + backendDoc.signed_url_expires_in * 1000,
-            paymentPlan: backendDoc.payment_plan ?? docs.bookingApplication.paymentPlan,
-            error: null,
-          },
-          // The upload doubles as a safety-net for the plot lock; keep the
-          // customer-facing conflict banner in sync with whatever it reports.
-          payment: backendDoc.inventory_status
-            ? { ...docs.payment, inventoryStatus: backendDoc.inventory_status }
-            : docs.payment,
+        // Always record the accepted submission, even if the KYC links failed,
+        // so the same payment is never uploaded twice. The uploads stay on
+        // this booking until the customer starts a different plot.
+        const { state: submittedState, warning } = applySubmissionResult(docs, backendDoc, {
+          fileName,
+          pdfDataUrl,
+          now: Date.now(),
         });
+        persist(submittedState);
+        store.saveApplicantContactSnapshot(session.email, submittedState);
+        if (warning) setError(warning);
         // The plot booking (online/cash payment) is held for admin KYC review —
         // don't hand the customer their own copy of the filled application
         // packet until that booking shows up verified in `bookings`. The
@@ -1188,6 +1168,11 @@ export function CustomerApplicationPage() {
         throw err;
       }
     } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        logout();
+        openModal('signin', 'customer');
+        return;
+      }
       const message = err instanceof Error ? err.message : 'Could not generate the application PDF.';
       setError(message);
       persist({ ...docs, bookingApplication: { ...docs.bookingApplication, error: message } });
@@ -1234,15 +1219,13 @@ export function CustomerApplicationPage() {
   // generated from the offline cheque/DD/UTR path (no backendDocumentId, never
   // uploaded to the backend) isn't part of that review and stays unaffected.
   const pdfHeldForKyc = !!docs.bookingApplication.backendDocumentId && !approvedBooking;
+  // Accepted by the server for this payment — resubmitting would upload a
+  // duplicate application, so Generate is disabled from here on.
+  const applicationSubmitted = !!docs.bookingApplication.backendDocumentId;
   // OPS Divine Greens is fully sold — block the form past project selection
   // and surface the sold-out card instead, rather than let a signed-in
   // customer fill out an application for a plot that no longer exists.
   const isSoldOut = form.projectId === 'ops-divine-greens';
-  useEffect(() => {
-    if (isSoldOut && currentPage !== 0) {
-      setCurrentPage(0);
-    }
-  }, [isSoldOut, currentPage]);
   const pageLabels = [
     'Project',
     'Fill application form',
@@ -1306,6 +1289,19 @@ export function CustomerApplicationPage() {
           />
         </div>
       </div>
+
+      {notice && (
+        <div role="alert" className="mb-5 flex items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p>{notice}</p>
+          <button
+            type="button"
+            onClick={() => setNotice(null)}
+            className="shrink-0 text-xs font-semibold underline underline-offset-2"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       <div className={`application-notebook notebook-${pageDirection}`} data-page={currentPage}>
         <Section title="Project">
@@ -1956,7 +1952,7 @@ export function CustomerApplicationPage() {
                 on the &ldquo;Fill application form&rdquo; page, to enable PDF generation.
               </p>
             )}
-            {canGeneratePdf && pdfHeldForKyc && !docs.bookingApplication.pdfDataUrl && (
+            {paymentComplete && !applicationSubmitted && (
               <p className="mb-3 rounded-lg border border-hairline bg-bg px-3 py-2 text-xs leading-relaxed text-ink-muted">
                 <span className="font-semibold text-ink">Your payment is confirmed and awaiting KYC verification.</span>{' '}
                 &ldquo;Generate application PDF&rdquo; still needs every checklist item above completed (signatures,
@@ -1967,10 +1963,10 @@ export function CustomerApplicationPage() {
             <button
               type="button"
               onClick={handleGenerate}
-              disabled={generating || !canGeneratePdf}
+              disabled={generating || !canGeneratePdf || applicationSubmitted}
               className="rounded-full bg-green px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {generating ? 'Generating...' : 'Generate application PDF'}
+              {generating ? 'Generating...' : applicationSubmitted ? 'Application submitted' : 'Generate application PDF'}
             </button>
             {paymentComplete && (
               <button
@@ -1991,7 +1987,7 @@ export function CustomerApplicationPage() {
                 Open generated PDF
               </button>
             )}
-            {docs.bookingApplication.pdfDataUrl && pdfHeldForKyc && (
+            {pdfHeldForKyc && (
               <span
                 title="The filled application packet unlocks for download once our team verifies your KYC documents."
                 className="ml-3 inline-block cursor-not-allowed rounded-full border border-hairline px-5 py-3 text-sm font-semibold text-ink-muted"
@@ -2000,7 +1996,7 @@ export function CustomerApplicationPage() {
               </span>
             )}
           </div>
-          {docs.bookingApplication.pdfDataUrl && pdfHeldForKyc && (
+          {pdfHeldForKyc && (
             <p className="basis-full text-xs leading-relaxed text-ink-muted">
               Your application has been submitted for review. The filled application PDF unlocks for download once our
               team verifies your KYC documents.

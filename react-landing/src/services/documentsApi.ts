@@ -18,6 +18,11 @@ export interface GeneratedDocument {
    * document is still saved and the payment is under manual review server-side. */
   inventory_id?: string | null;
   inventory_status?: 'pending_kyc_review' | 'booked' | 'conflict' | null;
+  /** Set true only after all required customer files have been validated and linked to this booking. */
+  kyc_documents_attached?: boolean;
+  /** Set true only after the authenticated user's Aadhaar verification is linked to this booking. */
+  aadhaar_verification_attached?: boolean;
+  booking_id?: string | null;
 }
 
 export interface GenerateDocumentInput {
@@ -34,6 +39,17 @@ export interface UploadGeneratedApplicationPdfInput {
   inventoryId?: string | null;
   razorpayOrderId?: string | null;
   razorpayPaymentId?: string | null;
+  /** Server verification record for the current authenticated account and booking. */
+  aadhaarVerificationId: string;
+  /** Existing uploaded document records to validate and associate with this booking. */
+  kycDocumentIds: {
+    aadhaar_front: string;
+    aadhaar_back: string;
+    pan_card: string;
+    applicant_photo: string;
+    co_applicant_photo?: string;
+    cancelled_cheque: string;
+  };
   formData: Record<string, string | number>;
 }
 
@@ -216,6 +232,8 @@ export function uploadGeneratedApplicationPdf(token: string, input: UploadGenera
   formData.append('payment_id', input.paymentId);
   if (input.inventoryId) formData.append('inventory_id', input.inventoryId);
   formData.append('form_data', JSON.stringify(input.formData));
+  formData.append('kyc_document_ids', JSON.stringify(input.kycDocumentIds));
+  formData.append('aadhaar_verification_id', input.aadhaarVerificationId);
   if (input.razorpayOrderId) formData.append('razorpay_order_id', input.razorpayOrderId);
   if (input.razorpayPaymentId) formData.append('razorpay_payment_id', input.razorpayPaymentId);
   return authedRequest<GeneratedDocument>('/documents/project-booking-application', token, {

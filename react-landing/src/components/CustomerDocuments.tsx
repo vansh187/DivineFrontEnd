@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, getDisplayName } from '../hooks/useAuth';
+import { useAccountCustomerDocs } from '../hooks/useAccountCustomerDocs';
 import * as store from '../services/documentStore';
 import type { CustomerDocState } from '../services/documentStore';
 import { generateDocument, getDocument, uploadApplicantPhoto, uploadCoApplicantPhoto, uploadPanPhoto } from '../services/documentsApi';
@@ -23,7 +24,7 @@ export function CustomerDocuments({ pendingUnit = null }: CustomerDocumentsProps
   const { session, logout, openModal } = useAuth();
   const email = session?.email ?? 'anonymous';
 
-  const [docs, setDocs] = useState<CustomerDocState>(() => store.loadCustomerDocs(email));
+  const [docs, setDocs] = useAccountCustomerDocs(email, session?.userId);
   const [verifyingPan, setVerifyingPan] = useState(false);
   const [uploadingPan, setUploadingPan] = useState(false);
   const [uploadingApplicantPhoto, setUploadingApplicantPhoto] = useState(false);
@@ -296,7 +297,10 @@ export function CustomerDocuments({ pendingUnit = null }: CustomerDocumentsProps
       <p className="eyebrow-label text-terracotta">Document upload</p>
       <h2 className="mt-2 font-display text-2xl font-bold text-ink sm:text-3xl">Aadhar, PAN &amp; document generation</h2>
       <p className="mt-2 text-sm leading-[1.6] text-ink-muted">
-        Aadhaar verification, Aadhaar photo upload, PAN upload, applicant &amp; co-applicant photos, document generation, and signature checks can be completed later if verification is pending.
+        Verify Aadhaar for each plot booking, then upload that booking&apos;s Aadhaar photos, PAN, applicant &amp; co-applicant photos, and signed documents.
+      </p>
+      <p className="mt-2 text-xs font-semibold text-ink-muted">
+        Nothing is reused between bookings: each new plot booking needs a fresh Aadhaar verification, new document uploads and the application details entered again. The verification is tied to your signed-in account.
       </p>
       <p className="mt-3 rounded-lg border border-hairline bg-bg px-3 py-2 text-xs font-semibold text-ink-muted">
         Note: if you are uploading a photocopy of a document, please upload only a self-attested copy.
@@ -305,6 +309,7 @@ export function CustomerDocuments({ pendingUnit = null }: CustomerDocumentsProps
       <div className="mt-6 grid grid-cols-1 items-stretch gap-5 sm:grid-cols-2 lg:grid-cols-3">
         <AadhaarVerifyTile
           token={session?.token ?? ''}
+          ownerId={session?.userId ?? ''}
           status={docs.aadhar}
           onStatusChange={(next) => persist({ ...docs, aadhar: next })}
           frontStatus={docs.aadharFront}
