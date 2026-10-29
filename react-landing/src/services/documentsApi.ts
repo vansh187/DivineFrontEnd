@@ -18,6 +18,11 @@ export interface GeneratedDocument {
    * document is still saved and the payment is under manual review server-side. */
   inventory_id?: string | null;
   inventory_status?: 'pending_kyc_review' | 'booked' | 'conflict' | null;
+  /** Set true only after all required customer files have been validated and linked to this booking. */
+  kyc_documents_attached?: boolean;
+  /** Set true only after the authenticated user's Aadhaar verification is linked to this booking. */
+  aadhaar_verification_attached?: boolean;
+  booking_id?: string | null;
 }
 
 export interface GenerateDocumentInput {
@@ -34,6 +39,17 @@ export interface UploadGeneratedApplicationPdfInput {
   inventoryId?: string | null;
   razorpayOrderId?: string | null;
   razorpayPaymentId?: string | null;
+  /** Server verification record for the current authenticated account and booking. */
+  aadhaarVerificationId: string;
+  /** Existing uploaded document records to validate and associate with this booking. */
+  kycDocumentIds: {
+    aadhaar_front: string;
+    aadhaar_back: string;
+    pan_card: string;
+    applicant_photo: string;
+    co_applicant_photo?: string;
+    cancelled_cheque: string;
+  };
   formData: Record<string, string | number>;
 }
 
@@ -66,7 +82,7 @@ function messageForDocumentsError(status: number, detail: unknown): string {
   if (status === 429) return 'Too many attempts. Please wait a minute and try again.';
   if (status === 400) {
     if (detail === 'empty_file') return 'That file is empty. Please choose a different file.';
-    if (detail === 'file_too_large') return 'That file is too large. Please upload a file under 15 MB.';
+    if (detail === 'file_too_large') return 'That file is too large. Photos must be under 8 MB and the application PDF under 19 MB.';
     if (detail === 'unsupported_file_type') return 'Please upload a JPG, PNG, or generated PDF file.';
     if (detail === 'side_required') return 'Please choose whether this is the Aadhaar front or back photo.';
     if (detail === 'invalid_side') return 'Please upload the Aadhaar front and back photos separately.';
@@ -202,13 +218,15 @@ export async function uploadCancelledCheque(token: string, file: File): Promise<
   });
 }
 
+const MAX_APPLICATION_PDF_BYTES = 19 * 1024 * 1024; // matches the backend's MAX_BOOKING_APPLICATION_UPLOAD_BYTES
+
 /** Uploads the customer-generated booking application PDF to backend storage.
  * Backend should persist this file in Supabase Storage and return the document row
  * with a signed URL, matching the other document endpoints. */
 export function uploadGeneratedApplicationPdf(token: string, input: UploadGeneratedApplicationPdfInput): Promise<GeneratedDocument> {
   if (!input.paymentId) throw new ApiError(400, 'payment_id_required', messageForDocumentsError(400, 'payment_id_required'));
   if (!input.file.size) throw new ApiError(400, 'empty_file', messageForDocumentsError(400, 'empty_file'));
-  if (input.file.size > 15 * 1024 * 1024) throw new ApiError(400, 'file_too_large', messageForDocumentsError(400, 'file_too_large'));
+  if (input.file.size > MAX_APPLICATION_PDF_BYTES) throw new ApiError(400, 'file_too_large', messageForDocumentsError(400, 'file_too_large'));
   const formData = new FormData();
   formData.append('file', input.file);
   formData.append('document_type', 'project_booking_application');
@@ -216,6 +234,8 @@ export function uploadGeneratedApplicationPdf(token: string, input: UploadGenera
   formData.append('payment_id', input.paymentId);
   if (input.inventoryId) formData.append('inventory_id', input.inventoryId);
   formData.append('form_data', JSON.stringify(input.formData));
+  formData.append('kyc_document_ids', JSON.stringify(input.kycDocumentIds));
+  formData.append('aadhaar_verification_id', input.aadhaarVerificationId);
   if (input.razorpayOrderId) formData.append('razorpay_order_id', input.razorpayOrderId);
   if (input.razorpayPaymentId) formData.append('razorpay_payment_id', input.razorpayPaymentId);
   return authedRequest<GeneratedDocument>('/documents/project-booking-application', token, {

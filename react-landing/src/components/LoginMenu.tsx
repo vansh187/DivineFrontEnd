@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { useAuth, getDisplayName } from '../hooks/useAuth';
-import { loadBrokerDocs, loadCustomerDocs, saveBrokerDocs, saveCustomerDocs } from '../services/documentStore';
+import { loadBrokerDocs, loadCustomerProfilePhoto, saveBrokerDocs, saveCustomerProfilePhoto } from '../services/documentStore';
 import { getLatestDocumentByType } from '../services/documentsApi';
 
 function IconWrap({ children }: { children: ReactNode }) {
@@ -51,7 +51,7 @@ function freshSignedUrl(url: string | null, expiresAt: number | null): string | 
 function cachedProfilePhoto(session: NonNullable<ReturnType<typeof useAuth>['session']>) {
   const photo = session.role === 'broker'
     ? loadBrokerDocs(session.email).profilePhoto
-    : loadCustomerDocs(session.email).applicantPhoto;
+    : loadCustomerProfilePhoto(session.email);
   return photo.dataUrl || freshSignedUrl(photo.signedUrl, photo.signedUrlExpiresAt);
 }
 
@@ -73,18 +73,17 @@ function cacheProfilePhoto(session: NonNullable<ReturnType<typeof useAuth>['sess
     return;
   }
 
-  const docs = loadCustomerDocs(session.email);
-  saveCustomerDocs(session.email, {
-    ...docs,
-    applicantPhoto: {
-      ...docs.applicantPhoto,
-      dataUrl: docs.applicantPhoto.documentId === doc.id ? docs.applicantPhoto.dataUrl : null,
-      uploadedAt: doc.created_date,
-      documentId: doc.id,
-      signedUrl: doc.signed_url,
-      signedUrlExpiresAt: Date.now() + doc.signed_url_expires_in * 1000,
-      error: null,
-    },
+  // Avatar only — never written into the booking's applicantPhoto, so a past
+  // booking's photo can't be reused as KYC for a new plot.
+  const photo = loadCustomerProfilePhoto(session.email);
+  saveCustomerProfilePhoto(session.email, {
+    ...photo,
+    dataUrl: photo.documentId === doc.id ? photo.dataUrl : null,
+    uploadedAt: doc.created_date,
+    documentId: doc.id,
+    signedUrl: doc.signed_url,
+    signedUrlExpiresAt: Date.now() + doc.signed_url_expires_in * 1000,
+    error: null,
   });
 }
 

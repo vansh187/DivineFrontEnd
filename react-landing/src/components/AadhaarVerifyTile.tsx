@@ -97,6 +97,7 @@ function PhotoUploadRow({
 
 interface AadhaarVerifyTileProps {
   token: string;
+  ownerId: string;
   status: AadhaarStatus;
   onStatusChange: (next: AadhaarStatus) => void;
   frontStatus: AadhaarPhotoStatus;
@@ -108,6 +109,7 @@ interface AadhaarVerifyTileProps {
 
 export function AadhaarVerifyTile({
   token,
+  ownerId,
   status,
   onStatusChange,
   frontStatus,
@@ -138,8 +140,16 @@ export function AadhaarVerifyTile({
 
   const applyResult = (result: AadhaarVerifyResult) => {
     setError(null);
+    if (result.owner_id !== ownerId) {
+      const message = 'Aadhaar verification did not match the signed-in account. Please verify again.';
+      setError(message);
+      onStatusChange({ ...status, verified: false, verificationId: null, verifiedOwnerId: null, lastAttemptError: message });
+      return;
+    }
     onStatusChange({
       verified: result.verified,
+      verificationId: result.verified ? result.id : null,
+      verifiedOwnerId: result.verified ? result.owner_id : null,
       verifiedAt: result.verified ? new Date().toISOString() : status.verifiedAt,
       method: result.method,
       maskedAadhaar: result.masked_aadhaar,
@@ -169,6 +179,8 @@ export function AadhaarVerifyTile({
         onStatusChange({
           ...status,
           verified: false,
+          verificationId: null,
+          verifiedOwnerId: null,
           lastAttemptError: message,
         });
       }

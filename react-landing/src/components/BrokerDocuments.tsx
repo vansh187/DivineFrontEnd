@@ -497,6 +497,7 @@ export function BrokerDocuments() {
 
         <AadhaarVerifyTile
           token={session?.token ?? ''}
+          ownerId={session?.userId ?? ''}
           status={docs.aadhar}
           onStatusChange={(next) => persist({ ...docs, aadhar: next })}
           frontStatus={docs.aadharFront}

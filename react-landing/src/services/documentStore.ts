@@ -31,6 +31,9 @@ export interface DocStatus {
  * documents and pay while support or the customer retries verification later. */
 export interface AadhaarStatus {
   verified: boolean;
+  verificationId: string | null;
+  /** Authenticated account that received this server verification result. */
+  verifiedOwnerId: string | null;
   verifiedAt: string | null;
   method: 'qr' | 'offline_xml' | null;
   maskedAadhaar: string | null;
@@ -48,6 +51,8 @@ export interface AadhaarStatus {
 export function emptyAadhaarStatus(): AadhaarStatus {
   return {
     verified: false,
+    verificationId: null,
+    verifiedOwnerId: null,
     verifiedAt: null,
     method: null,
     maskedAadhaar: null,
@@ -133,6 +138,48 @@ export function emptyPaymentStatus(): PaymentStatus {
     inventoryConflictReason: null,
     error: null,
   };
+}
+
+/** Resets the Aadhaar verification and every uploaded file so the next plot
+ * booking starts from scratch. Server-side booking documents remain available
+ * to admins. The booking application and payment are left to the caller. */
+export function clearBookingUploadCache(state: CustomerDocState): CustomerDocState {
+  return {
+    ...state,
+    aadhar: emptyAadhaarStatus(),
+    aadharFront: emptyAadhaarPhotoStatus(),
+    aadharBack: emptyAadhaarPhotoStatus(),
+    pan: emptyDocStatus(),
+    applicantPhoto: emptyAadhaarPhotoStatus(),
+    coApplicantPhoto: emptyAadhaarPhotoStatus(),
+    applicantSignature: emptySignatureStatus(),
+    coApplicantSignature: emptySignatureStatus(),
+    cancelledCheque: emptySignatureStatus(),
+    paymentProof: emptySignatureStatus(),
+    hasCoApplicant: false,
+    generatedDoc: emptyGeneratedDocStatus(),
+  };
+}
+
+export const AADHAAR_REVERIFY_MESSAGE =
+  'Your earlier Aadhaar verification could not be confirmed for this account. Please verify Aadhaar again.';
+
+/** A verification cached under an email is valid only for the account that
+ * received the server response. Older cache entries have no owner and expire,
+ * with a message so the customer knows why they must verify again. */
+export function forAadhaarOwner(state: CustomerDocState, ownerId: string): CustomerDocState {
+  if (!state.aadhar.verified || state.aadhar.verifiedOwnerId === ownerId) return state;
+  return { ...state, aadhar: { ...emptyAadhaarStatus(), lastAttemptError: AADHAAR_REVERIFY_MESSAGE } };
+}
+
+/** Loads this account's booking state with any foreign/ownerless Aadhaar
+ * verification dropped (and saved back, so it doesn't reappear). */
+export function loadAccountCustomerDocs(email: string, ownerId: string | null | undefined): CustomerDocState {
+  const loaded = loadCustomerDocs(email);
+  if (!ownerId) return loaded;
+  const scoped = forAadhaarOwner(loaded, ownerId);
+  if (scoped !== loaded) saveCustomerDocs(email, scoped);
+  return scoped;
 }
 
 export interface SignatureStatus {
@@ -251,6 +298,10 @@ export interface BookingApplicationStatus {
   pdfFileName: string | null;
   pdfDataUrl: string | null;
   backendDocumentId: string | null;
+  /** Set only after the backend confirms this application and its KYC links. */
+  bookingId: string | null;
+  kycDocumentsAttached: boolean;
+  aadhaarVerificationAttached: boolean;
   signedUrl: string | null;
   signedUrlExpiresAt: number | null;
   /** The payment plan the backend derived on the last successful upload — used
@@ -338,56 +389,6 @@ export function emptyBookingApplicationFormData(): BookingApplicationFormData {
   };
 }
 
-/** Personal details that stay the same no matter which plot is being booked -
- * applicant and co-applicant identity, contact, and address. Carried over when a
- * customer starts a second booking so they don't retype what the backend already
- * has from the first one. Plot-, pricing-, payment-, and consent-specific fields
- * are deliberately left blank. */
-const CARRY_OVER_FORM_FIELDS: readonly (keyof BookingApplicationFormData)[] = [
-  'applicantName',
-  'guardianName',
-  'dob',
-  'gender',
-  'pan',
-  'email',
-  'aadhaar',
-  'phone',
-  'mobile',
-  'residentialStatus',
-  'permanentAddress',
-  'correspondenceAddress',
-  'correspondenceSameAsPermanent',
-  'coApplicantName',
-  'coApplicantGuardianName',
-  'coApplicantDob',
-  'coApplicantGender',
-  'coApplicantPan',
-  'coApplicantAadhaar',
-  'coApplicantPhone',
-  'coApplicantMobile',
-  'coApplicantEmail',
-  'coApplicantResidentialStatus',
-  'coApplicantPermanentAddress',
-  'coApplicantCorrespondenceAddress',
-  'coApplicantCorrespondenceSameAsPermanent',
-  'place',
-];
-
-/**
- * A fresh booking application for a customer who already completed one. Every
- * plot-, pricing-, payment-, and consent-specific field is reset (a new plot has
- * its own price, its own booking payment, its own signed consents); only the
- * applicant/co-applicant identity carried in `previous` is preserved.
- */
-export function startNextBookingApplication(
-  previous: BookingApplicationFormData,
-): BookingApplicationFormData {
-  const carried = Object.fromEntries(
-    CARRY_OVER_FORM_FIELDS.map((field) => [field, previous[field]]),
-  ) as Partial<BookingApplicationFormData>;
-  return { ...emptyBookingApplicationFormData(), ...carried };
-}
-
 export function emptyBookingApplicationStatus(): BookingApplicationStatus {
   return {
     formData: emptyBookingApplicationFormData(),
@@ -397,6 +398,9 @@ export function emptyBookingApplicationStatus(): BookingApplicationStatus {
     pdfFileName: null,
     pdfDataUrl: null,
     backendDocumentId: null,
+    bookingId: null,
+    kycDocumentsAttached: false,
+    aadhaarVerificationAttached: false,
     signedUrl: null,
     signedUrlExpiresAt: null,
     paymentPlan: null,
@@ -630,8 +634,97 @@ export function saveCustomerDocs(email: string, state: CustomerDocState) {
 export function clearCustomerDocsCache(email: string) {
   try {
     localStorage.removeItem(storageKey('customer', email));
+    localStorage.removeItem(profilePhotoKey(email));
+    localStorage.removeItem(applicantContactKey(email));
   } catch {
     /* ignore */
+  }
+}
+
+function profilePhotoKey(email: string) {
+  return `dvi_profile_photo_customer_${email.toLowerCase()}`;
+}
+
+/** The customer's avatar (header menu / profile page). Kept apart from the
+ * booking's `applicantPhoto` so a profile photo is never reused as KYC for a
+ * new plot booking — every booking uploads its own. Reads only ever flow
+ * booking → avatar (a one-time copy of an avatar stored by older builds),
+ * never avatar → booking. */
+export function loadCustomerProfilePhoto(email: string): AadhaarPhotoStatus {
+  try {
+    const raw = localStorage.getItem(profilePhotoKey(email));
+    if (raw) return { ...emptyAadhaarPhotoStatus(), ...(JSON.parse(raw) as Partial<AadhaarPhotoStatus>) };
+  } catch {
+    return emptyAadhaarPhotoStatus();
+  }
+  // Older builds kept the avatar in the booking's applicantPhoto — copy it once
+  // so a photo whose upload never finished (dataUrl only) isn't lost.
+  const legacy = loadCustomerDocs(email).applicantPhoto;
+  if (!legacy.dataUrl && !legacy.documentId) return emptyAadhaarPhotoStatus();
+  const migrated = { ...legacy, error: null };
+  saveCustomerProfilePhoto(email, migrated);
+  return migrated;
+}
+
+export function saveCustomerProfilePhoto(email: string, photo: AadhaarPhotoStatus) {
+  // Drop the base64 copy once the backend holds the file; the signed URL is re-fetched.
+  const slim = photo.documentId || photo.signedUrl ? { ...photo, dataUrl: null } : photo;
+  try {
+    localStorage.setItem(profilePhotoKey(email), JSON.stringify(slim));
+  } catch {
+    try {
+      localStorage.setItem(profilePhotoKey(email), JSON.stringify({ ...slim, dataUrl: null }));
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function applicantContactKey(email: string) {
+  return `dvi_applicant_contact_${email.toLowerCase()}`;
+}
+
+/** Display-only copy of the applicant details from the last submitted
+ * application, for the profile page's fallbacks once a new booking has cleared
+ * the form. Never read back into a booking. */
+export interface ApplicantContactSnapshot {
+  applicantName: string;
+  gender: string;
+  dob: string;
+  mobile: string;
+  phone: string;
+  address: string;
+}
+
+export function emptyApplicantContactSnapshot(): ApplicantContactSnapshot {
+  return { applicantName: '', gender: '', dob: '', mobile: '', phone: '', address: '' };
+}
+
+export function saveApplicantContactSnapshot(email: string, docs: CustomerDocState) {
+  const form = docs.bookingApplication.formData;
+  const snapshot: ApplicantContactSnapshot = {
+    applicantName: form.applicantName || docs.aadhar.name || '',
+    gender: form.gender || docs.aadhar.gender || '',
+    dob: form.dob || docs.aadhar.dob || '',
+    mobile: form.mobile,
+    phone: form.phone,
+    address: form.permanentAddress || form.correspondenceAddress || docs.aadhar.address || '',
+  };
+  try {
+    localStorage.setItem(applicantContactKey(email), JSON.stringify(snapshot));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function loadApplicantContactSnapshot(email: string): ApplicantContactSnapshot {
+  try {
+    const raw = localStorage.getItem(applicantContactKey(email));
+    return raw
+      ? { ...emptyApplicantContactSnapshot(), ...(JSON.parse(raw) as Partial<ApplicantContactSnapshot>) }
+      : emptyApplicantContactSnapshot();
+  } catch {
+    return emptyApplicantContactSnapshot();
   }
 }
 
