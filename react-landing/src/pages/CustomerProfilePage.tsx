@@ -13,9 +13,9 @@ import {
 } from '../services/documentStore';
 import { usePaymentSchedule } from '../hooks/usePaymentSchedule';
 import { formatCurrencyINR, formatIndianDate } from '../utils/currency';
-import { PAY_WINDOW_DAYS, type MilestoneStatus, type ScheduleMilestone } from '../services/paymentSchedule';
+import { type MilestoneStatus, type ScheduleMilestone } from '../services/paymentSchedule';
 import { createPaymentOrder, ONLINE_PAYMENTS_ENABLED, submitOfflineInstallmentPayment, verifyRazorpayPayment } from '../services/paymentsApi';
-import type { CashPaymentMethod } from '../services/paymentsApi';
+import type { OfflineInstallmentMethod } from '../services/paymentsApi';
 import { openRazorpayCheckout } from '../services/razorpayCheckout';
 import { townshipPricing } from '../data/townshipPricing';
 import {
@@ -253,10 +253,10 @@ export function CustomerProfilePage() {
   const [payingNo, setPayingNo] = useState<number | null>(null);
   const [payError, setPayError] = useState('');
   const [paySuccess, setPaySuccess] = useState('');
-  // Per-milestone payment method choice ('razorpay' | 'cash' | 'rtgs_neft') and
-  // the UTR number typed for an NEFT/RTGS confirmation - both keyed by
-  // milestone.no since every open instalment picks independently.
-  const [installmentMethod, setInstallmentMethod] = useState<Record<number, 'razorpay' | CashPaymentMethod>>({});
+  // Per-milestone payment method choice ('razorpay' | 'cash' | 'cheque' | 'rtgs_neft')
+  // and the reference typed for it (UTR number for NEFT/RTGS, cheque number for a
+  // cheque) - both keyed by milestone.no since every open instalment picks independently.
+  const [installmentMethod, setInstallmentMethod] = useState<Record<number, 'razorpay' | OfflineInstallmentMethod>>({});
   const [installmentUtr, setInstallmentUtr] = useState<Record<number, string>>({});
   const [pendingInstallmentNos, setPendingInstallmentNos] = useState<number[]>([]);
 
@@ -795,7 +795,7 @@ export function CustomerProfilePage() {
 
   // Customer-entered cash and bank transfer details are claims for review,
   // not confirmed receipts. Only the admin approval flow marks the milestone paid.
-  const handlePayInstallmentOffline = async (milestone: ScheduleMilestone, method: CashPaymentMethod, utrNumber?: string) => {
+  const handlePayInstallmentOffline = async (milestone: ScheduleMilestone, method: OfflineInstallmentMethod, reference?: string) => {
     if (!session || milestone.amount == null) return;
     await submitOfflineInstallmentPayment(
       session.token,
@@ -803,20 +803,25 @@ export function CustomerProfilePage() {
       milestone.no,
       milestone.dueDateISO,
       method,
-      utrNumber,
+      reference,
     );
     setPendingInstallmentNos((previous) => [...new Set([...previous, milestone.no])]);
     setInstallmentUtr((previous) => ({ ...previous, [milestone.no]: '' }));
-    setPaySuccess(`Your ${method === 'cash' ? 'cash payment' : 'NEFT/RTGS transfer'} for instalment ${milestone.no} was submitted. It will be marked paid after admin approval.`);
+    const methodLabel = method === 'cash' ? 'cash payment' : method === 'cheque' ? 'cheque' : 'NEFT/RTGS transfer';
+    setPaySuccess(`Your ${methodLabel} for instalment ${milestone.no} was submitted. It will be marked paid after admin approval.`);
     schedule.refresh();
   };
 
   const handlePayInstallment = async (milestone: ScheduleMilestone) => {
     if (!session || milestone.amount == null || milestone.amount <= 0) return;
     const method = installmentMethod[milestone.no] ?? (ONLINE_PAYMENTS_ENABLED ? 'razorpay' : 'cash');
-    const utrNumber = installmentUtr[milestone.no]?.trim() ?? '';
-    if (method === 'rtgs_neft' && !utrNumber) {
+    const reference = installmentUtr[milestone.no]?.trim() ?? '';
+    if (method === 'rtgs_neft' && !reference) {
       setPayError('Enter the NEFT / RTGS UTR number before confirming.');
+      return;
+    }
+    if (method === 'cheque' && !reference) {
+      setPayError('Enter the cheque number before confirming.');
       return;
     }
     setPayingNo(milestone.no);
@@ -826,7 +831,7 @@ export function CustomerProfilePage() {
       if (method === 'razorpay') {
         await handlePayInstallmentOnline(milestone);
       } else {
-        await handlePayInstallmentOffline(milestone, method, method === 'rtgs_neft' ? utrNumber : undefined);
+        await handlePayInstallmentOffline(milestone, method, method === 'cash' ? undefined : reference);
       }
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
@@ -925,8 +930,8 @@ export function CustomerProfilePage() {
           <p className="eyebrow-label text-terracotta">Payment schedule</p>
           <h2 className="mt-2 font-display text-2xl font-bold text-ink">What you pay, and when</h2>
           <p className="mt-2 max-w-[60ch] text-sm leading-[1.65] text-ink-muted">
-            Your plot cost is split across these milestones. Payment for the next instalment opens {PAY_WINDOW_DAYS} days
-            before its due date — once it does, record cash or NEFT/RTGS. Online payment is temporarily unavailable while the payment gateway dashboard is being confirmed.
+            Your plot cost is split across these milestones. You can pay the next instalment any time before its due
+            date — record cash, cheque or NEFT/RTGS. Online payment is temporarily unavailable while the payment gateway dashboard is being confirmed.
           </p>
           {profile.bookingOptions.length > 1 && <div className="mt-5">{renderBookingSelector('profile-booking-payments')}</div>}
 
@@ -955,10 +960,6 @@ export function CustomerProfilePage() {
               </thead>
               <tbody>
                 {schedule.milestones.map((milestone) => {
-                  const opensOn =
-                    milestone.dueDate && !milestone.payable && milestone.isNext && milestone.status !== 'paid'
-                      ? new Date(milestone.dueDate.getTime() - PAY_WINDOW_DAYS * 24 * 60 * 60 * 1000)
-                      : null;
                   return (
                     <tr key={`${milestone.no}-${milestone.label}`} className="border-b border-hairline align-top">
                       <td className="px-5 py-3.5 font-display text-base font-bold text-ink">
@@ -991,12 +992,11 @@ export function CustomerProfilePage() {
                             <button
                               type="button"
                               disabled
-                              title={opensOn ? `Opens ${formatDateObj(opensOn)}` : 'Available closer to the due date'}
+                              title="Pay earlier instalments first"
                               className="cursor-not-allowed rounded-full bg-green px-4 py-2 text-xs font-semibold text-white opacity-50"
                             >
                               Pay {milestone.amount != null ? formatINR(milestone.amount) : 'now'}
                             </button>
-                            {opensOn && <span className="text-[11px] text-ink-muted">Opens {formatDateObj(opensOn)}</span>}
                           </div>
                         ) : (
                           (() => {
@@ -1009,7 +1009,9 @@ export function CustomerProfilePage() {
                                 ? `Record ${amountLabel} (Cash)`
                                 : method === 'rtgs_neft'
                                   ? `Confirm ${amountLabel} (NEFT/RTGS)`
-                                  : `Pay ${amountLabel}`;
+                                  : method === 'cheque'
+                                    ? `Confirm ${amountLabel} (Cheque)`
+                                    : `Pay ${amountLabel}`;
                             return (
                               <div className="flex flex-col items-end gap-1.5">
                                 <select
@@ -1017,7 +1019,7 @@ export function CustomerProfilePage() {
                                   onChange={(event) =>
                                     setInstallmentMethod((prev) => ({
                                       ...prev,
-                                      [milestone.no]: event.target.value as 'razorpay' | CashPaymentMethod,
+                                      [milestone.no]: event.target.value as 'razorpay' | OfflineInstallmentMethod,
                                     }))
                                   }
                                   disabled={payingNo !== null}
@@ -1025,16 +1027,17 @@ export function CustomerProfilePage() {
                                 >
                                     <option value="razorpay" disabled={!ONLINE_PAYMENTS_ENABLED}>{ONLINE_PAYMENTS_ENABLED ? 'Razorpay' : 'Razorpay temporarily unavailable'}</option>
                                   <option value="cash">Cash</option>
+                                  <option value="cheque">Cheque</option>
                                   <option value="rtgs_neft">NEFT / RTGS</option>
                                 </select>
-                                {method === 'rtgs_neft' && (
+                                {(method === 'rtgs_neft' || method === 'cheque') && (
                                   <input
                                     type="text"
                                     value={installmentUtr[milestone.no] ?? ''}
                                     onChange={(event) =>
                                       setInstallmentUtr((prev) => ({ ...prev, [milestone.no]: event.target.value }))
                                     }
-                                    placeholder="UTR number"
+                                    placeholder={method === 'cheque' ? 'Cheque number' : 'UTR number'}
                                     disabled={payingNo !== null}
                                     className="w-32 rounded-lg border border-hairline bg-bg px-2 py-1.5 text-xs text-ink outline-none focus:border-green disabled:cursor-not-allowed disabled:opacity-60"
                                   />

@@ -15,10 +15,6 @@ import type { CustomerScheduleRow, PaymentPlan } from './customerProfileApi';
  *  days before an instalment's due date. */
 export const REMINDER_LEAD_DAYS = 20;
 
-/** "Pay now" for the next unpaid instalment unlocks this many days before its
- *  due date. */
-export const PAY_WINDOW_DAYS = 5;
-
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Fallback split, mirrors PAYMENT_SCHEDULE in customerProfilePdf.ts (duplicated
@@ -47,7 +43,8 @@ export interface ScheduleMilestone {
   daysUntilDue: number | null;
   /** The earliest unpaid milestone — the one the reminder + Pay button target. */
   isNext: boolean;
-  /** True when this milestone's "Pay now" button should be live. */
+  /** True when this milestone's "Pay now" button should be live: the next unpaid
+   *  instalment, any time (no window before the due date). */
   payable: boolean;
 }
 
@@ -169,8 +166,6 @@ export function deriveSchedule(input: DeriveScheduleInput): ScheduleMilestone[] 
       isNext &&
       !paid &&
       status !== 'pending-review' &&
-      daysUntilDue != null &&
-      daysUntilDue <= PAY_WINDOW_DAYS &&
       row.amount != null &&
       row.amount > 0;
 

@@ -1,7 +1,10 @@
 import { authedRequest as authedRequestBase } from './authApi';
 
-/** Enable Razorpay checkout for payment-flow testing. */
-export const ONLINE_PAYMENTS_ENABLED = true;
+/**
+ * Razorpay checkout stays off until live keys are configured on the payment server.
+ * Set VITE_ONLINE_PAYMENTS_ENABLED=true at build time to turn it back on.
+ */
+export const ONLINE_PAYMENTS_ENABLED = import.meta.env.VITE_ONLINE_PAYMENTS_ENABLED === 'true';
 
 /** Contract with POST /payments/create-order for Razorpay Checkout. */
 export interface PaymentOrder {
@@ -77,12 +80,16 @@ export interface PaymentRecord {
 export interface OfflineInstallmentSubmission {
   id: string;
   amount: number;
-  method: CashPaymentMethod;
+  method: OfflineInstallmentMethod;
   status: 'pending_review' | 'approved' | 'rejected';
   installment_no: number;
   utr_number?: string | null;
+  cheque_number?: string | null;
   created_date: string;
 }
+
+/** Methods a customer can report for an instalment from their profile. */
+export type OfflineInstallmentMethod = CashPaymentMethod | 'cheque';
 
 export interface VerifyRazorpayPaymentInput {
   razorpay_order_id: string;
@@ -106,6 +113,7 @@ function messageForPaymentError(status: number, detail: unknown): string {
     if (detail === 'invalid_purpose') return 'Something went wrong starting your payment. Please refresh and try again.';
     if (detail === 'invalid_method') return 'Choose a valid payment method.';
     if (detail === 'utr_number_required') return 'Enter the UTR number for this bank transfer.';
+    if (detail === 'cheque_number_required') return 'Enter the cheque number.';
   }
   if (typeof detail === 'string' && detail.startsWith('payment_')) {
     return 'Something went wrong starting your payment. Please try again.';
@@ -179,15 +187,16 @@ export function recordCashPayment(
   });
 }
 
-/** Submits a customer-reported cash or NEFT/RTGS instalment for admin review.
- * The backend must leave the schedule unpaid until an admin approves it. */
+/** Submits a customer-reported cash, cheque or NEFT/RTGS instalment for admin review.
+ * The backend must leave the schedule unpaid until an admin approves it.
+ * `reference` is the UTR number for `'rtgs_neft'` or the cheque number for `'cheque'`. */
 export function submitOfflineInstallmentPayment(
   token: string,
   amount: number,
   installmentNo: number,
   dueDate: string | null,
-  method: CashPaymentMethod,
-  utrNumber?: string | null,
+  method: OfflineInstallmentMethod,
+  reference?: string | null,
 ): Promise<OfflineInstallmentSubmission> {
   return authedRequest<OfflineInstallmentSubmission>('/payments/offline-submissions', token, {
     method: 'POST',
@@ -198,7 +207,8 @@ export function submitOfflineInstallmentPayment(
       installment_no: installmentNo,
       due_date: dueDate,
       method,
-      ...(utrNumber ? { utr_number: utrNumber } : {}),
+      ...(reference && method === 'rtgs_neft' ? { utr_number: reference } : {}),
+      ...(reference && method === 'cheque' ? { cheque_number: reference } : {}),
     }),
   });
 }
