@@ -35,6 +35,10 @@ export interface LoginInput {
 export interface AuthTokenResponse {
   access_token: string;
   token_type: string;
+  /** True after signing in with an emailed temporary password (offline buyers
+   * imported by the team) - the app must make them set their own password
+   * (changePassword) before anything else. */
+  must_change_password?: boolean;
 }
 
 export interface JwtClaims {
@@ -42,6 +46,9 @@ export interface JwtClaims {
   username?: string;
   role?: Role;
   exp?: number;
+  /** Set on a token issued for a temporary password - the API refuses it
+   * everywhere except change-password and the profile read. */
+  pwd_change?: boolean;
 }
 
 // The API's login field is literally "username" — signup() below sets it to
@@ -68,7 +75,7 @@ function firstValidationMessage(detail: unknown): string | null {
   return null;
 }
 
-type RequestKind = 'signup' | 'login' | 'forgot' | 'reset';
+type RequestKind = 'signup' | 'login' | 'forgot' | 'reset' | 'change';
 
 function messageForError(status: number, detail: unknown, kind: RequestKind): string {
   if (status === 429) return 'Too many attempts. Please wait a minute and try again.';
@@ -79,8 +86,17 @@ function messageForError(status: number, detail: unknown, kind: RequestKind): st
     if (status === 409) return 'That account could not be created. Please try again.';
     if (status === 422) return firstValidationMessage(detail) ?? 'Please check the details you entered.';
   } else if (kind === 'login') {
+    if (status === 401 && detail === 'temp_password_expired') {
+      return 'Your temporary password has expired. Use "Forgot password" to set a new one.';
+    }
     if (status === 401) return 'Incorrect email or password.';
     if (status === 422) return firstValidationMessage(detail) ?? 'Please check the details you entered.';
+  } else if (kind === 'change') {
+    if (status === 400 && detail === 'invalid_current_password') return 'Your current password is incorrect.';
+    if (status === 401) return 'Your session has expired. Please sign in again.';
+    if (status === 400 && detail === 'password_unchanged') return 'Choose a password different from the current one.';
+    if (status === 400 && detail === 'password_too_short') return 'Your new password must be at least 8 characters.';
+    if (status === 422) return firstValidationMessage(detail) ?? 'Your new password must be at least 8 characters.';
   } else if (kind === 'forgot') {
     if (status === 422) return firstValidationMessage(detail) ?? 'Please check the details you entered.';
   } else {
@@ -93,12 +109,15 @@ function messageForError(status: number, detail: unknown, kind: RequestKind): st
   return 'Something went wrong. Please try again.';
 }
 
-async function postJson<T>(path: string, body: unknown, kind: RequestKind): Promise<T> {
+async function postJson<T>(path: string, body: unknown, kind: RequestKind, token?: string): Promise<T> {
   let res: Response;
   try {
     res = await fetch(`${API_BASE_URL}${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify(body),
     });
   } catch {
@@ -132,6 +151,15 @@ export function login(role: Role, input: LoginInput): Promise<AuthTokenResponse>
     username: input.email,
     password: input.password,
   }, 'login');
+}
+
+/** Logged-in password change; also how an offline buyer replaces the emailed
+ * temporary password. Returns a fresh token without the change restriction. */
+export function changePassword(token: string, currentPassword: string, newPassword: string): Promise<AuthTokenResponse> {
+  return postJson<AuthTokenResponse>('/customer/change-password', {
+    current_password: currentPassword,
+    new_password: newPassword,
+  }, 'change', token);
 }
 
 export interface ForgotPasswordInput {

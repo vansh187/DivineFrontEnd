@@ -12,6 +12,7 @@ import {
   type PaymentStatus,
 } from '../services/documentStore';
 import { usePaymentSchedule } from '../hooks/usePaymentSchedule';
+import { chargeHeadLabel, planDisplayName } from '../services/paymentPlansApi';
 import { formatCurrencyINR, formatIndianDate } from '../utils/currency';
 import { type MilestoneStatus, type ScheduleMilestone } from '../services/paymentSchedule';
 import { createPaymentOrder, ONLINE_PAYMENTS_ENABLED, submitOfflineInstallmentPayment, verifyRazorpayPayment } from '../services/paymentsApi';
@@ -45,6 +46,8 @@ import { fetchDemandLetterPdf, getDocument, getLatestDocumentByType, uploadAppli
 import { listMyBookings, fetchBookingReceiptPdf, type BookingRecord } from '../services/bookingsApi';
 
 const formatINR = formatCurrencyINR;
+
+const FINANCE_PENDING_MESSAGE = "Payment details for this plot are being updated by our team. Your letters will be available here soon.";
 const formatDate = formatIndianDate;
 const formatDateObj = formatIndianDate;
 
@@ -511,7 +514,9 @@ export function CustomerProfilePage() {
                 ? 'cash'
                 : rb.payment_method === 'rtgs_neft'
                   ? 'rtgs_neft'
-                  : rb.payment_method === 'razorpay'
+                  : rb.payment_method === 'cheque'
+                    ? 'cheque'
+                    : rb.payment_method === 'razorpay'
                     ? 'razorpay'
                     : null,
             razorpayOrderId: rb.razorpay_order_id ?? null,
@@ -569,6 +574,9 @@ export function CustomerProfilePage() {
       receiptFormData,
       receiptPayment,
       pdfInput,
+      // Offline purchase imported by our team: no uploaded application file,
+      // and no price / payment data yet - so no letters either.
+      financePending: Boolean(selectedBooking?.finance_pending),
     };
   }, [session, remote, visibleBookings, selectedBookingKey, photoVersion]);
 
@@ -688,6 +696,12 @@ export function CustomerProfilePage() {
     setDownloading(kind);
     setError('');
     try {
+      if (profile.financePending) {
+        setError(kind === 'application'
+          ? 'The application form for this plot is kept at our office. Please contact us for a copy.'
+          : FINANCE_PENDING_MESSAGE);
+        return;
+      }
       if (kind === 'application') {
         if (!profile.backendDocumentId) {
           setError('The booking application form is not available for the selected plot yet.');
@@ -934,6 +948,12 @@ export function CustomerProfilePage() {
             date — record cash, cheque or NEFT/RTGS. Online payment is temporarily unavailable while the payment gateway dashboard is being confirmed.
           </p>
           {profile.bookingOptions.length > 1 && <div className="mt-5">{renderBookingSelector('profile-booking-payments')}</div>}
+          {schedule.plan && (
+            <p className="mt-4 text-sm text-ink">
+              <span className="text-xs font-semibold uppercase tracking-[0.04em] text-ink-muted">Payment plan</span>{' '}
+              <span className="font-semibold">{planDisplayName(schedule.plan)}</span>
+            </p>
+          )}
 
           {(payError || paySuccess) && (
             <p
@@ -974,10 +994,19 @@ export function CustomerProfilePage() {
                         )}
                       </td>
                       <td className="px-5 py-3.5 text-ink-muted">
-                        {milestone.dueDate ? formatDateObj(milestone.dueDate) : '-'}
+                        {milestone.dueDate
+                          ? formatDateObj(milestone.dueDate)
+                          : milestone.awaitingPossession
+                            ? milestone.dueText || 'On Offer of Possession'
+                            : '-'}
                       </td>
                       <td className="px-5 py-3.5 text-right font-semibold text-ink">
                         {milestone.amount != null ? formatINR(milestone.amount) : '-'}
+                        {milestone.chargeHead && milestone.chargeAmount ? (
+                          <span className="block text-[11px] font-normal text-ink-muted">
+                            incl. {chargeHeadLabel(milestone.chargeHead)} {formatINR(milestone.chargeAmount)}
+                          </span>
+                        ) : null}
                       </td>
                       <td className="px-5 py-3.5">
                         <MilestoneStatusPill status={pendingInstallmentNos.includes(milestone.no) ? 'pending-review' : milestone.status} />
@@ -987,6 +1016,8 @@ export function CustomerProfilePage() {
                           <span className="text-xs font-semibold text-amber-800">Awaiting admin approval</span>
                         ) : milestone.status === 'paid' ? (
                           <span className="text-xs font-semibold text-green">Paid</span>
+                        ) : milestone.awaitingPossession ? (
+                          <span className="text-xs font-semibold text-ink-muted">Payable on possession</span>
                         ) : !milestone.payable ? (
                           <div className="flex flex-col items-end gap-1">
                             <button
@@ -1171,13 +1202,15 @@ export function CustomerProfilePage() {
           <button
             type="button"
             onClick={() => handleDownload('application')}
-            disabled={downloading !== null || !profile.backendDocumentId || applicationPdfLocked}
+            disabled={downloading !== null || !profile.backendDocumentId || applicationPdfLocked || profile.financePending}
             title={applicationPdfLocked ? 'Unlocks once our team verifies your KYC documents.' : undefined}
             className="mt-4 rounded-full bg-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
           >
             {downloading === 'application'
               ? 'Preparing...'
-              : applicationPdfLocked
+              : profile.financePending
+                ? 'Available at our office'
+                : applicationPdfLocked
                 ? 'Unlocks once KYC verified'
                 : 'Download application form'}
           </button>
@@ -1192,10 +1225,11 @@ export function CustomerProfilePage() {
           <button
             type="button"
             onClick={() => handleDownload('allotment')}
-            disabled={downloading !== null}
+            disabled={downloading !== null || profile.financePending}
+            title={profile.financePending ? FINANCE_PENDING_MESSAGE : undefined}
             className="mt-4 rounded-full bg-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {downloading === 'allotment' ? 'Preparing…' : 'Download PDF'}
+            {downloading === 'allotment' ? 'Preparing…' : profile.financePending ? 'Payment details pending' : 'Download PDF'}
           </button>
         </div>
 
@@ -1203,15 +1237,16 @@ export function CustomerProfilePage() {
           <IconBadge icon={<RupeeIcon />} accent="terracotta" interactive />
           <h3 className="mt-4 font-display text-lg font-bold text-ink">Demand letter</h3>
           <p className="mt-1.5 text-sm leading-[1.6] text-ink-muted">
-            Instalments due and outstanding amount, in the OPS Divine Greens format.
+            Instalments due and outstanding amount for the selected plot.
           </p>
           <button
             type="button"
             onClick={() => handleDownload('demand')}
-            disabled={downloading !== null}
+            disabled={downloading !== null || profile.financePending}
+            title={profile.financePending ? FINANCE_PENDING_MESSAGE : undefined}
             className="mt-4 rounded-full bg-green px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {downloading === 'demand' ? 'Preparing…' : 'Download PDF'}
+            {downloading === 'demand' ? 'Preparing…' : profile.financePending ? 'Payment details pending' : 'Download PDF'}
           </button>
         </div>
 

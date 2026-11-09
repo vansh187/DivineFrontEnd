@@ -10,6 +10,7 @@ import {
   type CustomerScheduleRow,
   type CustomerBookingInfo,
 } from '../services/customerProfileApi';
+import type { BookingPaymentPlanSummary } from '../services/paymentPlansApi';
 import {
   deriveSchedule,
   paymentReminder,
@@ -23,6 +24,8 @@ export interface PaymentScheduleState {
   /** The next unpaid milestone once it is within 20 days of its due date / overdue. */
   reminder: PaymentReminder | null;
   totalAmount: number | null;
+  /** Payment plan the booking was made under; null for legacy bookings. */
+  plan: BookingPaymentPlanSummary | null;
   hasBooking: boolean;
   loading: boolean;
   /** `server` when `GET /customer/profile` supplied the rows, else `local`. */
@@ -44,6 +47,7 @@ interface RemoteMeta {
   received: number | null;
   bookingDate: string | null;
   hasBooking: boolean | null;
+  plan: BookingPaymentPlanSummary | null;
 }
 
 function mostUrgentBooking(bookings: CustomerBookingInfo[]): CustomerBookingInfo | null {
@@ -111,6 +115,7 @@ export function usePaymentSchedule(selectedBookingKey?: string | null): PaymentS
           total: typeof booking.total_consideration === 'number' ? booking.total_consideration : null,
           received: typeof booking.amount_received === 'number' ? booking.amount_received : null,
           bookingDate: booking.booking_date ?? null,
+          plan: booking.payment_plan ?? null,
           hasBooking: bookings.length > 0 ? bookings.some((entry) => entry.has_booking !== false) : typeof booking.has_booking === 'boolean' ? booking.has_booking : null,
         });
       })
@@ -128,7 +133,7 @@ export function usePaymentSchedule(selectedBookingKey?: string | null): PaymentS
 
   return useMemo<PaymentScheduleState>(() => {
     if (!session) {
-      return { milestones: [], reminder: null, totalAmount: null, hasBooking: false, loading, source: 'local', refresh };
+      return { milestones: [], reminder: null, totalAmount: null, plan: null, hasBooking: false, loading, source: 'local', refresh };
     }
 
     const docs = loadCustomerDocs(session.email);
@@ -189,6 +194,25 @@ export function usePaymentSchedule(selectedBookingKey?: string | null): PaymentS
       milestones,
       reminder: hasBooking ? paymentReminder(milestones) : null,
       totalAmount,
+      // The server's plan for this booking wins (null = legacy booking without
+      // a plan). Only while the server has no schedule for it yet (just booked)
+      // fall back to the plan cached from this device's upload / payment.
+      plan: remote?.plan
+        ? remote.plan
+        : usingServer
+          ? null
+          : storedPlan?.payment_plan ??
+          (docs.bookingApplication.planPreview
+            ? {
+                ...docs.bookingApplication.planPreview.plan,
+                sale_price: docs.bookingApplication.planPreview.sale_price,
+                plc: docs.bookingApplication.planPreview.plc,
+                ifms: docs.bookingApplication.planPreview.ifms,
+                cam: docs.bookingApplication.planPreview.cam,
+                total: docs.bookingApplication.planPreview.total,
+                booking_amount: docs.bookingApplication.planPreview.booking_amount,
+              }
+            : null),
       hasBooking,
       loading,
       source: usingServer ? 'server' : 'local',

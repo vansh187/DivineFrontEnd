@@ -46,6 +46,13 @@ export interface ScheduleMilestone {
   /** True when this milestone's "Pay now" button should be live: the next unpaid
    *  instalment, any time (no window before the due date). */
   payable: boolean;
+  /** "On Offer of Possession" with no date yet: not payable, never overdue. */
+  awaitingPossession: boolean;
+  /** Server text for when it falls due, e.g. "On Offer of Possession". */
+  dueText: string | null;
+  /** Charge included in `amount` (e.g. "PLC"), and its amount. */
+  chargeHead: string | null;
+  chargeAmount: number | null;
 }
 
 function startOfDayMs(date: Date): number {
@@ -105,6 +112,12 @@ export function deriveSchedule(input: DeriveScheduleInput): ScheduleMilestone[] 
   const base = sourceRows
     ? sourceRows.map((row) => {
         const rawStatus = (row.status ?? '').toLowerCase();
+        // A possession-linked row is dated only once possession is announced -
+        // never project it from the booking date.
+        const possessionLinked = (row.due_trigger ?? '').toLowerCase() === 'possession';
+        const dueDate =
+          parseISO(row.due_date) ??
+          (!possessionLinked && bookingDate && row.due_days != null ? addDays(bookingDate, row.due_days) : null);
         return {
           label: row.label,
           percent: Number.isFinite(row.percent) ? row.percent : null,
@@ -114,9 +127,11 @@ export function deriveSchedule(input: DeriveScheduleInput): ScheduleMilestone[] 
               : total != null && Number.isFinite(row.percent)
                 ? Math.round(total * (row.percent / 100))
                 : null,
-          dueDate:
-            parseISO(row.due_date) ??
-            (bookingDate && row.due_days != null ? addDays(bookingDate, row.due_days) : null),
+          dueDate,
+          awaitingPossession: possessionLinked && !dueDate,
+          dueText: row.due_text ?? null,
+          chargeHead: row.charge_head ?? null,
+          chargeAmount: typeof row.charge_amount === 'number' ? row.charge_amount : null,
           rawStatus:
             rawStatus === 'paid' || (locallyPaidLabels.size > 0 && locallyPaidLabels.has(labelKey(row.label)))
               ? 'paid'
@@ -128,6 +143,10 @@ export function deriveSchedule(input: DeriveScheduleInput): ScheduleMilestone[] 
         percent: Math.round(row.share * 100),
         amount: total != null ? Math.round(total * row.share) : null,
         dueDate: bookingDate ? addDays(bookingDate, row.days) : null,
+        awaitingPossession: false,
+        dueText: null as string | null,
+        chargeHead: null as string | null,
+        chargeAmount: null as number | null,
         rawStatus: '',
       }));
 
@@ -165,6 +184,7 @@ export function deriveSchedule(input: DeriveScheduleInput): ScheduleMilestone[] 
     const payable =
       isNext &&
       !paid &&
+      !row.awaitingPossession &&
       status !== 'pending-review' &&
       row.amount != null &&
       row.amount > 0;
@@ -180,6 +200,10 @@ export function deriveSchedule(input: DeriveScheduleInput): ScheduleMilestone[] 
       daysUntilDue,
       isNext,
       payable,
+      awaitingPossession: row.awaitingPossession,
+      dueText: row.dueText,
+      chargeHead: row.chargeHead,
+      chargeAmount: row.chargeAmount,
     };
   });
 }

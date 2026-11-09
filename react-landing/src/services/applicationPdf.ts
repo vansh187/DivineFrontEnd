@@ -3,6 +3,7 @@ import type { PDFImage, PDFPage, PDFFont } from 'pdf-lib';
 import { getApplicationProject } from '../data/applicationProjects';
 import type { ApplicationProject, ApplicationProjectId } from '../data/applicationProjects';
 import type { BookingApplicationFormData, PaymentStatus } from './documentStore';
+import { chargeHeadLabel, planDisplayName, type PaymentPlanPreview } from './paymentPlansApi';
 import { amountToIndianWords } from '../utils/currency';
 
 interface GenerateApplicationPdfInput {
@@ -20,6 +21,8 @@ interface GenerateApplicationPdfInput {
   hasCoApplicant: boolean;
   identityAttachments?: IdentityAttachment[];
   paymentInfo?: PaymentStatus | null;
+  /** Selected payment plan with its instalments for the prices entered. */
+  planPreview?: PaymentPlanPreview | null;
 }
 
 interface GeneratePaymentReceiptPdfInput {
@@ -48,6 +51,8 @@ interface PdfContext {
    *  pre-embedded once up front - null for projects with no dedicated icon
    *  asset yet, which fall back to the drawn monogram tile. */
   brandIcon: PDFImage | null;
+  /** Selected payment plan + instalments; null on legacy / plan-less packets. */
+  plan?: PaymentPlanPreview | null;
 }
 
 interface PageCursor {
@@ -156,7 +161,8 @@ const termsAndConditions = [
   'In case of cancellation, forfeiture, refund, or any other termination, I/we shall have no right, title, interest, or lien on the Plot applied for or provisionally/finally allotted.',
 ];
 
-const paymentPlanRows: Array<[string, string]> = [
+/** Legacy construction-linked plan, kept only for packets without a selected plan. */
+const legacyPaymentPlanRows: Array<[string, string]> = [
   ['On Booking', '10% of BSP'],
   ['On Issuance of Allotment Letter/BBA', '20% of BSP'],
   ['On Start of Drainage Work', '25% of BSP + PLC'],
@@ -340,6 +346,7 @@ function formatPaymentMethod(value: PaymentStatus['method']): string {
   if (value === 'razorpay') return 'Online payment - Razorpay';
   if (value === 'cash') return 'Cash payment';
   if (value === 'rtgs_neft') return 'Bank transfer - NEFT / RTGS';
+  if (value === 'cheque') return 'Cheque';
   return '-';
 }
 
@@ -798,10 +805,19 @@ function renderPricingPage(ctx: PdfContext, formData: BookingApplicationFormData
     ['A. Basic Sale Price - price', formData.basicSalePrice],
     ['B. PLC Applicable - rate per sq yard', formData.plcRatePerSqYd],
     ['B. PLC Applicable - price', formData.plcPrice],
-    ['Total Amount A+B', formData.totalAmount],
+    ...(ctx.plan
+      ? ([
+          ['C. IFMS - rate per sq yard', formData.ifmsRatePerSqYd],
+          ['C. IFMS - price', formData.ifmsAmount || '0'],
+          ['D. CAM - rate per sq yard', formData.camRatePerSqYd],
+          ['D. CAM - price', formData.camAmount || '0'],
+          ['Total Amount A+B+C+D', formData.totalAmount],
+        ] as Array<[string, string]>)
+      : ([['Total Amount A+B', formData.totalAmount]] as Array<[string, string]>)),
     ['Amount in figure', formData.amountInFigure],
     ['Amount in words', formData.totalAmountWords],
-    ['Plan type', 'Construction Linked Plan'],
+    ['Plan type', ctx.plan ? planDisplayName(ctx.plan.plan) : 'Construction Linked Plan'],
+    ...(ctx.plan ? ([['Booking amount', formatCurrencyINR(ctx.plan.booking_amount)]] as Array<[string, string]>) : []),
     ['Mode of booking', formData.bookingMode],
     ['Employee name', formData.employeeName],
     ['Employee code', formData.employeeCode],
@@ -859,8 +875,24 @@ function renderTermsPage(ctx: PdfContext, formData: BookingApplicationFormData) 
   cursor = drawAccepted(ctx, cursor, 'Terms and conditions accepted', formData.termsAccepted);
 }
 
+function planRowsForPdf(plan: PaymentPlanPreview): Array<[string, string]> {
+  return plan.rows.map((row) => {
+    const head = chargeHeadLabel(row.charge_head);
+    const share = `${row.percent}% of BSP${head ? ` + ${head}` : ''}`;
+    const due = row.due_date ? formatIndianDateShort(row.due_date) : row.due_text;
+    return [`${row.label} (${due})`, `${share} = ${formatCurrencyINR(row.amount)}`];
+  });
+}
+
+function formatIndianDateShort(iso: string): string {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime())
+    ? iso
+    : date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
 function renderPaymentPlanPage(ctx: PdfContext, formData: BookingApplicationFormData) {
-  let cursor = addPage(ctx, 'Page 11 - Construction linked payment plan');
+  let cursor = addPage(ctx, ctx.plan ? 'Page 11 - Payment plan' : 'Page 11 - Construction linked payment plan');
   cursor = drawParagraph(
     ctx,
     cursor,
@@ -869,8 +901,21 @@ function renderPaymentPlanPage(ctx: PdfContext, formData: BookingApplicationForm
   cursor = drawParagraph(ctx, cursor, 'The booking is applicable as per the Allotment Letter and is to be signed separately, and it overrides all conditions mentioned herewith.');
   cursor = drawParagraph(ctx, cursor, 'In case of non-payment or delay in payment of installments, the developer reserves the right to cancel the allotment or regularize the unit with interest from the due dates.');
   cursor = drawParagraph(ctx, cursor, 'The time period mentioned above regarding the payment will remain same for the new transferee as well.');
-  cursor = drawSectionLabel(ctx, cursor, 'Construction linked plan');
-  cursor = drawRows(ctx, cursor, paymentPlanRows);
+  if (ctx.plan) {
+    cursor = drawSectionLabel(ctx, cursor, planDisplayName(ctx.plan.plan));
+    cursor = drawRows(ctx, cursor, [
+      ...planRowsForPdf(ctx.plan),
+      ['Total', formatCurrencyINR(ctx.plan.total)],
+    ]);
+    cursor = drawParagraph(
+      ctx,
+      cursor,
+      'Due dates are counted from the date of booking. The instalment payable on Offer of Possession is due on the date possession is offered.',
+    );
+  } else {
+    cursor = drawSectionLabel(ctx, cursor, 'Construction linked plan');
+    cursor = drawRows(ctx, cursor, legacyPaymentPlanRows);
+  }
   cursor = drawAccepted(ctx, cursor, 'Payment plan accepted', formData.paymentPlanAccepted);
 }
 
@@ -1118,6 +1163,7 @@ export async function generateApplicationPdf({
   hasCoApplicant,
   identityAttachments = [],
   paymentInfo = null,
+  planPreview = null,
 }: GenerateApplicationPdfInput): Promise<Blob> {
   if (!formData.projectId) {
     throw new Error('Select the project before generating the application PDF.');
@@ -1145,6 +1191,7 @@ export async function generateApplicationPdf({
     pageNumber: 0,
     project,
     brandIcon,
+    plan: planPreview,
   };
 
   await renderReadableApplicationPacket(ctx, formData, identityAttachments, hasCoApplicant, paymentInfo);

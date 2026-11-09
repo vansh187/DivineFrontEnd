@@ -1,4 +1,5 @@
 import { authedRequest as authedRequestBase } from './authApi';
+import { messageForPlanDetail, type BookingPlanSelection } from './paymentPlansApi';
 
 /**
  * Razorpay checkout stays off until live keys are configured on the payment server.
@@ -18,8 +19,9 @@ export interface PaymentOrder {
 }
 
 /** Why the payment is being made.
- *  - `plot_booking` — the 10% booking amount; tells the backend to lock the
- *    linked inventory unit (see `inventory_id`) the moment this payment settles.
+ *  - `plot_booking` — the booking amount (the chosen payment plan's first
+ *    instalment); tells the backend to lock the linked inventory unit (see
+ *    `inventory_id`) the moment this payment settles.
  *  - `installment`  — a later milestone of the construction-linked plan; carries
  *    `installment_no` + `due_date` so the backend can mark that milestone paid.
  *  - `other`        — anything else. */
@@ -49,9 +51,14 @@ export interface BookingPaymentOptions {
   installmentNo?: number | null;
   /** purpose `installment`: that milestone's ISO (`YYYY-MM-DD`) due date. */
   dueDate?: string | null;
+  /** purpose `plot_booking`: the chosen payment plan and declared prices. The
+   *  amount must equal that plan's booking amount (POST /payment-plans/preview),
+   *  and `inventoryId` is required alongside it. */
+  plan?: BookingPlanSelection | null;
 }
 
-export type CashPaymentMethod = 'cash' | 'rtgs_neft';
+/** `cheque` is accepted for plot-booking payments (with a cheque number). */
+export type CashPaymentMethod = 'cash' | 'rtgs_neft' | 'cheque';
 
 export interface PaymentRecord {
   id: string;
@@ -60,7 +67,7 @@ export interface PaymentRecord {
   amount: number;
   currency: string;
   status: string;
-  method: 'razorpay' | 'cash' | 'rtgs_neft';
+  method: 'razorpay' | 'cash' | 'rtgs_neft' | 'cheque';
   verified: boolean;
   razorpay_order_id?: string | null;
   razorpay_payment_id?: string | null;
@@ -89,7 +96,7 @@ export interface OfflineInstallmentSubmission {
 }
 
 /** Methods a customer can report for an instalment from their profile. */
-export type OfflineInstallmentMethod = CashPaymentMethod | 'cheque';
+export type OfflineInstallmentMethod = CashPaymentMethod;
 
 export interface VerifyRazorpayPaymentInput {
   razorpay_order_id: string;
@@ -105,21 +112,43 @@ function messageForPaymentError(status: number, detail: unknown): string {
       : 'Please sign in again to continue.';
   }
   if (status === 403) return 'You can only access your own payments.';
+  if (status === 409 && detail === 'unit_not_available') return 'This plot is no longer available. Please choose another plot.';
   if (status === 404) return 'That payment could not be found.';
   if (status === 429) return 'Too many attempts. Please wait a minute and try again.';
   if (status === 400) {
     if (detail === 'invalid_amount') return 'Enter a valid amount.';
-    if (detail === 'amount_too_large') return 'That amount is too large — please contact us directly for large payments.';
+    if (detail === 'amount_too_large')
+      return 'That amount is above the ₹1 crore online limit. Please pay by cash, cheque or NEFT/RTGS, or choose another plan.';
     if (detail === 'invalid_purpose') return 'Something went wrong starting your payment. Please refresh and try again.';
     if (detail === 'invalid_method') return 'Choose a valid payment method.';
     if (detail === 'utr_number_required') return 'Enter the UTR number for this bank transfer.';
     if (detail === 'cheque_number_required') return 'Enter the cheque number.';
+    const planMessage = messageForPlanDetail(detail);
+    if (planMessage) return planMessage;
   }
   if (typeof detail === 'string' && detail.startsWith('payment_')) {
     return 'Something went wrong starting your payment. Please try again.';
   }
   if (status === 422) return 'Please check the amount you entered.';
   return 'Something went wrong. Please try again.';
+}
+
+/** Fields shared by both booking calls: plot, instalment context, and plan. */
+function bookingFields(opts: BookingPaymentOptions): Record<string, string | number> {
+  return {
+    ...(opts.inventoryId ? { inventory_id: opts.inventoryId } : {}),
+    ...(opts.installmentNo != null ? { installment_no: opts.installmentNo } : {}),
+    ...(opts.dueDate ? { due_date: opts.dueDate } : {}),
+    ...(opts.plan
+      ? {
+          payment_plan_code: opts.plan.planCode,
+          sale_price: opts.plan.salePrice,
+          plc_amount: opts.plan.plcAmount,
+          ifms_amount: opts.plan.ifmsAmount,
+          cam_amount: opts.plan.camAmount,
+        }
+      : {}),
+  };
 }
 
 function authedRequest<T>(path: string, token: string, init?: RequestInit): Promise<T> {
@@ -140,9 +169,7 @@ export function createPaymentOrder(
     body: JSON.stringify({
       amount,
       purpose: opts.purpose ?? 'other',
-      ...(opts.inventoryId ? { inventory_id: opts.inventoryId } : {}),
-      ...(opts.installmentNo != null ? { installment_no: opts.installmentNo } : {}),
-      ...(opts.dueDate ? { due_date: opts.dueDate } : {}),
+      ...bookingFields(opts),
     }),
   });
 }
@@ -159,17 +186,17 @@ export function verifyRazorpayPayment(token: string, input: VerifyRazorpayPaymen
   });
 }
 
-/** Records cash (or an already-completed RTGS/NEFT transfer) collected outside
- * offline payment — settles immediately server-side, no gateway involved (unlike
- * createPaymentOrder/verifyRazorpayPayment). `utrNumber` is required when
- * `method` is `'rtgs_neft'`; omit both for a plain cash record. */
+/** Records cash, an already-completed RTGS/NEFT transfer, or a cheque —
+ * settles immediately server-side, no gateway involved (unlike
+ * createPaymentOrder/verifyRazorpayPayment). `reference` is the UTR number for
+ * `'rtgs_neft'` and the cheque number for `'cheque'`; omit it for cash. */
 export function recordCashPayment(
   token: string,
   amount: number,
   note?: string,
   opts: BookingPaymentOptions = {},
   method: CashPaymentMethod = 'cash',
-  utrNumber?: string | null,
+  reference?: string | null,
 ): Promise<PaymentRecord> {
   return authedRequest<PaymentRecord>('/payments/cash', token, {
     method: 'POST',
@@ -179,10 +206,9 @@ export function recordCashPayment(
       note: note || undefined,
       purpose: opts.purpose ?? 'other',
       method,
-      ...(utrNumber ? { utr_number: utrNumber } : {}),
-      ...(opts.inventoryId ? { inventory_id: opts.inventoryId } : {}),
-      ...(opts.installmentNo != null ? { installment_no: opts.installmentNo } : {}),
-      ...(opts.dueDate ? { due_date: opts.dueDate } : {}),
+      ...(reference && method === 'rtgs_neft' ? { utr_number: reference } : {}),
+      ...(reference && method === 'cheque' ? { cheque_number: reference } : {}),
+      ...bookingFields(opts),
     }),
   });
 }
