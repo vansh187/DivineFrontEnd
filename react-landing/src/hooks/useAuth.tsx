@@ -11,6 +11,9 @@ export interface AuthSession {
   email: string;
   firstName: string | null;
   lastName: string | null;
+  /** Signed in with an emailed temporary password - ForcePasswordChange blocks
+   * the app until changePassword() succeeds. */
+  mustChangePassword?: boolean;
 }
 
 export type ModalMode = 'signin' | 'signup';
@@ -71,6 +74,9 @@ interface AuthContextValue {
   /** Creates the account only — does not sign the visitor in. Call login()
    * afterwards once they've confirmed on the sign-in screen. */
   signup: (role: Role, input: SignupInput) => Promise<void>;
+  /** Replace the temporary password (or any password) and swap in the fresh,
+   * unrestricted token the API returns. */
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   /** Persist a session from a token issued outside the auth API (chat login). */
   applySession: (input: { token: string; role?: Role; email?: string }) => void;
   /** `clearDocsCache` also wipes the cached document uploads/booking-application
@@ -159,9 +165,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: input.email,
         firstName,
         lastName,
+        mustChangePassword: Boolean(res.must_change_password || claims?.pwd_change),
       });
     },
     [persist],
+  );
+
+  const changePassword = useCallback(
+    async (currentPassword: string, newPassword: string) => {
+      if (!session) throw new Error('not_signed_in');
+      const res = await authApi.changePassword(session.token, currentPassword, newPassword);
+      persist({ ...session, token: res.access_token, mustChangePassword: false });
+    },
+    [persist, session],
   );
 
   const signup = useCallback(async (role: Role, input: SignupInput) => {
@@ -184,6 +200,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email,
         firstName,
         lastName,
+        mustChangePassword: Boolean(claims?.pwd_change),
       });
     },
     [persist],
@@ -217,6 +234,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       login,
       signup,
+      changePassword,
       applySession,
       logout,
       isModalOpen,
@@ -227,7 +245,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setModalMode,
       setModalRole,
     }),
-    [session, login, signup, applySession, logout, isModalOpen, modalMode, modalRole, openModal, closeModal],
+    [session, login, signup, changePassword, applySession, logout, isModalOpen, modalMode, modalRole, openModal, closeModal],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

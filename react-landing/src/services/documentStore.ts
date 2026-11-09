@@ -1,4 +1,5 @@
 import type { PaymentPlan } from './customerProfileApi';
+import type { PaymentPlanPreview } from './paymentPlansApi';
 import type { ApplicationProjectId } from '../data/applicationProjects';
 import { applicationProjects } from '../data/applicationProjects';
 
@@ -109,7 +110,7 @@ export interface PaymentStatus {
   paymentId: string | null;
   amount: number | null;
   status: 'created' | 'paid' | 'failed' | null;
-  method: 'razorpay' | 'cash' | 'rtgs_neft' | null;
+  method: 'razorpay' | 'cash' | 'rtgs_neft' | 'cheque' | null;
   razorpayOrderId: string | null;
   razorpayPaymentId: string | null;
   paidAt: string | null;
@@ -242,10 +243,17 @@ export interface BookingApplicationFormData {
   basicSalePrice: string;
   plcRatePerSqYd: string;
   plcPrice: string;
+  /** Interest-Free Maintenance Security: rate per sq yd and amount in rupees ('' = none). */
+  ifmsRatePerSqYd: string;
+  ifmsAmount: string;
+  /** Common Area Maintenance charge: rate per sq yd and amount in rupees ('' = none). */
+  camRatePerSqYd: string;
+  camAmount: string;
+  /** Full code of the chosen payment plan, e.g. `PP1/FPP/10-15-25-25-15-10`. */
+  paymentPlanCode: string;
   totalAmount: string;
-  /** Agreed total plot consideration in rupees. Sent to the backend as
-   * `total_amount` and drives the demand / allotment payment plan. Defaults to
-   * A + B but the sales team can override it. */
+  /** Total plot consideration in rupees (sale price + PLC + IFMS + CAM), taken
+   * from the payment-plan preview. Sent to the backend as `total_amount`. */
   totalPlotAmount: string;
   amountInFigure: string;
   totalAmountWords: string;
@@ -307,6 +315,10 @@ export interface BookingApplicationStatus {
   /** The payment plan the backend derived on the last successful upload — used
    * to fill the demand / allotment letters until GET /customer/profile is live. */
   paymentPlan: PaymentPlan | null;
+  /** The plan preview the booking payment was made against (plan, prices,
+   * instalments). Locks the plan, feeds the application PDF, and supplies
+   * `total_amount` on upload. Null until the booking payment is made. */
+  planPreview: PaymentPlanPreview | null;
   error: string | null;
 }
 
@@ -347,6 +359,11 @@ export function emptyBookingApplicationFormData(): BookingApplicationFormData {
     basicSalePrice: '',
     plcRatePerSqYd: '',
     plcPrice: '',
+    ifmsRatePerSqYd: '',
+    ifmsAmount: '',
+    camRatePerSqYd: '',
+    camAmount: '',
+    paymentPlanCode: '',
     totalAmount: '',
     totalPlotAmount: '',
     amountInFigure: '',
@@ -404,6 +421,7 @@ export function emptyBookingApplicationStatus(): BookingApplicationStatus {
     signedUrl: null,
     signedUrlExpiresAt: null,
     paymentPlan: null,
+    planPreview: null,
     error: null,
   };
 }

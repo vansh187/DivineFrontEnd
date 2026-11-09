@@ -73,8 +73,17 @@ function messageForDocumentsError(status: number, detail: unknown): string {
     if (detail === 'token_expired') return 'Your session has expired. Please sign in again.';
     return 'Please sign in again to continue.';
   }
-  if (status === 403) return 'You can only upload documents for your own account.';
+  if (status === 403) {
+    if (detail === 'password_change_required') return 'Please set your new password first.';
+    return 'You can only upload documents for your own account.';
+  }
+  if (status === 409 && detail === 'booking_application_exists')
+    return 'Your application for this booking was already submitted.';
+  if (status === 409 && detail === 'payment_details_pending')
+    return 'Payment details for this plot are being updated by our team. Your letters will be available here soon.';
   if (status === 404) {
+    if (detail === 'no_file_for_imported_record')
+      return 'The application form for this plot is kept at our office. Please contact us for a copy.';
     if (detail === 'demand_letter_not_available' || detail === 'letter_not_generated')
       return 'The demand letter is not ready for this booking yet. Please try again shortly.';
     return 'That document could not be found.';
@@ -97,6 +106,10 @@ function messageForDocumentsError(status: number, detail: unknown): string {
       return 'A demand letter is only available for a booking application document.';
     if (detail === 'payment_plan_missing' || detail === 'no_payment_plan')
       return 'The payment plan for this booking is not ready yet. Please try again after it is generated.';
+    if (detail === 'plan_mismatch')
+      return 'The payment plan or total on the application does not match the booking payment. Please review the Pricing page.';
+    if (detail === 'payment_not_for_booking')
+      return 'This payment is an instalment, not the booking payment. Please contact support.';
     if (detail === 'invalid_form_data') return 'Application form data could not be uploaded. Please refresh and try again.';
     if (detail === 'payment_not_found') return 'Payment record was not found. Please complete payment again before generating the PDF.';
     if (detail === 'payment_not_completed') return 'Payment is not completed yet. Please wait for confirmation before generating the PDF.';

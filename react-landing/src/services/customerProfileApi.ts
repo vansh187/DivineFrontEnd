@@ -1,4 +1,5 @@
 import { authedRequest as authedRequestBase, ApiError } from './authApi';
+import type { BookingPaymentPlanSummary } from './paymentPlansApi';
 
 /**
  * Customer profile — the real personal + booking data shown on
@@ -38,8 +39,10 @@ export interface CustomerBookingInfo {
   unit_type?: string | null;
   /** ISO 8601 date (YYYY-MM-DD) the plot was booked. */
   booking_date?: string | null;
-  /** Total plot consideration in whole rupees. */
+  /** Total plot consideration in whole rupees (plan bookings: sale price + PLC + IFMS + CAM). */
   total_consideration?: number | null;
+  /** Payment plan chosen at booking; absent / null on bookings made before plans. */
+  payment_plan?: BookingPaymentPlanSummary | null;
   /** Amount already received from the customer, in whole rupees. */
   amount_received?: number | null;
   /** Booking-payment reference, used for receipt downloads when supplied. */
@@ -50,9 +53,16 @@ export interface CustomerBookingInfo {
   razorpay_order_id?: string | null;
   razorpay_payment_id?: string | null;
   payment_created_date?: string | null;
-  /** Optional server-computed schedule; the UI falls back to the default
-   * 10/15/25/25/25 split against `total_consideration` when this is absent. */
+  /** Server-computed schedule (always present for plan bookings). Only legacy
+   * bookings without one fall back to the old 10/15/25/25/25 split. */
   payment_schedule?: CustomerScheduleRow[] | null;
+  /** Plot bought offline and imported by our team before its price / payment
+   * details were loaded: the letters stay unavailable until they are. */
+  finance_pending?: boolean | null;
+  /** Full plot address, e.g. "Plot No -C61, Suraksha Enclave Sec-15, ...". */
+  plot_address?: string | null;
+  applicant_name?: string | null;
+  co_applicants?: string[] | null;
 }
 
 export interface CustomerScheduleRow {
@@ -71,6 +81,15 @@ export interface CustomerScheduleRow {
   /** ISO date the "Pay now" button unlocks (backend convention: due_date − 5
    * days). Optional — the UI derives the same 5-day window itself. */
   pay_enabled_from?: string | null;
+  /** `possession` rows ("On Offer of Possession") have no `due_date` until the
+   * company announces possession: no Pay button, never overdue. */
+  due_trigger?: 'booking' | 'possession' | string | null;
+  due_text?: string | null;
+  /** Sale-price share of `amount`; `amount` = `basic_amount` + `charge_amount`. */
+  basic_amount?: number | null;
+  /** `PLC` | `IFMS` | `CAM` | `PLC+IFMS+CAM` | null */
+  charge_head?: string | null;
+  charge_amount?: number | null;
 }
 
 /**
@@ -86,6 +105,8 @@ export interface PaymentPlan {
   total_outstanding_words?: string | null;
   booking_date?: string | null;
   rows: CustomerScheduleRow[];
+  /** The plan the booking was paid against (plan bookings only). */
+  payment_plan?: BookingPaymentPlanSummary | null;
 }
 
 export interface CustomerProfile {

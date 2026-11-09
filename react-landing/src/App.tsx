@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { LandingPage } from './pages/LandingPage';
 import { SiteLayout } from './components/SiteLayout';
 import { AuthModal } from './components/AuthModal';
+import { ForcePasswordChange } from './components/ForcePasswordChange';
 import { BackButton } from './components/BackButton';
 import { ChatWidget } from './components/chat/ChatWidget';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -279,6 +280,7 @@ function App() {
           <BackButton />
           <AppRoutes />
           <AuthModal />
+          <ForcePasswordChange />
           {/* Isolated boundary: a bug in the (newer, less-tested) chat widget
            * should never blank out the rest of the site. */}
           <ErrorBoundary>

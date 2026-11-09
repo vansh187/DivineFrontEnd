@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '../components/DashboardLayout';
@@ -27,31 +27,46 @@ import { getDocument, uploadCancelledCheque, uploadGeneratedApplicationPdf } fro
 import { ApiError } from '../services/authApi';
 import { blobToDataUrl, downloadPdfBlob, generateApplicationPdf, generatePaymentReceiptPdf, openDataUrl, openPdfBlob } from '../services/applicationPdf';
 import { createPaymentOrder, ONLINE_PAYMENTS_ENABLED, recordCashPayment, verifyRazorpayPayment } from '../services/paymentsApi';
+import type { PaymentRecord } from '../services/paymentsApi';
 import { openRazorpayCheckout } from '../services/razorpayCheckout';
 import { amountToIndianWords } from '../utils/currency';
 import { formatAadhaarDob, mapAadhaarGender } from '../utils/aadhaar';
 import { listMyBookings } from '../services/bookingsApi';
 import type { BookingRecord } from '../services/bookingsApi';
+import { usePaymentPlanPreview } from '../hooks/usePaymentPlanPreview';
+import { PaymentPlanPicker, PlanScheduleTable } from '../components/PaymentPlanPicker';
+import { planDisplayName } from '../services/paymentPlansApi';
+import { applyPricingChange, pricingTotalFields, type PriceRowKind, type PricingChange, type PricingField } from '../services/pricingCalc';
+import type { BookingPlanSelection, PaymentPlanPreview } from '../services/paymentPlansApi';
+import { getCustomerProfileShared, profileBookings } from '../services/customerProfileApi';
 
 function parseAmount(value: string): number {
   const cleaned = Number(value.replace(/,/g, '').trim());
   return Number.isFinite(cleaned) ? cleaned : 0;
 }
 
-/** On-booking instalment share of the total plot amount — first milestone of the
- * 10 / 15 / 25 / 25 / 25 payment plan (see PAYMENT_SCHEDULE in customerProfilePdf.ts).
- * The booking amount is derived from this, never typed by the customer. */
-const BOOKING_SHARE = 0.1;
+/** Online (Razorpay) payments above this are refused by the server
+ * (`amount_too_large`) — e.g. PP4 (100% on booking) on an expensive plot. */
+const ONLINE_PAYMENT_LIMIT = 1_00_00_000;
 
-function bookingAmountFor(totalPlotAmount: number): number {
-  return totalPlotAmount > 0 ? Math.round(totalPlotAmount * BOOKING_SHARE) : 0;
-}
+/** The server rejects a Basic Sale Price whose implied rate falls outside this
+ * band (`sale_price_out_of_range`); used only for an early, non-blocking hint. */
+const RATE_PER_SQ_YD_HINT_RANGE = { min: 5_000, max: 5_00_000 };
+
+/** Booking amount depends on the plan, so it comes only from the server
+ * preview: cleared whenever the plan changes so a stale amount can never be
+ * shown or charged. Never falls back to a fixed percentage. */
+const BOOKING_AMOUNT_CLEARED: Partial<BookingApplicationFormData> = {
+  bookingAmount: '',
+  bookingAmountWords: '',
+};
 
 type FieldName = keyof BookingApplicationFormData;
 
 function serializeFormData(
   formData: BookingApplicationFormData,
   includeCoApplicant: boolean,
+  paidPlan: PaymentPlanPreview | null,
 ): Record<string, string | number> {
   const serialized = Object.fromEntries(
     Object.entries(formData)
@@ -62,11 +77,17 @@ function serializeFormData(
       .map(([key, value]) => [key, typeof value === 'boolean' ? (value ? 'Yes' : 'No') : value]),
   ) as Record<string, string | number>;
 
-  // The backend needs the total plot consideration as `total_amount` (a number)
-  // to build the payment plan - NOT the booking amount, which comes from the
-  // payment record. Prefer the explicit "Total Plot Amount", fall back to A + B.
-  const totalAmount = parseAmount(formData.totalPlotAmount) || parseAmount(formData.totalAmount);
-  if (totalAmount > 0) serialized.total_amount = totalAmount;
+  // The backend takes the plan and prices from the booking payment and refuses
+  // the upload (`plan_mismatch`) if these disagree - so send the plan code and
+  // the total from the very preview the booking was paid against.
+  if (paidPlan) {
+    serialized.payment_plan_code = paidPlan.plan.code;
+    serialized.total_amount = paidPlan.total;
+  } else {
+    // Booking paid before payment plans existed: old behaviour, no plan.
+    const totalAmount = parseAmount(formData.totalPlotAmount) || parseAmount(formData.totalAmount);
+    if (totalAmount > 0) serialized.total_amount = totalAmount;
+  }
 
   return serialized;
 }
@@ -171,11 +192,14 @@ const PAYMENT_MODE_OPTIONS = ['Cheque', 'Demand Draft', 'NEFT / RTGS / UTR', 'Ca
  *  reference no. and amount here is enough to generate the packet without an
  *  online/cash/NEFT transaction on the last page; the customer hands the
  *  physical instrument to the sales desk separately. */
-const MANUAL_OFFLINE_PAYMENT_MODES = ['Cheque', 'Demand Draft', 'Online transfer', 'Other'];
+const MANUAL_OFFLINE_PAYMENT_MODES = ['Demand Draft', 'Online transfer', 'Other'];
 /** Backend-recognized label for the "NEFT / RTGS / UTR" payment mode — routed
  *  through `recordCashPayment(method: 'rtgs_neft')` so it gets a real payment
  *  record, an inventory lock, and the same KYC-gated packet release as cash. */
 const RTGS_NEFT_PAYMENT_MODE = 'NEFT / RTGS / UTR';
+/** Cheque is recorded through `recordCashPayment(method: 'cheque')` so the
+ *  chosen payment plan reaches the server with the booking payment. */
+const CHEQUE_PAYMENT_MODE = 'Cheque';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -642,6 +666,62 @@ export function CustomerApplicationPage() {
     }
   }, [soldOutProjectSelected, currentPage]);
 
+  // Payment plan: the list for this project and a live server preview of the
+  // chosen plan for the prices entered. The booking amount is that preview's
+  // first instalment. Once the booking payment is made the plan and prices are
+  // locked to the snapshot it was paid against, so nothing is re-previewed.
+  /** Pricing fields whose value was auto-filled (vs typed) - auto-calculation
+   * may replace those, never a value the customer typed. */
+  const autoFilledPricing = useRef<Set<PricingField>>(new Set());
+  const planForm = docs.bookingApplication.formData;
+  const planLocked = docs.payment.status === 'paid' && !!docs.payment.paymentId;
+  const plan = usePaymentPlanPreview({
+    projectId: planForm.projectId || null,
+    planCode: planForm.paymentPlanCode,
+    prices: {
+      salePrice: parseAmount(planForm.basicSalePrice),
+      plcAmount: parseAmount(planForm.plcPrice),
+      ifmsAmount: parseAmount(planForm.ifmsAmount),
+      camAmount: parseAmount(planForm.camAmount),
+    },
+    enabled: !planLocked,
+  });
+
+  // Copy the preview's total and booking amount into the form (they're printed
+  // on the application and shown on page 2). Only ever from a preview that
+  // matches the current inputs - see BOOKING_AMOUNT_CLEARED / pricingCalc.ts.
+  useEffect(() => {
+    const preview = plan.preview;
+    if (planLocked || !preview) return;
+    const current = docs.bookingApplication.formData;
+    const updates: Partial<BookingApplicationFormData> = {
+      totalAmount: String(preview.total),
+      amountInFigure: String(preview.total),
+      totalAmountWords: amountToIndianWords(preview.total),
+      totalPlotAmount: String(preview.total),
+      bookingAmount: String(preview.booking_amount),
+      bookingAmountWords: amountToIndianWords(preview.booking_amount),
+    };
+    const changed = (Object.keys(updates) as Array<keyof BookingApplicationFormData>).some(
+      (key) => current[key] !== updates[key],
+    );
+    if (changed) applyFormUpdates(updates);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plan.preview, planLocked]);
+
+  // Keep Total (A+B+C+D) / amount in figure / words in step with the prices
+  // even when nothing is being typed - e.g. a saved draft opened again, or the
+  // plan preview service being unavailable. Edits recompute them directly.
+  const localTotals = pricingTotalFields(planForm);
+  useEffect(() => {
+    if (planLocked) return;
+    const current = docs.bookingApplication.formData;
+    if (current.totalAmount !== localTotals.totalAmount || current.totalAmountWords !== localTotals.totalAmountWords) {
+      applyFormUpdates(localTotals);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localTotals.totalAmount, planLocked]);
+
   if (!session) return <Navigate to="/" replace />;
 
   // Aadhaar QR verification (Documents page) already extracts name/DOB/gender/guardian/
@@ -664,38 +744,25 @@ export function CustomerApplicationPage() {
     setError(null);
   };
 
-  // Only the two Price cells (Basic Sale Price and PLC) are ever typed in - the total,
-  // amount-in-figure, and amount-in-words all derive from their sum so they can never
-  // drift out of sync with what was actually entered.
-  const updatePrice = (field: 'basicSalePrice' | 'plcPrice', value: string) => {
-    const prevForm = docs.bookingApplication.formData;
-    const nextForm = { ...prevForm, [field]: value };
-    const total = parseAmount(nextForm.basicSalePrice) + parseAmount(nextForm.plcPrice);
-    nextForm.totalAmount = total ? String(total) : '';
-    nextForm.amountInFigure = total ? String(total) : '';
-    nextForm.totalAmountWords = total ? amountToIndianWords(total) : '';
-    // Keep the agreed "Total Plot Amount" tracking A + B until it's edited by hand.
-    if (!prevForm.totalPlotAmount || prevForm.totalPlotAmount === prevForm.totalAmount) {
-      nextForm.totalPlotAmount = total ? String(total) : '';
-    }
-    // Booking amount is always 10% of the total plot amount — derived, never typed.
-    const booking = bookingAmountFor(parseAmount(nextForm.totalPlotAmount));
-    nextForm.bookingAmount = booking ? String(booking) : '';
-    nextForm.bookingAmountWords = booking ? amountToIndianWords(booking) : '';
-    persist({
-      ...docs,
-      bookingApplication: { ...docs.bookingApplication, formData: nextForm, error: null },
-    });
+  // Pricing inputs - every field stays free to type in; see pricingCalc.ts for
+  // the auto-calculation rules (rate × area → price, totals, and never
+  // overwriting a value the customer typed themselves).
+  const changePricing = (change: PricingChange) => {
+    if (planLocked) return;
+    const { updates, autoFilled } = applyPricingChange(
+      docs.bookingApplication.formData,
+      change,
+      autoFilledPricing.current,
+    );
+    autoFilledPricing.current = autoFilled;
+    applyFormUpdates(updates);
   };
-
-  /** Total Plot Amount edited directly — keep the derived booking amount in sync. */
-  const updateTotalPlotAmount = (value: string) => {
-    const booking = bookingAmountFor(parseAmount(value));
-    applyFormUpdates({
-      totalPlotAmount: value,
-      bookingAmount: booking ? String(booking) : '',
-      bookingAmountWords: booking ? amountToIndianWords(booking) : '',
-    });
+  const updateRate = (row: PriceRowKind, value: string) => changePricing({ field: 'rate', row, value });
+  const updatePrice = (row: PriceRowKind, value: string) => changePricing({ field: 'price', row, value });
+  const updatePlotAreaSqYd = (value: string) => changePricing({ field: 'area', value });
+  const updatePaymentPlan = (code: string) => {
+    if (planLocked) return;
+    applyFormUpdates({ paymentPlanCode: code, ...BOOKING_AMOUNT_CLEARED });
   };
 
   const handleSignatureUpload = async (
@@ -737,7 +804,7 @@ export function CustomerApplicationPage() {
     }
   };
 
-  // A confirmed payment for less than the fixed 10% booking instalment is not
+  // A confirmed payment for less than the plan's booking instalment is not
   // acceptable - reject it rather than marking the booking paid.
   const isShortPayment = (paidAmount: number) => bookingDueAmount > 0 && paidAmount + 1 < bookingDueAmount;
 
@@ -747,9 +814,34 @@ export function CustomerApplicationPage() {
         logout();
         openModal('signin', 'customer');
       }
+      // The plan was retired between preview and payment: reload the list so
+      // the customer can choose again.
+      if (err.detail === 'payment_plan_not_found') plan.reloadPlans();
       return err.message;
     }
     return err instanceof Error ? err.message : 'Something went wrong. Please try again.';
+  };
+
+  /** Saves a settled booking payment together with the plan snapshot it was
+   * made against (locks the plan; feeds the PDF and the upload's total). */
+  const persistBookingPayment = (record: PaymentRecord, paidPlan: PaymentPlanPreview, verified: boolean, extra?: Partial<CustomerDocState['payment']>) => {
+    persist({
+      ...docs,
+      bookingApplication: { ...docs.bookingApplication, planPreview: paidPlan },
+      payment: {
+        paymentId: record.id,
+        amount: record.amount,
+        status: verified ? 'paid' : 'failed',
+        method: record.method,
+        razorpayOrderId: record.razorpay_order_id ?? null,
+        razorpayPaymentId: record.razorpay_payment_id ?? null,
+        paidAt: verified ? new Date().toISOString() : null,
+        inventoryStatus: record.inventory_status ?? null,
+        inventoryConflictReason: record.inventory_conflict_reason ?? null,
+        error: verified ? null : 'Payment could not be verified. Please try again or contact support.',
+        ...extra,
+      },
+    });
   };
 
   const handlePayNow = async () => {
@@ -757,25 +849,18 @@ export function CustomerApplicationPage() {
       setPaymentError('Online payments are temporarily unavailable while Razorpay is being configured. Please use cash or bank transfer.');
       return;
     }
-    const amount = bookingDueAmount;
-    if (amount <= 0) {
-      setPaymentError('Enter the Total Plot Amount on the Pricing page first — the booking amount is 10% of it.');
+    if (typeof bookingPlan === 'string') {
+      setPaymentError(bookingPlan);
       return;
     }
+    const { amount, selection, snapshot, inventoryId } = bookingPlan;
     setPaying(true);
     setPaymentError(null);
     try {
-      const inventoryId = docs.bookingApplication.inventoryId;
-      // This button only ever pays the plot booking instalment (10% of Total
-      // Plot Amount) - it's always a plot_booking payment, whether or not a
-      // specific inventory unit happens to be bound yet (e.g. the customer
-      // typed the unit number by hand instead of arriving via "Book Plot" on
-      // Available Plots). Gating purpose on inventoryId meant that case never
-      // got flagged for KYC review until the application PDF was uploaded,
-      // instead of the moment the payment itself settled.
       const order = await createPaymentOrder(session.token, amount, {
         purpose: 'plot_booking',
         inventoryId,
+        plan: selection,
       });
       if (!order.razorpay_key_id || !order.razorpay_order_id || !Number.isSafeInteger(order.amount_paise) || order.amount_paise <= 0) {
         throw new Error('Razorpay is not configured on the payment server yet.');
@@ -795,20 +880,9 @@ export function CustomerApplicationPage() {
         setPaymentError('Please correct the amount.');
         return;
       }
-      persist({
-        ...docs,
-        payment: {
-          paymentId: record.id,
-          amount: record.amount,
-          status: record.verified ? 'paid' : 'failed',
-          method: record.method,
-          razorpayOrderId: record.razorpay_order_id ?? result.razorpay_order_id,
-          razorpayPaymentId: record.razorpay_payment_id ?? result.razorpay_payment_id,
-          paidAt: record.verified ? new Date().toISOString() : null,
-          inventoryStatus: record.inventory_status ?? null,
-          inventoryConflictReason: record.inventory_conflict_reason ?? null,
-          error: record.verified ? null : 'Payment could not be verified. Please try again or contact support.',
-        },
+      persistBookingPayment(record, snapshot, record.verified, {
+        razorpayOrderId: record.razorpay_order_id ?? result.razorpay_order_id,
+        razorpayPaymentId: record.razorpay_payment_id ?? result.razorpay_payment_id,
       });
       if (record.verified) clearPendingUnit(session.email);
       else setPaymentError('Payment could not be verified. Please try again or contact support.');
@@ -820,41 +894,25 @@ export function CustomerApplicationPage() {
   };
 
   const handlePayByCash = async () => {
-    const amount = bookingDueAmount;
-    if (amount <= 0) {
-      setPaymentError('Enter the Total Plot Amount on the Pricing page first — the booking amount is 10% of it.');
+    if (typeof bookingPlan === 'string') {
+      setPaymentError(bookingPlan);
       return;
     }
+    const { amount, selection, snapshot, inventoryId } = bookingPlan;
     setPayingCash(true);
     setPaymentError(null);
     try {
-      const inventoryId = docs.bookingApplication.inventoryId;
-      // See handlePayNow - always a plot_booking payment, not gated on inventoryId.
       const record = await recordCashPayment(
         session.token,
         amount,
         'Cash recorded from booking application final page.',
-        { purpose: 'plot_booking', inventoryId },
+        { purpose: 'plot_booking', inventoryId, plan: selection },
       );
       if (isShortPayment(record.amount)) {
         setPaymentError('Please correct the amount.');
         return;
       }
-      persist({
-        ...docs,
-        payment: {
-          paymentId: record.id,
-          amount: record.amount,
-          status: 'paid',
-          method: record.method,
-          razorpayOrderId: record.razorpay_order_id ?? null,
-          razorpayPaymentId: record.razorpay_payment_id ?? null,
-          paidAt: new Date().toISOString(),
-          inventoryStatus: record.inventory_status ?? null,
-          inventoryConflictReason: record.inventory_conflict_reason ?? null,
-          error: null,
-        },
-      });
+      persistBookingPayment(record, snapshot, true);
       // Booking is on record — drop the "pending unit" (see handlePayNow).
       clearPendingUnit(session.email);
     } catch (err) {
@@ -864,55 +922,44 @@ export function CustomerApplicationPage() {
     }
   };
 
-  // Confirms an already-completed NEFT/RTGS transfer, using the UTR number
-  // entered as "Cheque / DD / UTR / reference no." on the "Fill application
-  // form" page. Unlike Cheque/DD/Online transfer/Other (which the backend has
-  // no payment method for), 'rtgs_neft' is a real `CashPaymentMethod` — this
-  // creates a payment + inventory-lock record exactly like cash, so the
+  // Confirms an already-completed NEFT/RTGS transfer (UTR number) or a cheque
+  // (cheque number), both entered as "Cheque / DD / UTR / reference no." on the
+  // "Fill application form" page. Each creates a payment + inventory-lock
+  // record exactly like cash, carrying the chosen payment plan, so the
   // generated packet is held for KYC review the same way.
-  const handleConfirmRtgsNeft = async () => {
-    const amount = bookingDueAmount;
-    if (amount <= 0) {
-      setPaymentError('Enter the Total Plot Amount on the Pricing page first — the booking amount is 10% of it.');
+  const handleConfirmBankPayment = async (method: 'rtgs_neft' | 'cheque') => {
+    if (typeof bookingPlan === 'string') {
+      setPaymentError(bookingPlan);
       return;
     }
-    const utrNumber = form.chequeNo.trim();
-    if (!utrNumber) {
-      setPaymentError('Enter the NEFT / RTGS UTR number on the "Fill application form" page before confirming.');
+    const reference = form.chequeNo.trim();
+    if (!reference) {
+      setPaymentError(
+        method === 'cheque'
+          ? 'Enter the cheque number on the "Fill application form" page before confirming.'
+          : 'Enter the NEFT / RTGS UTR number on the "Fill application form" page before confirming.',
+      );
       return;
     }
+    const { amount, selection, snapshot, inventoryId } = bookingPlan;
     setPayingRtgsNeft(true);
     setPaymentError(null);
     try {
-      const inventoryId = docs.bookingApplication.inventoryId;
-      // See handlePayNow - always a plot_booking payment, not gated on inventoryId.
       const record = await recordCashPayment(
         session.token,
         amount,
-        'NEFT/RTGS transfer recorded from booking application final page.',
-        { purpose: 'plot_booking', inventoryId },
-        'rtgs_neft',
-        utrNumber,
+        method === 'cheque'
+          ? 'Cheque recorded from booking application final page.'
+          : 'NEFT/RTGS transfer recorded from booking application final page.',
+        { purpose: 'plot_booking', inventoryId, plan: selection },
+        method,
+        reference,
       );
       if (isShortPayment(record.amount)) {
         setPaymentError('Please correct the amount.');
         return;
       }
-      persist({
-        ...docs,
-        payment: {
-          paymentId: record.id,
-          amount: record.amount,
-          status: 'paid',
-          method: record.method,
-          razorpayOrderId: record.razorpay_order_id ?? null,
-          razorpayPaymentId: record.razorpay_payment_id ?? null,
-          paidAt: new Date().toISOString(),
-          inventoryStatus: record.inventory_status ?? null,
-          inventoryConflictReason: record.inventory_conflict_reason ?? null,
-          error: null,
-        },
-      });
+      persistBookingPayment(record, snapshot, true);
       // Booking is on record — drop the "pending unit" (see handlePayNow).
       clearPendingUnit(session.email);
     } catch (err) {
@@ -944,6 +991,45 @@ export function CustomerApplicationPage() {
     }
   };
 
+  /** Upload answered 409 `booking_application_exists`: the application for this
+   * booking payment is already on the server. Find its document id on the
+   * profile and record the submission as done. */
+  const adoptExistingApplication = async (fileName: string, pdfDataUrl: string) => {
+    let documentId: string | null = null;
+    let bookingId: string | null = null;
+    try {
+      const profileData = await getCustomerProfileShared(session.token, true);
+      const match = profileBookings(profileData).find(
+        (booking) =>
+          (!!docs.payment.paymentId &&
+            (booking.payment_id === docs.payment.paymentId || booking.booking_payment_id === docs.payment.paymentId)) ||
+          (!!docs.bookingApplication.inventoryId && booking.inventory_id === docs.bookingApplication.inventoryId),
+      );
+      documentId = match?.backend_document_id ?? match?.document_id ?? null;
+      bookingId = match?.booking_id ?? null;
+    } catch {
+      // Profile unavailable - fall through to the message below.
+    }
+    if (!documentId) {
+      setError('Your application for this booking was already submitted. You can find it on your profile.');
+      return;
+    }
+    const next: CustomerDocState = {
+      ...docs,
+      bookingApplication: {
+        ...docs.bookingApplication,
+        generatedAt: new Date().toISOString(),
+        pdfFileName: fileName,
+        pdfDataUrl,
+        backendDocumentId: documentId,
+        bookingId: bookingId ?? docs.bookingApplication.bookingId,
+        error: null,
+      },
+    };
+    persist(next);
+    store.saveApplicantContactSnapshot(session.email, next);
+  };
+
   const handleGenerate = async () => {
     const applicantSignature = docs.applicantSignature.dataUrl;
     // Whether a co-applicant exists is set via the checkbox on the PAN card & signatures
@@ -972,7 +1058,7 @@ export function CustomerApplicationPage() {
     }
     if (!onlinePaymentComplete && !offlinePaymentEntered) {
       fail(
-        'Complete the plot booking payment (online, cash, or a confirmed NEFT/RTGS transfer), or enter the cheque / DD / other payment mode, reference number and amount on the "Fill application form" page, before generating the application PDF.',
+        'Complete the plot booking payment (online, cash, or a confirmed cheque or NEFT/RTGS payment), or enter the demand draft / other payment mode, reference number and amount on the "Fill application form" page, before generating the application PDF.',
       );
       return;
     }
@@ -1025,7 +1111,7 @@ export function CustomerApplicationPage() {
       return;
     }
     if (!docs.bookingApplication.formData.paymentPlanAccepted) {
-      fail('Accept the construction linked payment plan before generating the application PDF.');
+      fail('Accept the payment plan before generating the application PDF.');
       return;
     }
     if (!docs.bookingApplication.formData.checklistAccepted) {
@@ -1052,6 +1138,7 @@ export function CustomerApplicationPage() {
         coApplicantPhotoSource: docs.coApplicantPhoto.dataUrl || docs.coApplicantPhoto.signedUrl,
         hasCoApplicant,
         paymentInfo: docs.payment,
+        planPreview: activePlan,
         identityAttachments: [
           {
             title: 'Aadhaar Card - Front',
@@ -1119,7 +1206,8 @@ export function CustomerApplicationPage() {
         return;
       }
 
-      const totalForPlan = parseAmount(form.totalPlotAmount) || parseAmount(form.totalAmount);
+      const paidPlan = docs.bookingApplication.planPreview;
+      const totalForPlan = paidPlan?.total ?? (parseAmount(form.totalPlotAmount) || parseAmount(form.totalAmount));
       if (totalForPlan <= 0) {
         setError('Enter the Total Plot Amount on the Pricing page before generating the application PDF.');
         return;
@@ -1139,7 +1227,7 @@ export function CustomerApplicationPage() {
           razorpayPaymentId: docs.payment.razorpayPaymentId,
           aadhaarVerificationId: docs.aadhar.verificationId as string,
           kycDocumentIds: kycDocumentIdsFor(docs, hasCoApplicant),
-          formData: serializeFormData(docs.bookingApplication.formData, hasCoApplicant),
+          formData: serializeFormData(docs.bookingApplication.formData, hasCoApplicant, paidPlan),
         });
         // Always record the accepted submission, even if the KYC links failed,
         // so the same payment is never uploaded twice. The uploads stay on
@@ -1163,6 +1251,13 @@ export function CustomerApplicationPage() {
         if (err instanceof ApiError && err.status === 401) {
           logout();
           openModal('signin', 'customer');
+          return;
+        }
+        // This booking payment already has an application on the server (e.g. a
+        // retry after a network error): it succeeded - pick up its id from the
+        // profile instead of reporting a failure.
+        if (err instanceof ApiError && err.status === 409 && err.detail === 'booking_application_exists') {
+          await adoptExistingApplication(fileName, pdfDataUrl);
           return;
         }
         throw err;
@@ -1189,10 +1284,39 @@ export function CustomerApplicationPage() {
   // and the customer has a way to record it again rather than hitting a dead end.
   const paymentComplete = docs.payment.status === 'paid' && !!docs.payment.paymentId;
   const paymentNeedsReference = docs.payment.status === 'paid' && !docs.payment.paymentId;
-  // The booking instalment is fixed at 10% of the Total Plot Amount - the
-  // customer never types it.
-  const totalPlotAmount = parseAmount(form.totalPlotAmount) || parseAmount(form.totalAmount);
-  const bookingDueAmount = bookingAmountFor(totalPlotAmount);
+  // The plan schedule in force: the snapshot the booking was paid against once
+  // paid, otherwise the live preview for the current plan + prices. The booking
+  // amount is that plan's first instalment - never a fixed percentage.
+  const activePlan: PaymentPlanPreview | null = planLocked ? docs.bookingApplication.planPreview : plan.preview;
+  const bookingDueAmount = activePlan?.booking_amount ?? 0;
+  /** What a booking payment needs, or why it can't be made yet. */
+  const bookingPlan: string | { amount: number; selection: BookingPlanSelection; snapshot: PaymentPlanPreview; inventoryId: string } = (() => {
+    if (!form.paymentPlanCode) return 'Choose a payment plan on the Pricing page first.';
+    if (!plan.selection) return 'Enter the Basic Sale Price on the Pricing page first.';
+    if (plan.previewError) return plan.previewError;
+    if (!plan.ready || !plan.preview) return 'The instalments are still being calculated. Please wait a moment.';
+    if (!docs.bookingApplication.inventoryId) {
+      return 'We could not identify the plot for this booking. Please start the booking from Available Plots ("Book Plot").';
+    }
+    return {
+      amount: plan.preview.booking_amount,
+      selection: plan.selection,
+      snapshot: plan.preview,
+      inventoryId: docs.bookingApplication.inventoryId,
+    };
+  })();
+  const bookingPlanReady = typeof bookingPlan !== 'string';
+  const bookingPlanBlocker = typeof bookingPlan === 'string' ? bookingPlan : null;
+  const onlineAmountTooLarge = bookingDueAmount > ONLINE_PAYMENT_LIMIT;
+  const bankPaymentMode =
+    form.paymentMode.trim() === CHEQUE_PAYMENT_MODE ? 'cheque' : form.paymentMode.trim() === RTGS_NEFT_PAYMENT_MODE ? 'rtgs_neft' : null;
+  const impliedRatePerSqYd =
+    parseAmount(form.plotAreaSqYd) > 0 && parseAmount(form.basicSalePrice) > 0
+      ? parseAmount(form.basicSalePrice) / parseAmount(form.plotAreaSqYd)
+      : null;
+  const rateLooksOff =
+    impliedRatePerSqYd != null &&
+    (impliedRatePerSqYd < RATE_PER_SQ_YD_HINT_RANGE.min || impliedRatePerSqYd > RATE_PER_SQ_YD_HINT_RANGE.max);
   // Manual offline instrument (cheque / DD / online transfer / other) captured
   // on Page 2: mode + a reference no. + a positive amount. This unlocks PDF
   // generation without a backend-tracked payment — see MANUAL_OFFLINE_PAYMENT_MODES.
@@ -1202,7 +1326,7 @@ export function CustomerApplicationPage() {
   const offlinePaymentEntered =
     MANUAL_OFFLINE_PAYMENT_MODES.includes(form.paymentMode.trim()) &&
     form.chequeNo.trim() !== '' &&
-    parseAmount(form.bookingAmount) > 0;
+    bookingDueAmount > 0;
   const canGeneratePdf = paymentComplete || offlinePaymentEntered;
   const selectedProject = applicationProjects.find((project) => project.id === form.projectId);
   const currentBookedUnit = docs.bookingApplication.inventoryUnitNumber || form.unitNo;
@@ -1328,12 +1452,17 @@ export function CustomerApplicationPage() {
           <Field
             label="Booking amount remitted (Rs.)"
             type="number"
-            value={form.bookingAmount}
+            value={bookingDueAmount > 0 ? String(bookingDueAmount) : ''}
             onChange={() => {}}
             readOnly
-            hint="Auto-calculated: 10% of the Total Plot Amount (Pricing page)."
+            hint="Auto-calculated: the first instalment of the payment plan chosen on the Pricing page."
           />
-          <Field label="Amount in words" value={form.bookingAmountWords} onChange={() => {}} readOnly />
+          <Field
+            label="Amount in words"
+            value={bookingDueAmount > 0 ? amountToIndianWords(bookingDueAmount) : ''}
+            onChange={() => {}}
+            readOnly
+          />
           <SelectField
             label="Payment mode"
             value={form.paymentMode}
@@ -1348,17 +1477,18 @@ export function CustomerApplicationPage() {
           />
           <Field label="Dated" type="date" value={form.chequeDate} onChange={(value) => updateForm('chequeDate', value)} />
           <Field label="Drawn on bank" value={form.bankName} onChange={(value) => updateForm('bankName', value)} />
-          {form.paymentMode.trim() === RTGS_NEFT_PAYMENT_MODE ? (
+          {bankPaymentMode ? (
             <div className="sm:col-span-2 rounded-lg border border-hairline bg-bg p-3 text-xs leading-relaxed text-ink-muted">
-              Paying by NEFT/RTGS? Enter the UTR number and amount above and attach the transfer receipt below, then
-              confirm the transfer on the last (Generate) page. Like an online or cash payment, the application packet
-              stays locked until our team verifies your KYC.
+              Paying by {bankPaymentMode === 'cheque' ? 'cheque' : 'NEFT/RTGS'}? Enter the{' '}
+              {bankPaymentMode === 'cheque' ? 'cheque number' : 'UTR number'} above and attach a copy below, then confirm
+              the payment on the last (Generate) page. Like an online or cash payment, the application packet stays
+              locked until our team verifies your KYC.
             </div>
           ) : (
             <div className="sm:col-span-2 rounded-lg border border-hairline bg-bg p-3 text-xs leading-relaxed text-ink-muted">
-              Paying by cheque, demand draft or other bank transfer? Enter the mode, reference number and amount above,
-              then attach the instrument below. That is enough to generate the application packet on the last page — an
-              online or cash transaction is not required.
+              Paying by demand draft or another bank transfer? Enter the mode and reference number above, then attach
+              the instrument below. That is enough to generate the application packet on the last page — an online or
+              cash transaction is not required.
             </div>
           )}
           <SignatureUpload
@@ -1510,7 +1640,8 @@ export function CustomerApplicationPage() {
             type="number"
             min={0}
             value={form.plotAreaSqYd}
-            onChange={(value) => updateForm('plotAreaSqYd', stripNegative(value))}
+            onChange={updatePlotAreaSqYd}
+            readOnly={planLocked}
           />
           <Field
             label="In sq mtr."
@@ -1523,6 +1654,10 @@ export function CustomerApplicationPage() {
         </Section>
 
         <Section title="Details of pricing">
+          <p className="sm:col-span-2 text-xs text-ink-muted">
+            Enter the plot area and the rate per sq yard; the price fills in automatically (rate × area). You can also
+            type a price directly and the rate is worked out for you.
+          </p>
           <div className="sm:col-span-2 overflow-hidden rounded-lg border border-hairline">
             <div className="grid grid-cols-[1.3fr_1fr_1fr] bg-green px-3 py-2 text-xs font-bold text-white">
               <span>Basic Cost Of The Residential Plot</span>
@@ -1530,50 +1665,79 @@ export function CustomerApplicationPage() {
               <span>Price</span>
             </div>
             <div className="grid gap-px bg-hairline text-sm">
-              <div className="grid grid-cols-[1.3fr_1fr_1fr] bg-surface p-3">
-                <span className="font-semibold text-ink">A. Basic Sale Price (BSP)</span>
-                <input value={form.ratePerSqYd} onChange={(event) => updateForm('ratePerSqYd', event.target.value)} className="mx-2 rounded border border-hairline bg-bg px-2 py-1 outline-none focus:border-green" />
-                <input value={form.basicSalePrice} onChange={(event) => updatePrice('basicSalePrice', event.target.value)} className="mx-2 rounded border border-hairline bg-bg px-2 py-1 outline-none focus:border-green" />
-              </div>
-              <div className="grid grid-cols-[1.3fr_1fr_1fr] bg-surface p-3">
-                <span className="font-semibold text-ink">B. PLC Applicable</span>
-                <input value={form.plcRatePerSqYd} onChange={(event) => updateForm('plcRatePerSqYd', event.target.value)} className="mx-2 rounded border border-hairline bg-bg px-2 py-1 outline-none focus:border-green" />
-                <input value={form.plcPrice} onChange={(event) => updatePrice('plcPrice', event.target.value)} className="mx-2 rounded border border-hairline bg-bg px-2 py-1 outline-none focus:border-green" />
-              </div>
-              <div className="grid grid-cols-[1.3fr_1fr_1fr] bg-surface p-3">
-                <span className="font-semibold text-ink">Total Amount (A+B)</span>
-                <span />
-                <input value={form.totalAmount} readOnly className="mx-2 cursor-not-allowed rounded border border-hairline bg-bg px-2 py-1 text-ink-muted outline-none" />
-              </div>
-              <div className="grid grid-cols-[1.3fr_1fr_1fr] bg-surface p-3">
+              <div className="grid grid-cols-[1.3fr_1fr_1fr] items-start bg-surface p-3">
                 <span className="font-semibold text-ink">
-                  Total Plot Amount
-                  <span className="mt-0.5 block text-[11px] font-normal text-ink-muted">
-                    Agreed consideration. Drives the payment plan; edit if it differs from A+B.
-                  </span>
+                  Plot area (sq yd)
+                  <span className="mt-0.5 block text-[11px] font-normal text-ink-muted">Same as on the Plot page.</span>
+                </span>
+                <input inputMode="decimal" aria-label="Plot area in sq yd" value={form.plotAreaSqYd} readOnly={planLocked} onChange={(event) => updatePlotAreaSqYd(event.target.value)} placeholder="Area in sq yd" className="mx-2 h-10 self-start rounded-md border border-ink/25 bg-white px-3 py-1.5 text-ink shadow-sm outline-none placeholder:text-ink-muted/60 focus:border-green focus:ring-2 focus:ring-green/20 read-only:cursor-not-allowed read-only:bg-bg read-only:text-ink-muted read-only:shadow-none" />
+                <span />
+              </div>
+              <div className="grid grid-cols-[1.3fr_1fr_1fr] items-start bg-surface p-3">
+                <span className="font-semibold text-ink">
+                  A. Basic Sale Price (BSP)
+                </span>
+                <input inputMode="decimal" aria-label="A. Basic Sale Price (BSP) - rate per sq yd" value={form.ratePerSqYd} readOnly={planLocked} onChange={(event) => updateRate('bsp', event.target.value)} placeholder="Rate per sq yd" className="mx-2 h-10 self-start rounded-md border border-ink/25 bg-white px-3 py-1.5 text-ink shadow-sm outline-none placeholder:text-ink-muted/60 focus:border-green focus:ring-2 focus:ring-green/20 read-only:cursor-not-allowed read-only:bg-bg read-only:text-ink-muted read-only:shadow-none" />
+                <input inputMode="decimal" aria-label="A. Basic Sale Price (BSP) - price" value={form.basicSalePrice} readOnly={planLocked} onChange={(event) => updatePrice('bsp', event.target.value)} placeholder="Amount" className="mx-2 h-10 self-start rounded-md border border-ink/25 bg-white px-3 py-1.5 text-ink shadow-sm outline-none placeholder:text-ink-muted/60 focus:border-green focus:ring-2 focus:ring-green/20 read-only:cursor-not-allowed read-only:bg-bg read-only:text-ink-muted read-only:shadow-none" />
+              </div>
+              <div className="grid grid-cols-[1.3fr_1fr_1fr] items-start bg-surface p-3">
+                <span className="font-semibold text-ink">
+                  B. PLC Applicable
+                  <span className="mt-0.5 block text-[11px] font-normal text-ink-muted">Preferential Location Charges</span>
+                </span>
+                <input inputMode="decimal" aria-label="B. PLC Applicable - rate per sq yd" value={form.plcRatePerSqYd} readOnly={planLocked} onChange={(event) => updateRate('plc', event.target.value)} placeholder="Rate per sq yd" className="mx-2 h-10 self-start rounded-md border border-ink/25 bg-white px-3 py-1.5 text-ink shadow-sm outline-none placeholder:text-ink-muted/60 focus:border-green focus:ring-2 focus:ring-green/20 read-only:cursor-not-allowed read-only:bg-bg read-only:text-ink-muted read-only:shadow-none" />
+                <input inputMode="decimal" aria-label="B. PLC Applicable - price" value={form.plcPrice} readOnly={planLocked} onChange={(event) => updatePrice('plc', event.target.value)} placeholder="0" className="mx-2 h-10 self-start rounded-md border border-ink/25 bg-white px-3 py-1.5 text-ink shadow-sm outline-none placeholder:text-ink-muted/60 focus:border-green focus:ring-2 focus:ring-green/20 read-only:cursor-not-allowed read-only:bg-bg read-only:text-ink-muted read-only:shadow-none" />
+              </div>
+              <div className="grid grid-cols-[1.3fr_1fr_1fr] items-start bg-surface p-3">
+                <span className="font-semibold text-ink">
+                  C. IFMS
+                  <span className="mt-0.5 block text-[11px] font-normal text-ink-muted">Interest-Free Maintenance Security</span>
+                </span>
+                <input inputMode="decimal" aria-label="C. IFMS - rate per sq yd" value={form.ifmsRatePerSqYd} readOnly={planLocked} onChange={(event) => updateRate('ifms', event.target.value)} placeholder="Rate per sq yd" className="mx-2 h-10 self-start rounded-md border border-ink/25 bg-white px-3 py-1.5 text-ink shadow-sm outline-none placeholder:text-ink-muted/60 focus:border-green focus:ring-2 focus:ring-green/20 read-only:cursor-not-allowed read-only:bg-bg read-only:text-ink-muted read-only:shadow-none" />
+                <input inputMode="decimal" aria-label="C. IFMS - price" value={form.ifmsAmount} readOnly={planLocked} onChange={(event) => updatePrice('ifms', event.target.value)} placeholder="0" className="mx-2 h-10 self-start rounded-md border border-ink/25 bg-white px-3 py-1.5 text-ink shadow-sm outline-none placeholder:text-ink-muted/60 focus:border-green focus:ring-2 focus:ring-green/20 read-only:cursor-not-allowed read-only:bg-bg read-only:text-ink-muted read-only:shadow-none" />
+              </div>
+              <div className="grid grid-cols-[1.3fr_1fr_1fr] items-start bg-surface p-3">
+                <span className="font-semibold text-ink">
+                  D. CAM
+                  <span className="mt-0.5 block text-[11px] font-normal text-ink-muted">Common Area Maintenance</span>
+                </span>
+                <input inputMode="decimal" aria-label="D. CAM - rate per sq yd" value={form.camRatePerSqYd} readOnly={planLocked} onChange={(event) => updateRate('cam', event.target.value)} placeholder="Rate per sq yd" className="mx-2 h-10 self-start rounded-md border border-ink/25 bg-white px-3 py-1.5 text-ink shadow-sm outline-none placeholder:text-ink-muted/60 focus:border-green focus:ring-2 focus:ring-green/20 read-only:cursor-not-allowed read-only:bg-bg read-only:text-ink-muted read-only:shadow-none" />
+                <input inputMode="decimal" aria-label="D. CAM - price" value={form.camAmount} readOnly={planLocked} onChange={(event) => updatePrice('cam', event.target.value)} placeholder="0" className="mx-2 h-10 self-start rounded-md border border-ink/25 bg-white px-3 py-1.5 text-ink shadow-sm outline-none placeholder:text-ink-muted/60 focus:border-green focus:ring-2 focus:ring-green/20 read-only:cursor-not-allowed read-only:bg-bg read-only:text-ink-muted read-only:shadow-none" />
+              </div>
+              <div className="grid grid-cols-[1.3fr_1fr_1fr] items-start bg-surface p-3">
+                <span className="font-semibold text-ink">
+                  Total Amount (A+B+C+D)
+                  <span className="mt-0.5 block text-[11px] font-normal text-ink-muted">Adds up automatically as you type.</span>
                 </span>
                 <span />
-                <input
-                  type="number"
-                  value={form.totalPlotAmount}
-                  onChange={(event) => updateTotalPlotAmount(event.target.value)}
-                  placeholder="e.g. 5000000"
-                  className="mx-2 h-9 self-start rounded border border-hairline bg-bg px-2 py-1 outline-none focus:border-green"
-                />
+                <input value={form.totalAmount} readOnly className="mx-2 h-10 self-start cursor-not-allowed rounded-md border border-hairline bg-bg px-3 py-1.5 text-ink-muted outline-none" />
               </div>
-              <div className="grid grid-cols-[1.3fr_1fr_1fr] bg-surface p-3">
+              <div className="grid grid-cols-[1.3fr_1fr_1fr] items-start bg-surface p-3">
                 <span className="font-semibold text-ink">Amount in Figure</span>
                 <span />
-                <input value={form.amountInFigure} readOnly className="mx-2 cursor-not-allowed rounded border border-hairline bg-bg px-2 py-1 text-ink-muted outline-none" />
+                <input value={form.amountInFigure} readOnly className="mx-2 h-10 self-start cursor-not-allowed rounded-md border border-hairline bg-bg px-3 py-1.5 text-ink-muted outline-none" />
               </div>
-              <div className="grid grid-cols-[1.3fr_2fr] bg-surface p-3">
+              <div className="grid grid-cols-[1.3fr_2fr] items-start bg-surface p-3">
                 <span className="font-semibold text-ink">Amount in Words</span>
-                <input value={form.totalAmountWords} readOnly className="mx-2 cursor-not-allowed rounded border border-hairline bg-bg px-2 py-1 text-ink-muted outline-none" />
+                <input value={form.totalAmountWords} readOnly className="mx-2 h-10 self-start cursor-not-allowed rounded-md border border-hairline bg-bg px-3 py-1.5 text-ink-muted outline-none" />
               </div>
             </div>
           </div>
-          <div className="sm:col-span-2 rounded-lg bg-green px-4 py-3 font-display text-lg font-bold uppercase tracking-wide text-white">
-            Plan Type: Construction Linked Plan
+          {!planLocked && rateLooksOff && (
+            <p className="sm:col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              The Basic Sale Price works out to Rs. {Math.round(impliedRatePerSqYd ?? 0).toLocaleString('en-IN')} per sq yd.
+              Please check the Basic Sale Price for this plot.
+            </p>
+          )}
+          <div className="sm:col-span-2 rounded-lg border border-hairline bg-surface p-4">
+            <p className="mb-3 font-display text-lg font-bold uppercase tracking-wide text-ink">Payment plan</p>
+            <PaymentPlanPicker
+              state={plan}
+              value={form.paymentPlanCode}
+              onChange={updatePaymentPlan}
+              locked={planLocked}
+              snapshot={docs.bookingApplication.planPreview}
+            />
           </div>
           <label className="block">
             <span className="text-xs font-semibold text-ink">Mode of booking</span>
@@ -1691,24 +1855,33 @@ export function CustomerApplicationPage() {
           />
         </Section>
 
-        <Section title="Construction linked payment plan">
+        <Section title="Payment plan">
           <LegalNote>
             <p>
               Cost of stamp duty, registration, documentation charges, government taxes, and other applicable charges are payable by
               the allottee as actuals. The allotment letter is signed separately and overrides conditions mentioned in this note.
               Delayed or missed installments may lead to cancellation or regularization with interest.
             </p>
-            <div className="mt-4 grid gap-2 text-xs font-semibold text-ink sm:grid-cols-2">
-              <span>On booking: 10% of BSP</span>
-              <span>On issuance of Allotment Letter/BBA: 20% of BSP</span>
-              <span>On start of drainage work: 25% of BSP + PLC</span>
-              <span>On start of underground cabling work: 25% of BSP</span>
-              <span>On application of CC: 15% of BSP + IFMS</span>
-              <span>On offer of possession: 5% of BSP</span>
-            </div>
+            {activePlan ? (
+              <div className="mt-4">
+                <p className="mb-2 text-xs font-semibold text-ink">{planDisplayName(activePlan.plan)}</p>
+                <PlanScheduleTable rows={activePlan.rows} total={activePlan.total} />
+                <p className="mt-2 text-[11px] text-ink-muted">
+                  Due dates run from the date of booking. The instalment on Offer of Possession falls due when possession is offered.
+                </p>
+              </div>
+            ) : (
+              <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                Choose a payment plan and enter the prices on the Pricing page to see your instalments here.
+              </p>
+            )}
           </LegalNote>
           <CheckboxField
-            label="I/we accept the construction linked payment plan and related notes."
+            label={
+              activePlan
+                ? `I/we accept the ${activePlan.plan.short_code || 'selected'} payment plan and related notes.`
+                : 'I/we accept the selected payment plan and related notes.'
+            }
             checked={form.paymentPlanAccepted}
             onChange={(checked) => updateForm('paymentPlanAccepted', checked)}
           />
@@ -1810,7 +1983,7 @@ export function CustomerApplicationPage() {
               <div>
                 <p className="font-semibold text-ink">Plot booking payment</p>
                 <p className="mt-1 text-xs leading-relaxed text-ink-muted">
-                  The booking instalment is fixed at 10% of the Total Plot Amount. Online payment is temporarily unavailable while the payment gateway dashboard is being confirmed. Record cash here or enter cheque / DD / UTR details on the &ldquo;Fill application form&rdquo;
+                  The booking amount is the first instalment of the payment plan chosen on the Pricing page. Online payment is temporarily unavailable while the payment gateway dashboard is being confirmed. Record cash here, confirm a cheque or NEFT / RTGS payment, or enter demand draft details on the &ldquo;Fill application form&rdquo;
                   page. PDF generation unlocks once any of these is done.
                 </p>
               </div>
@@ -1829,9 +2002,9 @@ export function CustomerApplicationPage() {
             {!paymentComplete && offlinePaymentEntered && (
               <p className="mt-4 rounded-lg border border-terracotta-light bg-terracotta/5 px-3 py-2 text-xs leading-relaxed text-ink-muted">
                 <span className="font-semibold text-ink">
-                  {form.paymentMode} · Ref {form.chequeNo} · Rs. {parseAmount(form.bookingAmount).toLocaleString('en-IN')}
+                  {form.paymentMode} · Ref {form.chequeNo} · Rs. {bookingDueAmount.toLocaleString('en-IN')}
                 </span>{' '}
-                captured on the application form. You can generate the packet now; hand the physical cheque / draft to the
+                captured on the application form. You can generate the packet now; hand the physical draft to the
                 sales desk. An online / cash transaction below is optional.
               </p>
             )}
@@ -1839,7 +2012,14 @@ export function CustomerApplicationPage() {
               <>
                 <p className="mt-4 text-sm text-ink-muted">
                   <span className="font-semibold text-ink">Rs. {docs.payment.amount?.toLocaleString('en-IN')}</span> paid
-                  {docs.payment.method === 'cash' ? ' in cash' : docs.payment.method === 'rtgs_neft' ? ' via NEFT / RTGS' : ' online'}
+                  {docs.payment.method === 'cash'
+                    ? ' in cash'
+                    : docs.payment.method === 'rtgs_neft'
+                      ? ' via NEFT / RTGS'
+                      : docs.payment.method === 'cheque'
+                        ? ' by cheque'
+                        : ' online'}
+                  {docs.bookingApplication.planPreview ? ` against ${planDisplayName(docs.bookingApplication.planPreview.plan)}` : ''}
                   {docs.payment.paidAt ? ` on ${new Date(docs.payment.paidAt).toLocaleDateString('en-IN')}` : ''}.
                 </p>
                 {approvedBooking ? (
@@ -1876,24 +2056,32 @@ export function CustomerApplicationPage() {
                   </p>
                 )}
                 <div className="mb-4 rounded-lg border border-hairline bg-bg px-3 py-3">
-                  <p className="text-xs font-semibold text-ink-muted">Booking instalment (10% of Total Plot Amount)</p>
-                  <p className="mt-1 font-display text-2xl font-bold text-ink">
-                    {bookingDueAmount > 0 ? `Rs. ${bookingDueAmount.toLocaleString('en-IN')}` : '—'}
+                  <p className="text-xs font-semibold text-ink-muted">
+                    Booking instalment
+                    {activePlan ? ` (first instalment of ${activePlan.plan.short_code || planDisplayName(activePlan.plan)})` : ''}
                   </p>
-                  {bookingDueAmount <= 0 && (
-                    <p className="mt-1 text-xs text-amber-800">
-                      Enter the Total Plot Amount on the Pricing page to set the booking amount.
+                  <p className="mt-1 font-display text-2xl font-bold text-ink">
+                    {bookingPlanReady && bookingDueAmount > 0 ? `Rs. ${bookingDueAmount.toLocaleString('en-IN')}` : '—'}
+                  </p>
+                  {activePlan && bookingPlanReady && (
+                    <p className="mt-1 text-xs text-ink-muted">
+                      Total plot amount Rs. {activePlan.total.toLocaleString('en-IN')}
                     </p>
                   )}
+                  {bookingPlanBlocker && <p className="mt-1 text-xs text-amber-800">{bookingPlanBlocker}</p>}
                 </div>
                 <div className="grid gap-4 md:grid-cols-3">
                   <div className="rounded-lg border border-hairline bg-surface p-4">
                     <p className="text-xs font-semibold text-ink">Online payment temporarily unavailable</p>
-                    <p className="mt-1 text-xs text-ink-muted">Available again once the payment gateway dashboard is confirmed.</p>
+                    <p className="mt-1 text-xs text-ink-muted">
+                      {onlineAmountTooLarge
+                        ? 'Online payments are limited to Rs. 1 crore. Please pay this booking amount by cash, cheque or NEFT / RTGS.'
+                        : 'Available again once the payment gateway dashboard is confirmed.'}
+                    </p>
                     <button
                       type="button"
                       onClick={handlePayNow}
-                      disabled={!ONLINE_PAYMENTS_ENABLED || paying || bookingDueAmount <= 0}
+                      disabled={!ONLINE_PAYMENTS_ENABLED || paying || !bookingPlanReady || onlineAmountTooLarge}
                       className="mt-3 rounded-full bg-green px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-green-soft disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {ONLINE_PAYMENTS_ENABLED ? (paying ? 'Processing...' : 'Pay with Razorpay') : 'Razorpay temporarily unavailable'}
@@ -1901,39 +2089,38 @@ export function CustomerApplicationPage() {
                   </div>
                   <div className="rounded-lg border border-hairline bg-surface p-4">
                     <p className="text-xs font-semibold text-ink">Cash transaction</p>
-                    <p className="mt-1 text-xs text-ink-muted">Records the fixed booking instalment above as cash received.</p>
+                    <p className="mt-1 text-xs text-ink-muted">Records the booking instalment above as cash received.</p>
                     <button
                       type="button"
                       onClick={handlePayByCash}
-                      disabled={payingCash || bookingDueAmount <= 0}
+                      disabled={payingCash || !bookingPlanReady}
                       className="mt-3 rounded-full border border-hairline px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-green hover:text-green disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {payingCash ? 'Recording...' : 'Record Cash Payment'}
                     </button>
                   </div>
                   <div className="rounded-lg border border-hairline bg-surface p-4">
-                    <p className="text-xs font-semibold text-ink">NEFT / RTGS transfer</p>
+                    <p className="text-xs font-semibold text-ink">Cheque or NEFT / RTGS</p>
                     <p className="mt-1 text-xs text-ink-muted">
-                      Already transferred? Select &ldquo;NEFT / RTGS / UTR&rdquo; and enter the UTR number on the
-                      &ldquo;Fill application form&rdquo; page, then confirm it here.
+                      Select &ldquo;Cheque&rdquo; or &ldquo;NEFT / RTGS / UTR&rdquo; and enter the cheque or UTR number on
+                      the &ldquo;Fill application form&rdquo; page, then confirm it here.
                     </p>
                     <button
                       type="button"
-                      onClick={handleConfirmRtgsNeft}
-                      disabled={
-                        payingRtgsNeft ||
-                        bookingDueAmount <= 0 ||
-                        form.paymentMode.trim() !== RTGS_NEFT_PAYMENT_MODE ||
-                        !form.chequeNo.trim()
-                      }
+                      onClick={() => bankPaymentMode && void handleConfirmBankPayment(bankPaymentMode)}
+                      disabled={payingRtgsNeft || !bookingPlanReady || !bankPaymentMode || !form.chequeNo.trim()}
                       title={
-                        form.paymentMode.trim() !== RTGS_NEFT_PAYMENT_MODE || !form.chequeNo.trim()
-                          ? 'Select "NEFT / RTGS / UTR" as the payment mode and enter the UTR number on the "Fill application form" page first.'
+                        !bankPaymentMode || !form.chequeNo.trim()
+                          ? 'Select "Cheque" or "NEFT / RTGS / UTR" as the payment mode and enter the cheque / UTR number on the "Fill application form" page first.'
                           : undefined
                       }
                       className="mt-3 rounded-full border border-hairline px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-green hover:text-green disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {payingRtgsNeft ? 'Confirming...' : 'Confirm NEFT / RTGS Payment'}
+                      {payingRtgsNeft
+                        ? 'Confirming...'
+                        : bankPaymentMode === 'cheque'
+                          ? 'Confirm Cheque Payment'
+                          : 'Confirm NEFT / RTGS Payment'}
                     </button>
                   </div>
                 </div>
@@ -1948,7 +2135,7 @@ export function CustomerApplicationPage() {
           <div className="basis-full pt-8">
             {!canGeneratePdf && (
               <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
-                Complete the plot booking payment, or enter the cheque / DD / UTR payment mode, reference number and amount
+                Complete the plot booking payment, or enter the demand draft / other payment mode and reference number
                 on the &ldquo;Fill application form&rdquo; page, to enable PDF generation.
               </p>
             )}
