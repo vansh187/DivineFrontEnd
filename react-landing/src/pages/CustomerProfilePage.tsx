@@ -14,7 +14,7 @@ import {
 import { usePaymentSchedule } from '../hooks/usePaymentSchedule';
 import { chargeHeadLabel, planDisplayName } from '../services/paymentPlansApi';
 import { formatCurrencyINR, formatIndianDate } from '../utils/currency';
-import { type MilestoneStatus, type ScheduleMilestone } from '../services/paymentSchedule';
+import { undatedDueLabel, type MilestoneStatus, type ScheduleMilestone } from '../services/paymentSchedule';
 import { createPaymentOrder, ONLINE_PAYMENTS_ENABLED, submitOfflineInstallmentPayment, verifyRazorpayPayment } from '../services/paymentsApi';
 import type { OfflineInstallmentMethod } from '../services/paymentsApi';
 import { openRazorpayCheckout } from '../services/razorpayCheckout';
@@ -997,7 +997,7 @@ export function CustomerProfilePage() {
                         {milestone.dueDate
                           ? formatDateObj(milestone.dueDate)
                           : milestone.awaitingPossession
-                            ? milestone.dueText || 'On Offer of Possession'
+                            ? undatedDueLabel(milestone)
                             : '-'}
                       </td>
                       <td className="px-5 py-3.5 text-right font-semibold text-ink">
@@ -1017,7 +1017,9 @@ export function CustomerProfilePage() {
                         ) : milestone.status === 'paid' ? (
                           <span className="text-xs font-semibold text-green">Paid</span>
                         ) : milestone.awaitingPossession ? (
-                          <span className="text-xs font-semibold text-ink-muted">Payable on possession</span>
+                          <span className="text-xs font-semibold text-ink-muted">
+                            {milestone.dueTrigger === 'possession' ? 'Payable on possession' : 'Not due yet'}
+                          </span>
                         ) : !milestone.payable ? (
                           <div className="flex flex-col items-end gap-1">
                             <button

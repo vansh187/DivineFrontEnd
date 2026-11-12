@@ -5,6 +5,7 @@ import type { ApplicationProject, ApplicationProjectId } from '../data/applicati
 import type { BookingApplicationFormData, PaymentStatus } from './documentStore';
 import { chargeHeadLabel, planDisplayName, type PaymentPlanPreview } from './paymentPlansApi';
 import { amountToIndianWords } from '../utils/currency';
+import { camDurationLabel } from './pricingCalc';
 
 interface GenerateApplicationPdfInput {
   formData: BookingApplicationFormData;
@@ -803,13 +804,14 @@ function renderPricingPage(ctx: PdfContext, formData: BookingApplicationFormData
   cursor = drawRows(ctx, cursor, [
     ['A. Basic Sale Price - rate per sq yard', formData.ratePerSqYd],
     ['A. Basic Sale Price - price', formData.basicSalePrice],
-    ['B. PLC Applicable - rate per sq yard', formData.plcRatePerSqYd],
+    ['B. PLC Applicable - % of Basic Sale Price', formData.plcPercent ? `${formData.plcPercent}%` : ''],
     ['B. PLC Applicable - price', formData.plcPrice],
     ...(ctx.plan
       ? ([
           ['C. IFMS - rate per sq yard', formData.ifmsRatePerSqYd],
           ['C. IFMS - price', formData.ifmsAmount || '0'],
           ['D. CAM - rate per sq yard', formData.camRatePerSqYd],
+          ['D. CAM - duration', formData.camRatePerSqYd || formData.camAmount ? camDurationLabel(formData.camDurationYears) || 'Not selected' : ''],
           ['D. CAM - price', formData.camAmount || '0'],
           ['Total Amount A+B+C+D', formData.totalAmount],
         ] as Array<[string, string]>)
@@ -910,7 +912,7 @@ function renderPaymentPlanPage(ctx: PdfContext, formData: BookingApplicationForm
     cursor = drawParagraph(
       ctx,
       cursor,
-      'Due dates are counted from the date of booking. The instalment payable on Offer of Possession is due on the date possession is offered.',
+      'Due dates are counted from the date of booking unless stated otherwise against the instalment. An instalment linked to an event (such as Offer of Possession or a construction stage) is counted from the date that event takes place, and its due date will be communicated then.',
     );
   } else {
     cursor = drawSectionLabel(ctx, cursor, 'Construction linked plan');

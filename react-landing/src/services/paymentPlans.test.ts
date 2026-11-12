@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { previewMatches, type PaymentPlanPreview } from './paymentPlansApi';
-import { deriveSchedule } from './paymentSchedule';
+import { chargeHeadLabel, previewMatches, type PaymentPlanPreview } from './paymentPlansApi';
+import { deriveSchedule, undatedDueLabel } from './paymentSchedule';
 import { recordCashPayment } from './paymentsApi';
 
 // PP1 worked example from the business spec: sale price 50,00,000 + PLC 1,00,000
@@ -78,6 +78,71 @@ describe('deriveSchedule with plan rows', () => {
     const milestones = deriveSchedule({ rows: dated, bookingDate: '2026-11-09' });
     expect(milestones[3].awaitingPossession).toBe(false);
     expect(milestones[3].dueDateISO).toBe('2028-03-01');
+  });
+});
+
+describe('deriveSchedule with a custom "Counted from" event', () => {
+  const rows = [
+    { label: 'Booking Amount', percent: 10, due_days: 0, due_date: '2026-01-01', amount: 100000, due_trigger: 'booking', status: 'paid' },
+    {
+      label: 'On completion of plinth', percent: 40, due_days: 30, due_date: null, amount: 400000,
+      due_trigger: 'custom', due_from: 'Completion of plinth', due_text: '30 days after Completion of plinth',
+    },
+    { label: 'Within 180 days of booking', percent: 50, due_days: 180, due_date: '2026-06-30', amount: 500000, due_trigger: 'booking' },
+  ];
+
+  it('never dates the custom row from the booking date and never makes it payable', () => {
+    const milestones = deriveSchedule({ rows, bookingDate: '2026-01-01', totalAmount: 1000000 });
+    const plinth = milestones[1];
+    expect(plinth.dueDate).toBeNull();
+    expect(plinth.awaitingPossession).toBe(true);
+    expect(plinth.dueTrigger).toBe('custom');
+    expect(plinth.status).toBe('upcoming');
+    expect(plinth.payable).toBe(false);
+    expect(plinth.dueText).toBe('30 days after Completion of plinth');
+  });
+
+  it('lets the dated instalment after an undated event be paid', () => {
+    const milestones = deriveSchedule({ rows, bookingDate: '2026-01-01', totalAmount: 1000000 });
+    expect(milestones[2]).toMatchObject({ isNext: true, payable: true, amount: 500000 });
+  });
+
+  it('credits money received to the dated row paid, not the undated row before it', () => {
+    const unstamped = rows.map((row) => ({ ...row, status: undefined }));
+    const milestones = deriveSchedule({ rows: unstamped, bookingDate: '2026-01-01', totalAmount: 1000000, receivedAmount: 600000 });
+    expect(milestones.map((m) => m.status === 'paid')).toEqual([true, false, true]);
+    expect(milestones[1].payable).toBe(false);
+    expect(milestones[2].payable).toBe(false);
+  });
+
+  it('only possession and custom triggers wait on an event; anything else counts from booking', () => {
+    const odd = [
+      { label: 'Booking', percent: 10, due_days: 0, amount: 100000, due_trigger: 'on_booking' },
+      { label: 'Next', percent: 90, due_days: 30, amount: 900000, due_trigger: 'Booking ' },
+    ];
+    const milestones = deriveSchedule({ rows: odd, bookingDate: '2026-01-01', totalAmount: 1000000 });
+    expect(milestones.map((m) => m.awaitingPossession)).toEqual([false, false]);
+    expect(milestones[0]).toMatchObject({ isNext: true, payable: true });
+    expect(milestones[1].dueDateISO).toBe('2026-01-31');
+  });
+
+  it('labels an undated row by its own trigger', () => {
+    expect(undatedDueLabel({ dueTrigger: 'custom', dueFrom: 'Completion of plinth', dueText: null })).toBe('On Completion of plinth');
+    expect(undatedDueLabel({ dueTrigger: 'custom', dueFrom: null, dueText: '  ' })).toBe('To be announced');
+    expect(undatedDueLabel({ dueTrigger: 'possession', dueFrom: null, dueText: null })).toBe('On Offer of Possession');
+    expect(undatedDueLabel({ dueTrigger: 'custom', dueFrom: 'X', dueText: '30 days after X' })).toBe('30 days after X');
+  });
+});
+
+describe('chargeHeadLabel', () => {
+  it('spells out single charges, pairs and all three', () => {
+    expect(chargeHeadLabel(null)).toBeNull();
+    expect(chargeHeadLabel('PLC')).toBe('PLC');
+    expect(chargeHeadLabel('PLC+IFMS')).toBe('PLC + IFMS');
+    expect(chargeHeadLabel('PLC+CAM')).toBe('PLC + CAM');
+    expect(chargeHeadLabel('IFMS+CAM')).toBe('IFMS + CAM');
+    expect(chargeHeadLabel('ALL')).toBe('PLC + IFMS + CAM');
+    expect(chargeHeadLabel('PLC+IFMS+CAM')).toBe('PLC + IFMS + CAM');
   });
 });
 
