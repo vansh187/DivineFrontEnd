@@ -83,7 +83,9 @@ export interface CustomerScheduleRow {
   pay_enabled_from?: string | null;
   /** `possession` rows ("On Offer of Possession") have no `due_date` until the
    * company announces possession: no Pay button, never overdue. */
-  due_trigger?: 'booking' | 'possession' | string | null;
+  due_trigger?: 'booking' | 'possession' | 'custom' | string | null;
+  /** 'custom' rows: the event the days count from, e.g. "Completion of plinth". */
+  due_from?: string | null;
   due_text?: string | null;
   /** Sale-price share of `amount`; `amount` = `basic_amount` + `charge_amount`. */
   basic_amount?: number | null;

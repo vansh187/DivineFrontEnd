@@ -36,7 +36,7 @@ import type { BookingRecord } from '../services/bookingsApi';
 import { usePaymentPlanPreview } from '../hooks/usePaymentPlanPreview';
 import { PaymentPlanPicker, PlanScheduleTable } from '../components/PaymentPlanPicker';
 import { planDisplayName } from '../services/paymentPlansApi';
-import { applyPricingChange, pricingTotalFields, type PriceRowKind, type PricingChange, type PricingField } from '../services/pricingCalc';
+import { applyPricingChange, CAM_DURATION_OPTIONS, camDurationLabel, isCamDuration, MAX_PLC_PERCENT, pricingTotalFields, type PriceRowKind, type PricingChange, type PricingField } from '../services/pricingCalc';
 import type { BookingPlanSelection, PaymentPlanPreview } from '../services/paymentPlansApi';
 import { getCustomerProfileShared, profileBookings } from '../services/customerProfileApi';
 
@@ -760,6 +760,7 @@ export function CustomerApplicationPage() {
   const updateRate = (row: PriceRowKind, value: string) => changePricing({ field: 'rate', row, value });
   const updatePrice = (row: PriceRowKind, value: string) => changePricing({ field: 'price', row, value });
   const updatePlotAreaSqYd = (value: string) => changePricing({ field: 'area', value });
+  const updateCamDuration = (value: string) => changePricing({ field: 'camDuration', value });
   const updatePaymentPlan = (code: string) => {
     if (planLocked) return;
     applyFormUpdates({ paymentPlanCode: code, ...BOOKING_AMOUNT_CLEARED });
@@ -1655,13 +1656,14 @@ export function CustomerApplicationPage() {
 
         <Section title="Details of pricing">
           <p className="sm:col-span-2 text-xs text-ink-muted">
-            Enter the plot area and the rate per sq yard; the price fills in automatically (rate × area). You can also
-            type a price directly and the rate is worked out for you.
+            Enter the plot area and the rate per sq yard; the price fills in automatically (rate × area). PLC is a
+            percentage of the Basic Sale Price, and CAM is area × rate × duration in years. You can also type a price
+            directly and the rate is worked out for you.
           </p>
           <div className="sm:col-span-2 overflow-hidden rounded-lg border border-hairline">
             <div className="grid grid-cols-[1.3fr_1fr_1fr] bg-green px-3 py-2 text-xs font-bold text-white">
               <span>Basic Cost Of The Residential Plot</span>
-              <span>Rate per Sq Yard</span>
+              <span>Rate per Sq Yard / %</span>
               <span>Price</span>
             </div>
             <div className="grid gap-px bg-hairline text-sm">
@@ -1685,7 +1687,13 @@ export function CustomerApplicationPage() {
                   B. PLC Applicable
                   <span className="mt-0.5 block text-[11px] font-normal text-ink-muted">Preferential Location Charges</span>
                 </span>
-                <input inputMode="decimal" aria-label="B. PLC Applicable - rate per sq yd" value={form.plcRatePerSqYd} readOnly={planLocked} onChange={(event) => updateRate('plc', event.target.value)} placeholder="Rate per sq yd" className="mx-2 h-10 self-start rounded-md border border-ink/25 bg-white px-3 py-1.5 text-ink shadow-sm outline-none placeholder:text-ink-muted/60 focus:border-green focus:ring-2 focus:ring-green/20 read-only:cursor-not-allowed read-only:bg-bg read-only:text-ink-muted read-only:shadow-none" />
+                <div className="mx-2 self-start">
+                  <div className="relative">
+                    <input inputMode="decimal" aria-label="B. PLC Applicable - percentage of Basic Sale Price" value={form.plcPercent} readOnly={planLocked} onChange={(event) => updateRate('plc', event.target.value)} placeholder="PLC %" className="h-10 w-full rounded-md border border-ink/25 bg-white py-1.5 pl-3 pr-8 text-ink shadow-sm outline-none placeholder:text-ink-muted/60 focus:border-green focus:ring-2 focus:ring-green/20 read-only:cursor-not-allowed read-only:bg-bg read-only:text-ink-muted read-only:shadow-none" />
+                    <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-ink-muted">%</span>
+                  </div>
+                  <span className="mt-1 block text-[11px] text-ink-muted">of Basic Sale Price (0-{MAX_PLC_PERCENT}%)</span>
+                </div>
                 <input inputMode="decimal" aria-label="B. PLC Applicable - price" value={form.plcPrice} readOnly={planLocked} onChange={(event) => updatePrice('plc', event.target.value)} placeholder="0" className="mx-2 h-10 self-start rounded-md border border-ink/25 bg-white px-3 py-1.5 text-ink shadow-sm outline-none placeholder:text-ink-muted/60 focus:border-green focus:ring-2 focus:ring-green/20 read-only:cursor-not-allowed read-only:bg-bg read-only:text-ink-muted read-only:shadow-none" />
               </div>
               <div className="grid grid-cols-[1.3fr_1fr_1fr] items-start bg-surface p-3">
@@ -1700,8 +1708,17 @@ export function CustomerApplicationPage() {
                 <span className="font-semibold text-ink">
                   D. CAM
                   <span className="mt-0.5 block text-[11px] font-normal text-ink-muted">Common Area Maintenance</span>
+                  <span className="mt-0.5 block text-[11px] font-normal text-ink-muted">Area × rate × duration</span>
                 </span>
-                <input inputMode="decimal" aria-label="D. CAM - rate per sq yd" value={form.camRatePerSqYd} readOnly={planLocked} onChange={(event) => updateRate('cam', event.target.value)} placeholder="Rate per sq yd" className="mx-2 h-10 self-start rounded-md border border-ink/25 bg-white px-3 py-1.5 text-ink shadow-sm outline-none placeholder:text-ink-muted/60 focus:border-green focus:ring-2 focus:ring-green/20 read-only:cursor-not-allowed read-only:bg-bg read-only:text-ink-muted read-only:shadow-none" />
+                <div className="mx-2 flex flex-col gap-2 self-start">
+                  <input inputMode="decimal" aria-label="D. CAM - rate per sq yd" value={form.camRatePerSqYd} readOnly={planLocked} onChange={(event) => updateRate('cam', event.target.value)} placeholder="Rate per sq yd" className="h-10 w-full rounded-md border border-ink/25 bg-white px-3 py-1.5 text-ink shadow-sm outline-none placeholder:text-ink-muted/60 focus:border-green focus:ring-2 focus:ring-green/20 read-only:cursor-not-allowed read-only:bg-bg read-only:text-ink-muted read-only:shadow-none" />
+                  <select aria-label="D. CAM - duration in years" value={form.camDurationYears} disabled={planLocked} onChange={(event) => updateCamDuration(event.target.value)} className="h-10 w-full rounded-md border border-ink/25 bg-white px-3 py-1.5 text-ink shadow-sm outline-none focus:border-green focus:ring-2 focus:ring-green/20 disabled:cursor-not-allowed disabled:bg-bg disabled:text-ink-muted disabled:shadow-none">
+                    {!isCamDuration(form.camDurationYears) && <option value="">Select duration</option>}
+                    {CAM_DURATION_OPTIONS.map((years) => (
+                      <option key={years} value={years}>{camDurationLabel(years)}</option>
+                    ))}
+                  </select>
+                </div>
                 <input inputMode="decimal" aria-label="D. CAM - price" value={form.camAmount} readOnly={planLocked} onChange={(event) => updatePrice('cam', event.target.value)} placeholder="0" className="mx-2 h-10 self-start rounded-md border border-ink/25 bg-white px-3 py-1.5 text-ink shadow-sm outline-none placeholder:text-ink-muted/60 focus:border-green focus:ring-2 focus:ring-green/20 read-only:cursor-not-allowed read-only:bg-bg read-only:text-ink-muted read-only:shadow-none" />
               </div>
               <div className="grid grid-cols-[1.3fr_1fr_1fr] items-start bg-surface p-3">

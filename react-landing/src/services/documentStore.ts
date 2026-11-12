@@ -2,6 +2,7 @@ import type { PaymentPlan } from './customerProfileApi';
 import type { PaymentPlanPreview } from './paymentPlansApi';
 import type { ApplicationProjectId } from '../data/applicationProjects';
 import { applicationProjects } from '../data/applicationProjects';
+import { amountString, DEFAULT_CAM_DURATION_YEARS, parseAmount, roundHalfUp } from './pricingCalc';
 
 /**
  * Local persistence for the document-upload flow. Aadhar/PAN file storage and
@@ -241,13 +242,16 @@ export interface BookingApplicationFormData {
   unitType: string;
   ratePerSqYd: string;
   basicSalePrice: string;
-  plcRatePerSqYd: string;
+  /** Preferential Location Charges as a % of the Basic Sale Price, and the amount in rupees. */
+  plcPercent: string;
   plcPrice: string;
   /** Interest-Free Maintenance Security: rate per sq yd and amount in rupees ('' = none). */
   ifmsRatePerSqYd: string;
   ifmsAmount: string;
-  /** Common Area Maintenance charge: rate per sq yd and amount in rupees ('' = none). */
+  /** Common Area Maintenance charge: rate per sq yd, duration in years (one of
+   * CAM_DURATION_OPTIONS) and amount in rupees = area × rate × years ('' = none). */
   camRatePerSqYd: string;
+  camDurationYears: string;
   camAmount: string;
   /** Full code of the chosen payment plan, e.g. `PP1/FPP/10-15-25-25-15-10`. */
   paymentPlanCode: string;
@@ -357,11 +361,12 @@ export function emptyBookingApplicationFormData(): BookingApplicationFormData {
     unitType: '',
     ratePerSqYd: '',
     basicSalePrice: '',
-    plcRatePerSqYd: '',
+    plcPercent: '',
     plcPrice: '',
     ifmsRatePerSqYd: '',
     ifmsAmount: '',
     camRatePerSqYd: '',
+    camDurationYears: DEFAULT_CAM_DURATION_YEARS,
     camAmount: '',
     paymentPlanCode: '',
     totalAmount: '',
@@ -404,6 +409,25 @@ export function emptyBookingApplicationFormData(): BookingApplicationFormData {
     applicationDate: '',
     place: '',
   };
+}
+
+/**
+ * A saved draft merged over today's defaults. Drafts saved before PLC became a
+ * percentage carry `plcRatePerSqYd` (a per-sq-yd rate): that key is dropped so
+ * it is no longer uploaded, and the PLC % is worked out from the saved PLC and
+ * BSP amounts so the form and the PDF still show it. The amounts are unchanged.
+ */
+export function restoreBookingFormData(saved: unknown): BookingApplicationFormData {
+  const { plcRatePerSqYd: legacyPlcRate, ...rest } = (saved ?? {}) as Partial<BookingApplicationFormData> & {
+    plcRatePerSqYd?: string;
+  };
+  const formData = { ...emptyBookingApplicationFormData(), ...rest };
+  if (legacyPlcRate !== undefined && !formData.plcPercent) {
+    const bsp = roundHalfUp(parseAmount(formData.basicSalePrice));
+    const plc = parseAmount(formData.plcPrice);
+    if (bsp > 0 && plc > 0) formData.plcPercent = amountString((plc / bsp) * 100, 2);
+  }
+  return formData;
 }
 
 export function emptyBookingApplicationStatus(): BookingApplicationStatus {
@@ -545,10 +569,7 @@ export function loadCustomerDocs(email: string): CustomerDocState {
       bookingApplication: {
         ...emptyBookingApplicationStatus(),
         ...parsed.bookingApplication,
-        formData: {
-          ...emptyBookingApplicationFormData(),
-          ...parsed.bookingApplication?.formData,
-        },
+        formData: restoreBookingFormData(parsed.bookingApplication?.formData),
       },
       payment: { ...emptyPaymentStatus(), ...parsed.payment },
     };

@@ -46,8 +46,14 @@ export interface ScheduleMilestone {
   /** True when this milestone's "Pay now" button should be live: the next unpaid
    *  instalment, any time (no window before the due date). */
   payable: boolean;
-  /** "On Offer of Possession" with no date yet: not payable, never overdue. */
+  /** Due from an event with no date yet - "On Offer of Possession" before the
+   *  possession date is set, or an admin-named custom event ("30 days after
+   *  Completion of plinth"): not payable, never overdue. */
   awaitingPossession: boolean;
+  /** 'booking' | 'possession' | 'custom' (null for the default split). */
+  dueTrigger: string | null;
+  /** 'custom' rows: the event the days count from, e.g. "Completion of plinth". */
+  dueFrom: string | null;
   /** Server text for when it falls due, e.g. "On Offer of Possession". */
   dueText: string | null;
   /** Charge included in `amount` (e.g. "PLC"), and its amount. */
@@ -112,12 +118,17 @@ export function deriveSchedule(input: DeriveScheduleInput): ScheduleMilestone[] 
   const base = sourceRows
     ? sourceRows.map((row) => {
         const rawStatus = (row.status ?? '').toLowerCase();
-        // A possession-linked row is dated only once possession is announced -
-        // never project it from the booking date.
-        const possessionLinked = (row.due_trigger ?? '').toLowerCase() === 'possession';
+        // A row due from an event (possession, or a custom event such as
+        // "Completion of plinth") is dated only by the server once that event
+        // has a date - never project it from the booking date.
+        // Only these two triggers wait on an event - the same rule as the
+        // backend, so both agree on which instalment is next. Anything else
+        // (including an unknown trigger) is treated as counted from booking.
+        const trigger = (row.due_trigger ?? '').trim().toLowerCase();
+        const eventLinked = trigger === 'possession' || trigger === 'custom';
         const dueDate =
           parseISO(row.due_date) ??
-          (!possessionLinked && bookingDate && row.due_days != null ? addDays(bookingDate, row.due_days) : null);
+          (!eventLinked && bookingDate && row.due_days != null ? addDays(bookingDate, row.due_days) : null);
         return {
           label: row.label,
           percent: Number.isFinite(row.percent) ? row.percent : null,
@@ -128,7 +139,9 @@ export function deriveSchedule(input: DeriveScheduleInput): ScheduleMilestone[] 
                 ? Math.round(total * (row.percent / 100))
                 : null,
           dueDate,
-          awaitingPossession: possessionLinked && !dueDate,
+          awaitingPossession: eventLinked && !dueDate,
+          dueTrigger: trigger || null,
+          dueFrom: row.due_from?.trim() || null,
           dueText: row.due_text ?? null,
           chargeHead: row.charge_head ?? null,
           chargeAmount: typeof row.charge_amount === 'number' ? row.charge_amount : null,
@@ -144,6 +157,8 @@ export function deriveSchedule(input: DeriveScheduleInput): ScheduleMilestone[] 
         amount: total != null ? Math.round(total * row.share) : null,
         dueDate: bookingDate ? addDays(bookingDate, row.days) : null,
         awaitingPossession: false,
+        dueTrigger: null as string | null,
+        dueFrom: null as string | null,
         dueText: null as string | null,
         chargeHead: null as string | null,
         chargeAmount: null as number | null,
@@ -151,21 +166,31 @@ export function deriveSchedule(input: DeriveScheduleInput): ScheduleMilestone[] 
       }));
 
   // Decide which rows are paid: trust an explicit "paid" status, otherwise walk
-  // the running total received across the rows in order.
-  let runningReceived = received;
-  const paidFlags = base.map((row) => {
-    if (row.rawStatus === 'paid') {
-      if (row.amount != null) runningReceived = Math.max(0, runningReceived - row.amount);
-      return true;
-    }
-    if (row.amount != null && row.amount > 0 && runningReceived + 1 >= row.amount) {
-      runningReceived -= row.amount;
-      return true;
-    }
-    return false;
-  });
+  // what's left of the total received across the remaining rows. Rows waiting on
+  // an undated event come last in that walk: the customer can pay a dated
+  // instalment after one of them, and that money must land on the dated row
+  // they actually paid, not on the earlier undated row.
+  const paidFlags = base.map((row) => row.rawStatus === 'paid');
+  let runningReceived = base.reduce(
+    (left, row, i) => (paidFlags[i] && row.amount != null ? Math.max(0, left - row.amount) : left),
+    received,
+  );
+  const walkOrder = [
+    ...base.map((_, i) => i).filter((i) => !base[i].awaitingPossession),
+    ...base.map((_, i) => i).filter((i) => base[i].awaitingPossession),
+  ];
+  for (const i of walkOrder) {
+    const { amount } = base[i];
+    if (paidFlags[i] || amount == null || amount <= 0 || runningReceived + 1 < amount) continue;
+    runningReceived -= amount;
+    paidFlags[i] = true;
+  }
 
-  const firstUnpaid = paidFlags.findIndex((paid) => !paid);
+  // The next instalment to pay: the first unpaid one that isn't waiting on an
+  // undated event (the server lets a dated instalment after such a row be paid).
+  const firstUnpaidAny = paidFlags.findIndex((paid) => !paid);
+  const firstUnpaidDated = paidFlags.findIndex((paid, i) => !paid && !base[i].awaitingPossession);
+  const firstUnpaid = firstUnpaidDated >= 0 ? firstUnpaidDated : firstUnpaidAny;
   const todayMs = startOfDayMs(new Date());
 
   return base.map((row, i) => {
@@ -201,11 +226,21 @@ export function deriveSchedule(input: DeriveScheduleInput): ScheduleMilestone[] 
       isNext,
       payable,
       awaitingPossession: row.awaitingPossession,
+      dueTrigger: row.dueTrigger,
+      dueFrom: row.dueFrom,
       dueText: row.dueText,
       chargeHead: row.chargeHead,
       chargeAmount: row.chargeAmount,
     };
   });
+}
+
+/** What the Due date column shows for a row that has no date yet. */
+export function undatedDueLabel(milestone: Pick<ScheduleMilestone, 'dueTrigger' | 'dueFrom' | 'dueText'>): string {
+  if (milestone.dueText?.trim()) return milestone.dueText.trim();
+  if (milestone.dueTrigger === 'possession') return 'On Offer of Possession';
+  if (milestone.dueFrom) return `On ${milestone.dueFrom}`;
+  return 'To be announced';
 }
 
 export interface PaymentReminder {

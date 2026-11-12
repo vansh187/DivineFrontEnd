@@ -19,8 +19,12 @@ import { API_BASE_URL, ApiError } from './authApi';
  *                 100% + all charges for PP4)
  */
 
-export type PlanChargeHead = 'PLC' | 'IFMS' | 'CAM' | 'ALL' | 'PLC+IFMS+CAM';
-export type PlanDueTrigger = 'booking' | 'possession';
+export type PlanChargeHead =
+  | 'PLC' | 'IFMS' | 'CAM'
+  | 'PLC+IFMS' | 'PLC+CAM' | 'IFMS+CAM'
+  | 'ALL' | 'PLC+IFMS+CAM';
+/** 'custom' = an admin-named event (see `due_from`); such rows have no due date. */
+export type PlanDueTrigger = 'booking' | 'possession' | 'custom';
 
 export interface PaymentPlanInstalment {
   seq: number;
@@ -28,6 +32,8 @@ export interface PaymentPlanInstalment {
   percent: number;
   due_trigger: PlanDueTrigger;
   due_days: number | null;
+  /** The event a 'custom' row counts from, e.g. "Completion of plinth"; null otherwise. */
+  due_from?: string | null;
   due_text: string;
   charge_head: PlanChargeHead | null;
 }
@@ -38,6 +44,7 @@ export interface PlanScheduleRow {
   percent: number;
   due_trigger?: PlanDueTrigger;
   due_days?: number | null;
+  due_from?: string | null;
   due_text: string;
   /** `null` for the "On Offer of Possession" row until possession is announced. */
   due_date?: string | null;
@@ -248,6 +255,7 @@ export function planDisplayName(plan: { short_code?: string | null; name?: strin
 /** Human label for a row's charge head: "PLC", "IFMS", "CAM", or "PLC + IFMS + CAM". */
 export function chargeHeadLabel(head: string | null | undefined): string | null {
   if (!head) return null;
-  if (head === 'ALL' || head === 'PLC+IFMS+CAM') return 'PLC + IFMS + CAM';
-  return head;
+  if (head === 'ALL') return 'PLC + IFMS + CAM';
+  // 'PLC+IFMS' -> 'PLC + IFMS' (pairs and the computed all-three value alike)
+  return head.split('+').filter(Boolean).join(' + ');
 }

@@ -48,13 +48,30 @@ const roleHome: Record<Role, string> = {
 
 const pageMetadataByPath = Object.fromEntries(seoPages.map(({ path, title, description }) => [path, { title, description }]));
 
+/** Tab titles for the signed-in workspaces. They aren't in seo-pages.json (no
+ * crawlable HTML is generated for them) and stay noindex, but they are real
+ * pages - without this every one of them was titled "Page not found". */
+const workspacePageTitles: Record<string, string> = {
+  '/customer': 'Customer Dashboard',
+  '/customer/plots': 'Available Plots',
+  '/customer/profile': 'My Profile',
+  '/customer/application': 'Booking Application',
+  '/broker': 'Broker Dashboard',
+  '/broker/profile': 'Broker Profile',
+  '/broker/plots': 'Available Plots',
+  '/broker/leads': 'My Leads',
+  '/broker/commission': 'Commission',
+};
+const SITE_NAME = 'Divine Vision Infratech';
+
 function RouteMetadata() {
   const { pathname } = useLocation();
   useEffect(() => {
     const normalizedPath = pathname.replace(/\/$/, '') || '/';
     const metadata = pageMetadataByPath[normalizedPath];
     const noindex = !metadata;
-    document.title = metadata?.title ?? 'Page not found | Divine Vision Infratech';
+    const workspaceTitle = workspacePageTitles[normalizedPath];
+    document.title = metadata?.title ?? (workspaceTitle ? `${workspaceTitle} | ${SITE_NAME}` : `Page not found | ${SITE_NAME}`);
     const setMeta = (selector: string, attribute: string, value: string) => {
       let element = document.head.querySelector<HTMLMetaElement>(selector);
       if (!element) { element = document.createElement('meta'); document.head.appendChild(element); }
