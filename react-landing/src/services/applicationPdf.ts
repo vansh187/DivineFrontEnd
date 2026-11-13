@@ -5,7 +5,7 @@ import type { ApplicationProject, ApplicationProjectId } from '../data/applicati
 import type { BookingApplicationFormData, PaymentStatus } from './documentStore';
 import { chargeHeadLabel, planDisplayName, type PaymentPlanPreview } from './paymentPlansApi';
 import { amountToIndianWords } from '../utils/currency';
-import { camDurationLabel } from './pricingCalc';
+import { camDurationLabel, camRateLabel } from './pricingCalc';
 
 interface GenerateApplicationPdfInput {
   formData: BookingApplicationFormData;
@@ -810,8 +810,8 @@ function renderPricingPage(ctx: PdfContext, formData: BookingApplicationFormData
       ? ([
           ['C. IFMS - rate per sq yard', formData.ifmsRatePerSqYd],
           ['C. IFMS - price', formData.ifmsAmount || '0'],
-          ['D. CAM - rate per sq yard', formData.camRatePerSqYd],
-          ['D. CAM - duration', formData.camRatePerSqYd || formData.camAmount ? camDurationLabel(formData.camDurationYears) || 'Not selected' : ''],
+          [`D. CAM - ${camRateLabel(formData.camRateBasis)}`, formData.camRatePerSqYd],
+          ['D. CAM - duration', formData.camRatePerSqYd || formData.camAmount ? camDurationLabel(formData.camDurationYears, formData.camRateBasis) || 'Not selected' : ''],
           ['D. CAM - price', formData.camAmount || '0'],
           ['Total Amount A+B+C+D', formData.totalAmount],
         ] as Array<[string, string]>)

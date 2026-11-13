@@ -36,7 +36,7 @@ import type { BookingRecord } from '../services/bookingsApi';
 import { usePaymentPlanPreview } from '../hooks/usePaymentPlanPreview';
 import { PaymentPlanPicker, PlanScheduleTable } from '../components/PaymentPlanPicker';
 import { planDisplayName } from '../services/paymentPlansApi';
-import { applyPricingChange, CAM_DURATION_OPTIONS, camDurationLabel, isCamDuration, MAX_PLC_PERCENT, pricingTotalFields, type PriceRowKind, type PricingChange, type PricingField } from '../services/pricingCalc';
+import { applyPricingChange, CAM_DURATION_OPTIONS, camDurationLabel, camRateLabel, isCamDuration, MAX_PLC_PERCENT, pricingTotalFields, type PriceRowKind, type PricingChange, type PricingField } from '../services/pricingCalc';
 import type { BookingPlanSelection, PaymentPlanPreview } from '../services/paymentPlansApi';
 import { getCustomerProfileShared, profileBookings } from '../services/customerProfileApi';
 
@@ -74,6 +74,8 @@ function serializeFormData(
       // when the booking has no co-applicant - those fields share the form but
       // aren't part of this application.
       .filter(([key]) => includeCoApplicant || !key.startsWith('coApplicant'))
+      // Local bookkeeping for the CAM rule, not part of the application.
+      .filter(([key]) => key !== 'camRateBasis')
       .map(([key, value]) => [key, typeof value === 'boolean' ? (value ? 'Yes' : 'No') : value]),
   ) as Record<string, string | number>;
 
@@ -674,7 +676,7 @@ export function CustomerApplicationPage() {
    * may replace those, never a value the customer typed. */
   const autoFilledPricing = useRef<Set<PricingField>>(new Set());
   const planForm = docs.bookingApplication.formData;
-  const planLocked = docs.payment.status === 'paid' && !!docs.payment.paymentId;
+  const planLocked = store.isBookingPaymentComplete(docs.payment);
   const plan = usePaymentPlanPreview({
     projectId: planForm.projectId || null,
     planCode: planForm.paymentPlanCode,
@@ -1041,7 +1043,7 @@ export function CustomerApplicationPage() {
     // transfer) is complete, or a manual offline instrument (cheque / DD /
     // online transfer / other) has been captured on the "Fill application
     // form" page.
-    const onlinePaymentComplete = docs.payment.status === 'paid' && !!docs.payment.paymentId;
+    const onlinePaymentComplete = store.isBookingPaymentComplete(docs.payment);
     // Once the payment side is done, the checklist below is still required —
     // it's what gets submitted for KYC review, not a signal that KYC is
     // somehow blocking the submission. Say so on every checklist error while
@@ -1283,7 +1285,7 @@ export function CustomerApplicationPage() {
   // paid but without an id (e.g. paid under an older build before the field
   // existed) is treated as still pending so the payment controls stay available
   // and the customer has a way to record it again rather than hitting a dead end.
-  const paymentComplete = docs.payment.status === 'paid' && !!docs.payment.paymentId;
+  const paymentComplete = store.isBookingPaymentComplete(docs.payment);
   const paymentNeedsReference = docs.payment.status === 'paid' && !docs.payment.paymentId;
   // The plan schedule in force: the snapshot the booking was paid against once
   // paid, otherwise the live preview for the current plan + prices. The booking
@@ -1657,7 +1659,7 @@ export function CustomerApplicationPage() {
         <Section title="Details of pricing">
           <p className="sm:col-span-2 text-xs text-ink-muted">
             Enter the plot area and the rate per sq yard; the price fills in automatically (rate × area). PLC is a
-            percentage of the Basic Sale Price, and CAM is area × rate × duration in years. You can also type a price
+            percentage of the Basic Sale Price, and CAM is area × monthly rate × duration in months (1 year = 12 months). You can also type a price
             directly and the rate is worked out for you.
           </p>
           <div className="sm:col-span-2 overflow-hidden rounded-lg border border-hairline">
@@ -1708,14 +1710,14 @@ export function CustomerApplicationPage() {
                 <span className="font-semibold text-ink">
                   D. CAM
                   <span className="mt-0.5 block text-[11px] font-normal text-ink-muted">Common Area Maintenance</span>
-                  <span className="mt-0.5 block text-[11px] font-normal text-ink-muted">Area × rate × duration</span>
+                  <span className="mt-0.5 block text-[11px] font-normal text-ink-muted">{form.camRateBasis === 'legacy' ? 'Area × rate × years' : 'Area × rate per month × months'}</span>
                 </span>
                 <div className="mx-2 flex flex-col gap-2 self-start">
-                  <input inputMode="decimal" aria-label="D. CAM - rate per sq yd" value={form.camRatePerSqYd} readOnly={planLocked} onChange={(event) => updateRate('cam', event.target.value)} placeholder="Rate per sq yd" className="h-10 w-full rounded-md border border-ink/25 bg-white px-3 py-1.5 text-ink shadow-sm outline-none placeholder:text-ink-muted/60 focus:border-green focus:ring-2 focus:ring-green/20 read-only:cursor-not-allowed read-only:bg-bg read-only:text-ink-muted read-only:shadow-none" />
+                  <input inputMode="decimal" aria-label={`D. CAM - ${camRateLabel(form.camRateBasis)}`} value={form.camRatePerSqYd} readOnly={planLocked} onChange={(event) => updateRate('cam', event.target.value)} placeholder={form.camRateBasis === 'legacy' ? 'Rate per sq yd' : 'Rate per sq yd / month'} className="h-10 w-full rounded-md border border-ink/25 bg-white px-3 py-1.5 text-ink shadow-sm outline-none placeholder:text-ink-muted/60 focus:border-green focus:ring-2 focus:ring-green/20 read-only:cursor-not-allowed read-only:bg-bg read-only:text-ink-muted read-only:shadow-none" />
                   <select aria-label="D. CAM - duration in years" value={form.camDurationYears} disabled={planLocked} onChange={(event) => updateCamDuration(event.target.value)} className="h-10 w-full rounded-md border border-ink/25 bg-white px-3 py-1.5 text-ink shadow-sm outline-none focus:border-green focus:ring-2 focus:ring-green/20 disabled:cursor-not-allowed disabled:bg-bg disabled:text-ink-muted disabled:shadow-none">
                     {!isCamDuration(form.camDurationYears) && <option value="">Select duration</option>}
                     {CAM_DURATION_OPTIONS.map((years) => (
-                      <option key={years} value={years}>{camDurationLabel(years)}</option>
+                      <option key={years} value={years}>{camDurationLabel(years, form.camRateBasis)}</option>
                     ))}
                   </select>
                 </div>

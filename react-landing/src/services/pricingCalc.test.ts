@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { applyPricingChange, CAM_DURATION_OPTIONS, camDurationLabel, isCamDuration, pricingTotal, pricingTotalFields, roundHalfUp, sanitizeAmountInput, type PricingChange, type PricingField } from './pricingCalc';
+import { applyPricingChange, CAM_DURATION_OPTIONS, camDurationLabel, camDurationMonths, camRateLabel, isCamDuration, pricingTotal, pricingTotalFields, roundHalfUp, sanitizeAmountInput, type PricingChange, type PricingField } from './pricingCalc';
 import { previewMatches, roundRupee } from './paymentPlansApi';
-import { emptyBookingApplicationFormData, restoreBookingFormData, type BookingApplicationFormData } from './documentStore';
+import { emptyBookingApplicationFormData, isBookingPaymentComplete, restoreBookingFormData, type BookingApplicationFormData } from './documentStore';
 
 /** Replays a sequence of keystrokes-worth of changes the way the page does. */
 function run(changes: PricingChange[], start: Partial<BookingApplicationFormData> = {}) {
@@ -28,7 +28,7 @@ describe('pricing auto-calculation', () => {
     expect(form.plcPrice).toBe('100000');
     expect(form.ifmsAmount).toBe('50000');
     expect(form.camAmount).toBe('75000');
-    expect(form.camRatePerSqYd).toBe('375');
+    expect(form.camRatePerSqYd).toBe('31.25'); // 75,000 ÷ (200 sq yd × 12 months)
     expect(form.totalAmount).toBe('5225000');
     expect(form.amountInFigure).toBe('5225000');
     expect(form.totalAmountWords).not.toBe('');
@@ -168,15 +168,15 @@ describe('PLC as a percentage of the Basic Sale Price', () => {
   });
 });
 
-describe('CAM = area × rate per sq yd × duration', () => {
-  it('spec example: 200 sq yd × Rs 7 × 2 years = 2,800', () => {
+describe('CAM = area × rate per sq yd per month × duration in months', () => {
+  it('converts years to months: 200 sq yd × Rs 7 × 2 years (24 months) = 33,600', () => {
     const form = run([
       { field: 'area', value: '200' },
       { field: 'rate', row: 'cam', value: '7' },
       { field: 'camDuration', value: '2' },
     ]);
-    expect(form.camAmount).toBe('2800');
-    expect(form.totalAmount).toBe('2800');
+    expect(form.camAmount).toBe('33600');
+    expect(form.totalAmount).toBe('33600');
   });
 
   it('defaults to 1 year and recalculates when the duration or area changes', () => {
@@ -185,26 +185,29 @@ describe('CAM = area × rate per sq yd × duration', () => {
       { field: 'rate', row: 'cam', value: '7' },
     ]);
     expect(form.camDurationYears).toBe('1');
-    expect(form.camAmount).toBe('1400');
+    expect(form.camAmount).toBe('16800'); // 200 × 7 × 12 months
     form = run([{ field: 'camDuration', value: '4.5' }], form);
-    expect(form.camAmount).toBe('6300');
+    expect(form.camAmount).toBe('75600'); // 200 × 7 × 54 months
     form = run([{ field: 'area', value: '300' }], form);
-    expect(form.camAmount).toBe('9450');
+    expect(form.camAmount).toBe('113400'); // 300 × 7 × 54 months
   });
 
   it('works the rate back from a typed CAM amount', () => {
     const form = run([
       { field: 'area', value: '200' },
       { field: 'camDuration', value: '2.5' },
-      { field: 'price', row: 'cam', value: '5000' },
+      { field: 'price', row: 'cam', value: '60000' },
     ]);
-    expect(form.camRatePerSqYd).toBe('10');
+    expect(form.camRatePerSqYd).toBe('10'); // 60,000 ÷ (200 × 30 months)
   });
 
   it('offers 1 to 5 years in half-year steps', () => {
     expect(CAM_DURATION_OPTIONS).toEqual(['1', '1.5', '2', '2.5', '3', '3.5', '4', '4.5', '5']);
-    expect(camDurationLabel('1')).toBe('1 Year');
-    expect(camDurationLabel('2.5')).toBe('2.5 Years');
+    expect(camDurationLabel('1')).toBe('1 Year (12 months)');
+    expect(camDurationLabel('2.5')).toBe('2.5 Years (30 months)');
+    expect(camDurationMonths('1')).toBe(12);
+    expect(camDurationMonths('4.5')).toBe(54);
+    expect(camDurationMonths('')).toBe(0);
     expect(camDurationLabel('')).toBe('');
     expect(camDurationLabel('6')).toBe('');
     expect(isCamDuration('4.5')).toBe(true);
@@ -230,10 +233,82 @@ describe('restoring a saved draft', () => {
     expect(restored.camDurationYears).toBe('1');
   });
 
+  // Saved before the months conversion: no camRateBasis, CAM = area × rate × years.
+  const legacyDraft = {
+    plotAreaSqYd: '200', basicSalePrice: '5000000',
+    camRatePerSqYd: '7', camDurationYears: '2', camAmount: '2800',
+    totalAmount: '5002800', amountInFigure: '5002800', totalPlotAmount: '5002800', totalAmountWords: 'old words',
+    bookingAmount: '500280', bookingAmountWords: 'old booking words',
+  };
+
+  it('moves an unpaid pre-months draft onto the monthly rule: rate kept, amount and totals redone', () => {
+    const restored = restoreBookingFormData(legacyDraft);
+    expect(restored.camRatePerSqYd).toBe('7');
+    expect(restored.camAmount).toBe('33600'); // 200 × 7 × 24 months
+    expect(restored).toMatchObject({ totalAmount: '5033600', amountInFigure: '5033600', totalPlotAmount: '5033600' });
+    expect(restored.totalAmountWords).not.toBe('old words');
+    // the booking amount depends on the total, so it waits for a fresh plan preview
+    expect(restored).toMatchObject({ bookingAmount: '', bookingAmountWords: '' });
+    expect(restored.camRateBasis).toBe('monthly');
+  });
+
+  it('migrates only once, so a CAM amount typed under the monthly rule always sticks', () => {
+    const once = restoreBookingFormData(legacyDraft);
+    expect(restoreBookingFormData(once)).toEqual(once);
+    // typed under the new build, even though it equals the old years-only figure
+    const typed = { ...legacyDraft, camRateBasis: 'monthly' };
+    expect(restoreBookingFormData(typed).camAmount).toBe('2800');
+    expect(restoreBookingFormData(typed).totalAmount).toBe('5002800');
+  });
+
+  it('keeps an old CAM amount that has no rate (nothing to redo it from)', () => {
+    const restored = restoreBookingFormData({ ...legacyDraft, camRatePerSqYd: '' });
+    expect(restored.camAmount).toBe('2800');
+    expect(restored.bookingAmount).toBe('500280');
+    expect(restored.camRateBasis).toBe('monthly');
+  });
+
+  it('redoes a pre-months amount whose rate was rounded when back-filled', () => {
+    // 1000 typed for 150 sq yd × 1 year back-filled a 6.67 rate (150 × 6.67 = 1000.5)
+    const restored = restoreBookingFormData({ plotAreaSqYd: '150', camRatePerSqYd: '6.67', camDurationYears: '1', camAmount: '1000' });
+    expect(restored.camAmount).toBe('12006'); // 150 × 6.67 × 12, consistent with what any later edit gives
+    expect(restored.camRateBasis).toBe('monthly');
+  });
+
+  it('keeps the prices of a draft with a booking payment exactly, marked legacy', () => {
+    const restored = restoreBookingFormData(legacyDraft, { paymentMade: true });
+    expect(restored).toMatchObject({ camAmount: '2800', totalAmount: '5002800', bookingAmount: '500280', camRateBasis: 'legacy' });
+    // and still legacy on the next load, but moved over once no payment stands
+    expect(restoreBookingFormData(restored, { paymentMade: true })).toEqual(restored);
+    expect(restoreBookingFormData(restored).camAmount).toBe('33600');
+  });
+
+  it('labels legacy figures the way they were worked out', () => {
+    expect(camDurationLabel('2', 'legacy')).toBe('2 Years');
+    expect(camRateLabel('legacy')).toBe('rate per sq yard');
+    expect(camDurationLabel('2', 'monthly')).toBe('2 Years (24 months)');
+    expect(camRateLabel('monthly')).toBe('rate per sq yard per month');
+  });
+
+  it('editing a legacy form moves it onto the monthly rule first', () => {
+    const legacy = restoreBookingFormData(legacyDraft, { paymentMade: true });
+    const form = run([{ field: 'rate', row: 'bsp', value: '25000' }], legacy);
+    expect(form.camRateBasis).toBe('monthly');
+    expect(form.camAmount).toBe('33600');
+    expect(form.totalAmount).toBe('5033600');
+  });
+
   it('leaves a current draft as it was', () => {
-    const restored = restoreBookingFormData({ plcPercent: '5', plcPrice: '100000', basicSalePrice: '2000000', camDurationYears: '2.5' });
-    expect(restored).toMatchObject({ plcPercent: '5', camDurationYears: '2.5' });
+    const restored = restoreBookingFormData({ plcPercent: '5', plcPrice: '100000', basicSalePrice: '2000000', camDurationYears: '2.5', camRateBasis: 'monthly' });
+    expect(restored).toMatchObject({ plcPercent: '5', camDurationYears: '2.5', camRateBasis: 'monthly' });
     expect(restoreBookingFormData(undefined)).toEqual(emptyBookingApplicationFormData());
+  });
+
+  it('counts a booking payment as complete only with a payment reference', () => {
+    expect(isBookingPaymentComplete({ status: 'paid', paymentId: 'pay_1' })).toBe(true);
+    expect(isBookingPaymentComplete({ status: 'paid', paymentId: null })).toBe(false);
+    expect(isBookingPaymentComplete({ status: 'created', paymentId: 'pay_1' })).toBe(false);
+    expect(isBookingPaymentComplete(null)).toBe(false);
   });
 });
 
@@ -268,8 +343,8 @@ describe('pricing calculation accuracy', () => {
     ]);
     expect(form.basicSalePrice).toBe('4583425'); // 166.67 × 27500 = 4,583,425
     expect(form.plcPrice).toBe('114586'); // 4,583,425 × 2.5% = 114,585.625 → 114,586
-    expect(form.camAmount).toBe('1813'); // 166.67 × 7.25 × 1.5 = 1,812.536 → 1,813
-    expect(form.totalAmount).toBe('4699824');
+    expect(form.camAmount).toBe('21750'); // 166.67 × 7.25 × 18 months = 21,750.435 → 21,750
+    expect(form.totalAmount).toBe('4719761');
   });
 
   it('totals match the server: each price rounded half-up, then summed', () => {
@@ -278,7 +353,7 @@ describe('pricing calculation accuracy', () => {
       ratePerSqYd: '', basicSalePrice: '2500000.5',
       plcPercent: '', plcPrice: '1,00,000.49',
       ifmsRatePerSqYd: '', ifmsAmount: '50000.5',
-      camRatePerSqYd: '', camDurationYears: '1', camAmount: '',
+      camRatePerSqYd: '', camDurationYears: '1', camAmount: '', camRateBasis: 'monthly' as const,
     };
     // 2500001 + 100000 + 50001 + 0
     expect(pricingTotal(form)).toBe(2650002);
