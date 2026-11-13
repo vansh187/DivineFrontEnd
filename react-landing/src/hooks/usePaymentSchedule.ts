@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from './useAuth';
-import { loadCustomerDocs } from '../services/documentStore';
+import { isBookingPaymentComplete, loadCustomerDocs } from '../services/documentStore';
 import { loadPendingUnit } from '../services/pendingUnit';
 import {
   clearCustomerProfileCache,
@@ -156,7 +156,7 @@ export function usePaymentSchedule(selectedBookingKey?: string | null): PaymentS
     // hasn't linked it to this customer yet (just booked / cash just recorded):
     // a backend-derived plan, or a verified payment on file.
     const strongLocalBooking = Boolean(
-      storedPlan?.rows?.length || (docs.payment.status === 'paid' && docs.payment.paymentId),
+      storedPlan?.rows?.length || isBookingPaymentComplete(docs.payment),
     );
     // Weak evidence — a plot picked or a half-filled wizard. Only trusted while
     // the server hasn't answered; a pending unit is never cleared on abandon, so

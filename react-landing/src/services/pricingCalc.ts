@@ -8,7 +8,8 @@ import { amountToIndianWords } from '../utils/currency';
  *   A. BSP   rate per sq yd  × plot area (sq yd)
  *   B. PLC   % of BSP        × BSP price ÷ 100
  *   C. IFMS  rate per sq yd  × plot area (sq yd)
- *   D. CAM   rate per sq yd  × plot area (sq yd) × duration (years)
+ *   D. CAM   rate per sq yd per month × plot area (sq yd) × duration in months
+ *            (the duration is picked in years and converted: 1 year = 12 months)
  *
  * Every field stays free to type in. Auto-calculation only ever fills the
  * *other* field of a row, and never overwrites a value the customer typed
@@ -48,15 +49,41 @@ export const PRICE_ROW_FIELDS: Record<PriceRowKind, { rate: PricingField; price:
 /** CAM is charged for 1 to 5 years in half-year steps. */
 export const CAM_DURATION_OPTIONS = ['1', '1.5', '2', '2.5', '3', '3.5', '4', '4.5', '5'] as const;
 export const DEFAULT_CAM_DURATION_YEARS = '1';
+export const MONTHS_PER_YEAR = 12;
+
+/**
+ * How a form's CAM rate is meant:
+ *   - 'monthly' rate per sq yd per month × duration in months (current rule)
+ *   - 'legacy'  saved before the months conversion (amount = area × rate × years)
+ *               and kept as it was because a booking payment was made against it
+ * A draft saved before this field existed has no value and is treated as legacy.
+ */
+export type CamRateBasis = 'monthly' | 'legacy';
+export const CURRENT_CAM_RATE_BASIS: CamRateBasis = 'monthly';
 
 export function isCamDuration(years: string | null | undefined): boolean {
   return (CAM_DURATION_OPTIONS as readonly string[]).includes(String(years ?? ''));
 }
 
-/** "1 Year", "2.5 Years"; '' for anything that isn't a dropdown option. */
-export function camDurationLabel(years: string): string {
+/** The chosen CAM duration in months (2.5 years → 30); 0 if none is chosen. */
+export function camDurationMonths(years: string | null | undefined): number {
+  return isCamDuration(years) ? Number(years) * MONTHS_PER_YEAR : 0;
+}
+
+/**
+ * "1 Year (12 months)", "2.5 Years (30 months)"; '' for anything that isn't a
+ * dropdown option. A legacy form was not worked out in months, so it gets the
+ * plain "2 Years".
+ */
+export function camDurationLabel(years: string, basis: CamRateBasis = CURRENT_CAM_RATE_BASIS): string {
   if (!isCamDuration(years)) return '';
-  return `${years} ${years === '1' ? 'Year' : 'Years'}`;
+  const label = `${years} ${years === '1' ? 'Year' : 'Years'}`;
+  return basis === 'legacy' ? label : `${label} (${camDurationMonths(years)} months)`;
+}
+
+/** Row label for the CAM rate, matching how the rate is meant. */
+export function camRateLabel(basis: CamRateBasis = CURRENT_CAM_RATE_BASIS): string {
+  return basis === 'legacy' ? 'rate per sq yard' : 'rate per sq yard per month';
 }
 
 /** PLC is a share of the Basic Sale Price, so a % above this is a typo. */
@@ -74,7 +101,7 @@ export interface PricingResult {
   autoFilled: Set<PricingField>;
 }
 
-type PricingForm = Pick<BookingApplicationFormData, PricingField | 'plotAreaSqYd' | 'camDurationYears'>;
+type PricingForm = Pick<BookingApplicationFormData, PricingField | 'plotAreaSqYd' | 'camDurationYears' | 'camRateBasis'>;
 
 export function parseAmount(value: string | null | undefined): number {
   const cleaned = Number(String(value ?? '').replace(/,/g, '').trim());
@@ -139,21 +166,50 @@ export function rowMultiplier(row: PriceRowKind, form: PricingForm): number {
   switch (row) {
     case 'plc':
       return roundHalfUp(parseAmount(form.basicSalePrice)) / 100;
-    case 'cam': {
-      return isCamDuration(form.camDurationYears) ? area * Number(form.camDurationYears) : 0;
-    }
+    case 'cam':
+      // CAM rate is per sq yd per month, so the years are converted to months.
+      return area * camDurationMonths(form.camDurationYears);
     default:
       return area;
   }
 }
 
+/**
+ * Moves a form saved before the months conversion onto the monthly rule. The
+ * CAM rate is kept (it is the figure the office gives the customer) and the CAM
+ * amount is redone as area × rate × months, so the amount, rate and labels agree.
+ * When the amount changes, the totals follow and the plan-dependent booking
+ * amount is cleared, exactly as for an edit. Returns only what changes.
+ */
+export function convertLegacyCam(form: PricingForm): Partial<BookingApplicationFormData> {
+  if (form.camRateBasis === CURRENT_CAM_RATE_BASIS) return {};
+  const updates: Partial<BookingApplicationFormData> = { camRateBasis: CURRENT_CAM_RATE_BASIS };
+  const multiplier = rowMultiplier('cam', form);
+  const rate = parseAmount(form.camRatePerSqYd);
+  if (multiplier > 0 && rate > 0) {
+    const camAmount = amountString(rate * multiplier);
+    if (camAmount !== form.camAmount) {
+      Object.assign(updates, {
+        camAmount,
+        ...pricingTotalFields({ ...form, camAmount }),
+        bookingAmount: '',
+        bookingAmountWords: '',
+      });
+    }
+  }
+  return updates;
+}
+
 export function applyPricingChange(
-  form: PricingForm,
+  currentForm: PricingForm,
   change: PricingChange,
   previouslyAutoFilled: ReadonlySet<PricingField>,
 ): PricingResult {
   const autoFilled = new Set(previouslyAutoFilled);
-  const updates: Partial<BookingApplicationFormData> = {};
+  // A legacy form that is being edited moves to the monthly rule first, so the
+  // edit is worked out on figures that already agree with it.
+  const updates: Partial<BookingApplicationFormData> = convertLegacyCam(currentForm);
+  const form: PricingForm = { ...currentForm, ...updates };
   const next: PricingForm = { ...form };
   const set = (field: PricingField | 'plotAreaSqYd' | 'camDurationYears', value: string) => {
     updates[field] = value;

@@ -2,7 +2,7 @@ import type { PaymentPlan } from './customerProfileApi';
 import type { PaymentPlanPreview } from './paymentPlansApi';
 import type { ApplicationProjectId } from '../data/applicationProjects';
 import { applicationProjects } from '../data/applicationProjects';
-import { amountString, DEFAULT_CAM_DURATION_YEARS, parseAmount, roundHalfUp } from './pricingCalc';
+import { amountString, convertLegacyCam, CURRENT_CAM_RATE_BASIS, DEFAULT_CAM_DURATION_YEARS, parseAmount, roundHalfUp, type CamRateBasis } from './pricingCalc';
 
 /**
  * Local persistence for the document-upload flow. Aadhar/PAN file storage and
@@ -248,11 +248,14 @@ export interface BookingApplicationFormData {
   /** Interest-Free Maintenance Security: rate per sq yd and amount in rupees ('' = none). */
   ifmsRatePerSqYd: string;
   ifmsAmount: string;
-  /** Common Area Maintenance charge: rate per sq yd, duration in years (one of
-   * CAM_DURATION_OPTIONS) and amount in rupees = area × rate × years ('' = none). */
+  /** Common Area Maintenance charge: rate per sq yd per month, duration in years
+   * (one of CAM_DURATION_OPTIONS) and amount in rupees = area × rate × (years × 12)
+   * ('' = none). */
   camRatePerSqYd: string;
   camDurationYears: string;
   camAmount: string;
+  /** How the CAM rate above is meant (see CamRateBasis). Local only: never uploaded. */
+  camRateBasis: CamRateBasis;
   /** Full code of the chosen payment plan, e.g. `PP1/FPP/10-15-25-25-15-10`. */
   paymentPlanCode: string;
   totalAmount: string;
@@ -368,6 +371,7 @@ export function emptyBookingApplicationFormData(): BookingApplicationFormData {
     camRatePerSqYd: '',
     camDurationYears: DEFAULT_CAM_DURATION_YEARS,
     camAmount: '',
+    camRateBasis: CURRENT_CAM_RATE_BASIS,
     paymentPlanCode: '',
     totalAmount: '',
     totalPlotAmount: '',
@@ -411,13 +415,27 @@ export function emptyBookingApplicationFormData(): BookingApplicationFormData {
   };
 }
 
+/** A booking payment the backend confirmed, with a payment reference on file. */
+export function isBookingPaymentComplete(payment: Pick<PaymentStatus, 'status' | 'paymentId'> | null | undefined): boolean {
+  return payment?.status === 'paid' && !!payment.paymentId;
+}
+
 /**
- * A saved draft merged over today's defaults. Drafts saved before PLC became a
- * percentage carry `plcRatePerSqYd` (a per-sq-yd rate): that key is dropped so
- * it is no longer uploaded, and the PLC % is worked out from the saved PLC and
- * BSP amounts so the form and the PDF still show it. The amounts are unchanged.
+ * A saved draft merged over today's defaults.
+ *
+ * - Drafts saved before PLC became a percentage carry `plcRatePerSqYd` (a
+ *   per-sq-yd rate): that key is dropped so it is no longer uploaded, and the
+ *   PLC % is worked out from the saved PLC and BSP amounts so the form and the
+ *   PDF still show it. The amounts are unchanged.
+ * - Drafts saved before CAM was worked out in months (no `camRateBasis`) are
+ *   moved onto the monthly rule once (see convertLegacyCam), unless
+ *   `paymentMade`: money was paid against those prices, so they are kept
+ *   exactly and marked 'legacy', and the labels show them as they were worked out.
  */
-export function restoreBookingFormData(saved: unknown): BookingApplicationFormData {
+export function restoreBookingFormData(
+  saved: unknown,
+  { paymentMade = false }: { paymentMade?: boolean } = {},
+): BookingApplicationFormData {
   const { plcRatePerSqYd: legacyPlcRate, ...rest } = (saved ?? {}) as Partial<BookingApplicationFormData> & {
     plcRatePerSqYd?: string;
   };
@@ -426,6 +444,10 @@ export function restoreBookingFormData(saved: unknown): BookingApplicationFormDa
     const bsp = roundHalfUp(parseAmount(formData.basicSalePrice));
     const plc = parseAmount(formData.plcPrice);
     if (bsp > 0 && plc > 0) formData.plcPercent = amountString((plc / bsp) * 100, 2);
+  }
+  if (rest.camRateBasis !== CURRENT_CAM_RATE_BASIS) {
+    formData.camRateBasis = 'legacy';
+    if (!paymentMade) Object.assign(formData, convertLegacyCam(formData));
   }
   return formData;
 }
@@ -569,7 +591,11 @@ export function loadCustomerDocs(email: string): CustomerDocState {
       bookingApplication: {
         ...emptyBookingApplicationStatus(),
         ...parsed.bookingApplication,
-        formData: restoreBookingFormData(parsed.bookingApplication?.formData),
+        // Any recorded booking payment (even one still missing its reference)
+        // was paid against the saved prices, so those are kept as they were.
+        formData: restoreBookingFormData(parsed.bookingApplication?.formData, {
+          paymentMade: parsed.payment?.status === 'paid',
+        }),
       },
       payment: { ...emptyPaymentStatus(), ...parsed.payment },
     };
